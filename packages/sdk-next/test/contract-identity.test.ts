@@ -13,6 +13,7 @@ import { Session } from "@opencode-ai/schema/session"
 import { SessionInbox } from "@opencode-ai/schema/session-inbox"
 import { SessionMessage } from "@opencode-ai/schema/session-message"
 import { Workspace } from "@opencode-ai/schema/workspace"
+import { Worktree } from "@opencode-ai/schema/worktree"
 import { Api } from "@opencode-ai/server/api"
 import { ClientApi, groupNames, promiseOmitEndpoints } from "@opencode-ai/protocol/client"
 import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
@@ -22,6 +23,7 @@ const CoreAgent = await import("@opencode-ai/core/agent")
 const CoreModel = await import("@opencode-ai/core/model")
 const CoreProject = await import("@opencode-ai/core/project")
 const CoreSession = await import("@opencode-ai/core/session")
+const CoreWorktree = await import("@opencode-ai/core/worktree")
 
 test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Agent).toBe(Agent)
@@ -29,6 +31,7 @@ test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Model).toBe(Model)
   expect(SDK.WebSearch).toBe(WebSearch)
   expect(SDK.Session).toBe(Session)
+  expect(SDK.Worktree).toBe(Worktree)
   expect(SDK.Workspace).toBe(Workspace)
   expect(Object.keys(SDK).sort()).toEqual([
     "AbsolutePath",
@@ -45,7 +48,6 @@ test("re-exports canonical contracts directly from Schema", () => {
     "Permission",
     "PermissionSaved",
     "Project",
-    "ProjectCopy",
     "Prompt",
     "PromptInput",
     "Provider",
@@ -60,6 +62,7 @@ test("re-exports canonical contracts directly from Schema", () => {
     "Tool",
     "WebSearch",
     "Workspace",
+    "Worktree",
   ])
 })
 
@@ -69,8 +72,9 @@ test("Core and Server reuse the authoritative Schema and Protocol values", () =>
   expect(CoreModel.Ref).toBe(Model.Ref)
   expect(CoreSession.Info).toBe(Session.Info)
   expect(CoreProject.Current).toBe(Project.Current)
-  expect(CoreProject.Directory).toBe(Project.Directory)
-  expect(CoreProject.Directories).toBe(Project.Directories)
+  expect(CoreWorktree.DirectoryUnavailableError).toBeDefined()
+  expect(CoreWorktree.List).toBe(Worktree.List)
+  expect(CoreWorktree.Info).toBe(Worktree.Info)
   expect(CoreSessionInbox.Item).toBe(SessionInbox.Item)
   expect(CoreSessionInbox.User).toBe(SessionInbox.User)
   expect(CoreSessionInbox.Synthetic).toBe(SessionInbox.Synthetic)
