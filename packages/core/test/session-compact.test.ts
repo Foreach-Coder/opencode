@@ -34,7 +34,6 @@ const projects = Layer.succeed(
   Project.Service.of({
     list: () => Effect.succeed([]),
     resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
-    directories: () => Effect.succeed([]),
   }),
 )
 let requests: LLMRequest[] = []
