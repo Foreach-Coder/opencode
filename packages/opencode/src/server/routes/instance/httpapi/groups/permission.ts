@@ -1,4 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Brand } from "@opencode-ai/brand"
 import { Permission } from "@/permission"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -54,7 +55,7 @@ export const PermissionApi = HttpApi.make("permission")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode experimental HttpApi",
+      title: `${Brand.name} experimental HttpApi`,
       version: "0.0.1",
       description: "Experimental HttpApi surface for selected instance routes.",
     }),

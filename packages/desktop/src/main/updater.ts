@@ -4,6 +4,7 @@ import { UPDATER_ENABLED } from "./constants"
 import { createUpdaterController, type UpdaterReadyRecord } from "./updater-controller"
 import { getLogger } from "./logging"
 import { getStore } from "./store"
+import { UPDATER_STORE } from "./store-keys"
 
 const { autoUpdater } = pkg
 const key = "ready"
@@ -23,7 +24,7 @@ export function setupAutoUpdater(stop: () => Promise<void>) {
     currentVersion: app.getVersion(),
   })
 
-  const store = getStore("opencode.updater")
+  const store = getStore(UPDATER_STORE)
   return createUpdaterController({
     enabled: UPDATER_ENABLED,
     currentVersion: app.getVersion(),

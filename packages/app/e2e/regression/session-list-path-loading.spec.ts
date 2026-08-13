@@ -1,4 +1,5 @@
 import { test } from "@playwright/test"
+import { Brand } from "@opencode-ai/brand"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
@@ -22,15 +23,18 @@ test("shows loaded sessions before the directory path request resolves", async (
     return route.fallback()
   })
 
-  await page.addInitScript((directory) => {
-    localStorage.setItem(
-      "opencode.global.dat:server",
-      JSON.stringify({
-        projects: { local: [{ worktree: directory, expanded: true }] },
-        lastProject: { local: directory },
-      }),
-    )
-  }, fixture.directory)
+  await page.addInitScript(
+    ({ directory, storage }) => {
+      localStorage.setItem(
+        `${storage}:server`,
+        JSON.stringify({
+          projects: { local: [{ worktree: directory, expanded: true }] },
+          lastProject: { local: directory },
+        }),
+      )
+    },
+    { directory: fixture.directory, storage: `${Brand.slug}.global.dat` },
+  )
 
   await page.goto("/")
   try {

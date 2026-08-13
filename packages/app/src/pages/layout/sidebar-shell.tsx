@@ -29,7 +29,7 @@ export const SidebarContent = (props: {
   settingsKeybind: Accessor<string | undefined>
   onOpenSettings: () => void
   helpLabel: Accessor<string>
-  onOpenHelp: () => void
+  onOpenHelp?: () => void
   renderPanel: () => JSX.Element
 }): JSX.Element => {
   const expanded = createMemo(() => !!props.mobile || props.opened())
@@ -99,15 +99,19 @@ export const SidebarContent = (props: {
               aria-label={props.settingsLabel()}
             />
           </TooltipKeybind>
-          <Tooltip placement={placement()} value={props.helpLabel()}>
-            <IconButton
-              icon="help"
-              variant="ghost"
-              size="large"
-              onClick={props.onOpenHelp}
-              aria-label={props.helpLabel()}
-            />
-          </Tooltip>
+          <Show when={props.onOpenHelp}>
+            {(onOpenHelp) => (
+              <Tooltip placement={placement()} value={props.helpLabel()}>
+                <IconButton
+                  icon="help"
+                  variant="ghost"
+                  size="large"
+                  onClick={onOpenHelp()}
+                  aria-label={props.helpLabel()}
+                />
+              </Tooltip>
+            )}
+          </Show>
         </div>
       </div>
 

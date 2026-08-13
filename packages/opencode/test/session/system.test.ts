@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import type { Agent } from "../../src/agent/agent"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -7,6 +7,8 @@ import { Permission } from "../../src/permission"
 import { SystemPrompt } from "../../src/session/system"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { testEffect } from "../lib/effect"
+import type { Provider } from "../../src/provider/provider"
+import { Brand } from "@opencode-ai/brand"
 
 const skills: Skill.Info[] = [
   {
@@ -64,6 +66,13 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
+  test("injects the product identity into model prompts", () => {
+    const prompt = SystemPrompt.provider({ providerID: "test", api: { id: "gpt-5" } } as Provider.Model)[0]
+
+    expect(prompt).toStartWith(`You are ${Brand.name}.`)
+    expect(prompt).not.toContain("{{PRODUCT_NAME}}")
+  })
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service

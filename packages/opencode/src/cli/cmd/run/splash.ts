@@ -18,6 +18,7 @@ import {
   type ScrollbackWriter,
 } from "@opentui/core"
 import * as Locale from "@/util/locale"
+import { Brand } from "@opencode-ai/brand"
 import { go } from "@/cli/logo"
 import type { RunSplashTheme } from "./theme"
 
@@ -181,7 +182,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   let height = 1
 
   if (kind === "entry") {
-    const mark = go.right.slice(1)
+    const mark = go.right
     const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
 
@@ -194,7 +195,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
       })
     }
 
-    push(lines, body_left, top, "OpenCode", right, undefined, TextAttributes.BOLD)
+    push(lines, body_left, top, Brand.name, right, undefined, TextAttributes.BOLD)
     if (input.detail) {
       push(
         lines,
@@ -209,7 +210,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
   }
 
   if (kind === "exit") {
-    const mark = go.right.slice(1)
+    const mark = go.right
     const top = 1
     const body_left = (mark[0]?.length ?? 0) + 2
     const session = "Session  "
@@ -234,7 +235,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
       lines,
       body_left + label.length,
       top + 1,
-      `opencode run -i -s ${meta.session_id}`,
+      `${Brand.cli} run -i -s ${meta.session_id}`,
       right,
       undefined,
       TextAttributes.BOLD,

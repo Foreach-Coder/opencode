@@ -72,6 +72,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
           {
             ...(provider.options?.headers as Record<string, string> | undefined),
             Authorization: `Bearer ${auth.refresh}`,
+            // This flow uses GitHub's upstream OpenCode OAuth client registration.
             "User-Agent": `opencode/${InstallationVersion}`,
             "X-GitHub-Api-Version": API_VERSION,
           },

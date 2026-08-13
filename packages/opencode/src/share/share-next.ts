@@ -80,6 +80,15 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ShareNext") {}
 
+function internalShareURL(input: string) {
+  if (!URL.canParse(input)) throw new Error("Session sharing requires a valid internal enterprise URL")
+  const hostname = new URL(input).hostname.toLowerCase()
+  if (["opencode.ai", "opncd.ai"].some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))) {
+    throw new Error("OpenCode public product services are not allowed for session sharing")
+  }
+  return input.replace(/\/$/, "")
+}
+
 export const use = serviceUse(Service)
 
 function api(resource: string): Api {
@@ -205,9 +214,11 @@ export const layer = Layer.effect(
 
     const request = Effect.fn("ShareNext.request")(function* () {
       const headers: Record<string, string> = {}
+      const configured = (yield* cfg.get()).enterprise?.url
+      if (!configured) throw new Error("Session sharing requires an internal enterprise URL")
+      const baseUrl = internalShareURL(configured)
       const active = yield* account.active()
       if (Option.isNone(active) || !active.value.active_org_id) {
-        const baseUrl = (yield* cfg.get()).enterprise?.url ?? "https://opncd.ai"
         return { headers, api: legacyApi, baseUrl } satisfies Req
       }
 
@@ -218,7 +229,7 @@ export const layer = Layer.effect(
 
       headers.authorization = `Bearer ${token.value}`
       headers["x-org-id"] = active.value.active_org_id
-      return { headers, api: consoleApi, baseUrl: active.value.url } satisfies Req
+      return { headers, api: consoleApi, baseUrl } satisfies Req
     })
 
     const get = Effect.fnUntraced(function* (sessionID: SessionID) {

@@ -6,6 +6,8 @@ import os from "os"
 import path from "path"
 import { fileLogger } from "../../src/observability/logging"
 import { resource } from "../../src/observability/otlp"
+import { Global } from "../../src/global"
+import { Brand } from "@opencode-ai/brand"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
 const opencodeClient = process.env.OPENCODE_CLIENT
@@ -78,6 +80,24 @@ test("file logger appends concurrent runs with a run on every line", async () =>
   expect(lines.every((line) => line.startsWith("timestamp=") && line.includes(" level=INFO "))).toBe(true)
   expect(lines.every((line) => !line.includes(" fiber="))).toBe(true)
   expect(lines.every((line) => !line.startsWith("{"))).toBe(true)
+})
+
+test("file logger writes to the product log by default", async () => {
+  const file = path.join(Global.Path.log, Brand.log)
+  await fs.rm(file, { force: true })
+  await using _ = {
+    async [Symbol.asyncDispose]() {
+      await fs.rm(file, { force: true })
+    },
+  }
+
+  await Effect.logInfo("brand log path").pipe(
+    Effect.provide(Logger.layer([fileLogger()]).pipe(Layer.provide(NodeFileSystem.layer), Layer.orDie)),
+    Effect.scoped,
+    Effect.runPromise,
+  )
+
+  expect(await Bun.file(file).exists()).toBe(true)
 })
 
 test("file logger flattens nested objects", async () => {

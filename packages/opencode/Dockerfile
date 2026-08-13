@@ -7,12 +7,14 @@ ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=${BUN_RUNTIME_TRANSPILER_CACHE_PATH}
 RUN apk add libgcc libstdc++ ripgrep
 
 FROM base AS build-amd64
-COPY dist/opencode-linux-x64-baseline-musl/bin/opencode /usr/local/bin/opencode
+# brand:start
+COPY dist/foreachcode-linux-x64-baseline-musl/bin/foreachcode /usr/local/bin/foreachcode
 
 FROM base AS build-arm64
-COPY dist/opencode-linux-arm64-musl/bin/opencode /usr/local/bin/opencode
+COPY dist/foreachcode-linux-arm64-musl/bin/foreachcode /usr/local/bin/foreachcode
 
 ARG TARGETARCH
 FROM build-${TARGETARCH}
-RUN opencode --version
-ENTRYPOINT ["opencode"]
+RUN foreachcode --version
+ENTRYPOINT ["foreachcode"]
+# brand:end

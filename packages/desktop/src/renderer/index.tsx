@@ -28,6 +28,8 @@ import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
+import { UPDATER_ENABLED } from "../features"
+import { Brand } from "@opencode-ai/brand"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -60,9 +62,9 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 void initI18n()
 
 const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "disabled" })
-void window.api.updater.subscribe(setUpdaterState)
+if (UPDATER_ENABLED) void window.api.updater.subscribe(setUpdaterState)
 
-const deepLinkEvent = "opencode:deep-link"
+const deepLinkEvent = `${Brand.protocol}:deep-link`
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
@@ -195,11 +197,13 @@ const createPlatform = (): Platform => {
 
     storage,
 
-    updater: {
-      state: updaterState,
-      check: () => window.api.updater.check(),
-      install: () => window.api.updater.install(),
-    },
+    updater: UPDATER_ENABLED
+      ? {
+          state: updaterState,
+          check: () => window.api.updater.check(),
+          install: () => window.api.updater.install(),
+        }
+      : undefined,
 
     exportDebugLogs: () => window.api.exportDebugLogs(),
 
@@ -216,7 +220,7 @@ const createPlatform = (): Platform => {
 
       const notification = new Notification(title, {
         body: description ?? "",
-        icon: "https://opencode.ai/favicon-96x96-v3.png",
+        icon: "/favicon-v3.svg",
       })
       notification.onclick = () => {
         void window.api.showWindow()
@@ -285,7 +289,7 @@ listenForDeepLinks()
 render(() => {
   const platform = createPlatform()
   const loadLocale = async () => {
-    const current = await platform.storage?.("opencode.global.dat").getItem("language")
+    const current = await platform.storage?.(`${Brand.slug}.global.dat`).getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
     const raw = current ?? legacy
     if (!raw) return

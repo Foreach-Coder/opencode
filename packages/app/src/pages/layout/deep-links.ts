@@ -1,7 +1,9 @@
-export const deepLinkEvent = "opencode:deep-link"
+import { Brand } from "@opencode-ai/brand"
+
+export const deepLinkEvent = `${Brand.protocol}:deep-link`
 
 const parseUrl = (input: string) => {
-  if (!input.startsWith("opencode://")) return
+  if (!input.startsWith(`${Brand.protocol}://`)) return
   if (typeof URL.canParse === "function" && !URL.canParse(input)) return
   try {
     return new URL(input)

@@ -3,6 +3,7 @@ import { readFile, rm } from "node:fs/promises"
 import { platform, release, tmpdir } from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
+import { Brand } from "@opencode-ai/brand"
 
 const exec = promisify(execFile)
 
@@ -28,7 +29,7 @@ function writeOsc52(text: string) {
 
 export async function read() {
   if (platform() === "darwin") {
-    const file = path.join(tmpdir(), "opencode-clipboard.png")
+    const file = path.join(tmpdir(), `${Brand.slug}-clipboard.png`)
     try {
       await exec("osascript", [
         "-e",

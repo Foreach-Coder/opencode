@@ -1,4 +1,5 @@
 import { Link, Meta } from "@solidjs/meta"
+import { Brand } from "@opencode-ai/brand"
 
 export const Favicon = () => {
   return (
@@ -7,7 +8,7 @@ export const Favicon = () => {
       <Link rel="shortcut icon" href="/favicon-v3.ico" />
       <Link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v3.png" />
       <Link rel="manifest" href="/site.webmanifest" />
-      <Meta name="apple-mobile-web-app-title" content="OpenCode" />
+      <Meta name="apple-mobile-web-app-title" content={Brand.name} />
     </>
   )
 }

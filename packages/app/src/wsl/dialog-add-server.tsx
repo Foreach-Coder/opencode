@@ -551,7 +551,11 @@ export function DialogAddWslServer(props: DialogWslServerProps = {}) {
                         {language.t("wsl.onboarding.refresh")}
                       </Button>
                     </Show>
-                    <Show when={!opencodeReady() || opencodeCheck()?.matchesDesktop === false}>
+                    <Show
+                      when={
+                        api.installOpencodeEnabled && (!opencodeReady() || opencodeCheck()?.matchesDesktop === false)
+                      }
+                    >
                       <Button
                         variant="secondary"
                         size="large"

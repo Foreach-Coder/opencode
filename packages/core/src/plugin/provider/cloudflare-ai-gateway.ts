@@ -1,5 +1,6 @@
 import os from "os"
 import { InstallationVersion } from "../../installation/version"
+import { Brand } from "@opencode-ai/brand"
 import { Effect, Option, Schema } from "effect"
 import { PluginV2 } from "../../plugin"
 
@@ -71,7 +72,7 @@ function gatewayOptions(options: Record<string, unknown>, metadata: unknown) {
     skipCache: options.skipCache,
     collectLog: options.collectLog,
     headers: {
-      "User-Agent": `opencode/${InstallationVersion} cloudflare-ai-gateway (${os.platform()} ${os.release()}; ${os.arch()})`,
+      "User-Agent": `${Brand.slug}/${InstallationVersion} cloudflare-ai-gateway (${os.platform()} ${os.release()}; ${os.arch()})`,
     },
   }
 }

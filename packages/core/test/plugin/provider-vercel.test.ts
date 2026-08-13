@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Brand } from "@opencode-ai/brand"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -7,7 +8,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { it, model, provider } from "./provider-helper"
 
 describe("VercelPlugin", () => {
-  it.effect("applies legacy lower-case referer headers", () =>
+  it.effect("applies the lower-case product identity header", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
@@ -25,8 +26,7 @@ describe("VercelPlugin", () => {
       })
       expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel"))).request.headers).toEqual({
         Existing: "1",
-        "http-referer": "https://opencode.ai/",
-        "x-title": "opencode",
+        "x-title": Brand.name,
       })
     }),
   )

@@ -703,7 +703,7 @@ export const SettingsGeneralV2: Component = () => {
 
         <SoundsSection />
 
-        <Show when={desktop()}>
+        <Show when={desktop() && platform.updater}>
           <UpdatesSection />
         </Show>
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Brand } from "@opencode-ai/brand"
 import { enterWslOpencodeStep, wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
 
 describe("WSL server settings presentation", () => {
@@ -22,7 +23,7 @@ describe("WSL server settings presentation", () => {
         matchesDesktop: null,
         error: null,
       }),
-    ).toBe("Install OpenCode")
+    ).toBe(`Install ${Brand.name}`)
     expect(
       wslOpencodeAction({
         distro: "Debian",
@@ -32,7 +33,7 @@ describe("WSL server settings presentation", () => {
         matchesDesktop: false,
         error: null,
       }),
-    ).toBe("Update OpenCode")
+    ).toBe(`Update ${Brand.name}`)
     expect(
       wslOpencodeAction({
         distro: "Debian",

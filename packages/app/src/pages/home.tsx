@@ -360,7 +360,6 @@ function HomeDesign() {
           clearNotifications={clearNotifications}
           unseenCount={unseenCount}
           openSettings={openSettings}
-          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
           language={language}
         />
 
@@ -446,7 +445,7 @@ function HomeProjectColumn(props: {
   clearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   openSettings: () => void
-  openHelp: () => void
+  openHelp?: () => void
   language: ReturnType<typeof useLanguage>
 }) {
   const global = useGlobal()
@@ -508,14 +507,18 @@ function HomeProjectColumn(props: {
           <IconV2 name="settings-gear" size="small" />
           <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
         </button>
-        <button
-          type="button"
-          class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
-          onClick={props.openHelp}
-        >
-          <IconV2 name="help" size="small" />
-          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
-        </button>
+        <Show when={props.openHelp}>
+          {(openHelp) => (
+            <button
+              type="button"
+              class={`${HOME_PROJECT_NAV_ROW} text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted`}
+              onClick={openHelp()}
+            >
+              <IconV2 name="help" size="small" />
+              <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
+            </button>
+          )}
+        </Show>
       </div>
     </aside>
   )

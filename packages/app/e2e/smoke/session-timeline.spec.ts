@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { Brand } from "@opencode-ai/brand"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { fixture, pageMessages } from "./session-timeline.fixture"
 import { trackPageErrors, expectNoSmokeErrors } from "../utils/errors"
@@ -114,9 +115,9 @@ test.describe("smoke: session timeline", () => {
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
+      ({ dirBase64, sourceID, targetID, storage }) => {
         localStorage.setItem(
-          "opencode.global.dat:tabs",
+          `${storage}:tabs`,
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
@@ -127,7 +128,12 @@ test.describe("smoke: session timeline", () => {
           ),
         )
       },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+      {
+        dirBase64: base64Encode(fixture.directory),
+        sourceID: fixture.sourceID,
+        targetID: fixture.targetID,
+        storage: `${Brand.slug}.global.dat`,
+      },
     )
 
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.targetID}`)
@@ -240,9 +246,9 @@ test.describe("smoke: session timeline", () => {
     })
     await configureSmokePage(page, fixture.directory)
     await page.addInitScript(
-      ({ dirBase64, sourceID, targetID }) => {
+      ({ dirBase64, sourceID, targetID, storage }) => {
         localStorage.setItem(
-          "opencode.global.dat:tabs",
+          `${storage}:tabs`,
           JSON.stringify(
             [sourceID, targetID].map((sessionId) => ({
               type: "session",
@@ -253,7 +259,12 @@ test.describe("smoke: session timeline", () => {
           ),
         )
       },
-      { dirBase64: base64Encode(fixture.directory), sourceID: fixture.sourceID, targetID: fixture.targetID },
+      {
+        dirBase64: base64Encode(fixture.directory),
+        sourceID: fixture.sourceID,
+        targetID: fixture.targetID,
+        storage: `${Brand.slug}.global.dat`,
+      },
     )
     await page.goto(`/${base64Encode(fixture.directory)}/session/${fixture.sourceID}`)
     await expectSessionTitle(page, fixture.expected.sourceTitle)
@@ -345,19 +356,22 @@ async function configureSmokePage(page: Page, directory: string) {
     )
   })
 
-  await page.addInitScript((directory) => {
-    localStorage.setItem(
-      "opencode.global.dat:server",
-      JSON.stringify({
-        projects: {
-          local: [{ worktree: directory, expanded: true }],
-        },
-        lastProject: {
-          local: directory,
-        },
-      }),
-    )
-  }, directory)
+  await page.addInitScript(
+    ({ directory, storage }) => {
+      localStorage.setItem(
+        `${storage}:server`,
+        JSON.stringify({
+          projects: {
+            local: [{ worktree: directory, expanded: true }],
+          },
+          lastProject: {
+            local: directory,
+          },
+        }),
+      )
+    },
+    { directory, storage: `${Brand.slug}.global.dat` },
+  )
 
   await page.addInitScript(() => {
     const smoke = window as SmokeWindow

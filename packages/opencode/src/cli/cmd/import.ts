@@ -10,7 +10,7 @@ import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
 import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 
 const decodeMessageInfo = Schema.decodeUnknownSync(SessionV1.Info)
@@ -108,15 +108,14 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
   if (isUrl) {
     const slug = parseShareUrl(file)
     if (!slug) {
-      const baseUrl = yield* Effect.orDie(share.url())
-      process.stdout.write(`Invalid URL format. Expected: ${baseUrl}/share/<slug>`)
+      process.stdout.write("Invalid URL format. Expected: https://host/share/<slug>")
       process.stdout.write(EOL)
       return
     }
 
     const baseUrl = new URL(file).origin
-    const req = yield* Effect.orDie(share.request())
-    const headers = shouldAttachShareAuthHeaders(file, req.baseUrl) ? req.headers : {}
+    const req = Option.getOrUndefined(yield* Effect.option(share.request()))
+    const headers = req && shouldAttachShareAuthHeaders(file, req.baseUrl) ? req.headers : {}
 
     const tryFetch = (url: string) =>
       Effect.tryPromise({
@@ -127,7 +126,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
           }),
       })
 
-    const dataPath = req.api.data(slug)
+    const dataPath = req?.api.data(slug) ?? `/api/share/${slug}/data`
     let response = yield* tryFetch(`${baseUrl}${dataPath}`)
 
     if (!response.ok && dataPath !== `/api/share/${slug}/data`) {

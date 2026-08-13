@@ -1,5 +1,6 @@
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
+import { Brand } from "@opencode-ai/brand"
 
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -94,7 +95,7 @@ export const ProviderApi = HttpApi.make("provider")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode experimental HttpApi",
+      title: `${Brand.name} experimental HttpApi`,
       version: "0.0.1",
       description: "Experimental HttpApi surface for selected instance routes.",
     }),

@@ -1,4 +1,16 @@
 import type { WslDistroProbe, WslOpencodeCheck, WslServerItem } from "../../preload/types"
+import { Brand } from "@opencode-ai/brand"
+
+export const WSL_EXECUTABLE_PROBE = `if [ -x "$HOME/.${Brand.directory}/bin/${Brand.cli}" ]; then printf "%s\\n" "$HOME/.${Brand.directory}/bin/${Brand.cli}"; fi`
+
+export function wslInstallUnavailable() {
+  return {
+    code: 1,
+    signal: null,
+    stdout: "",
+    stderr: `${Brand.name} internal installer is not configured`,
+  }
+}
 
 export function wslServerIdToRestart(servers: WslServerItem[], distro: string) {
   return servers.find((item) => item.config.distro === distro)?.config.id

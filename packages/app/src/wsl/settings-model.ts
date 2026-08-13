@@ -1,4 +1,5 @@
 import type { WslOpencodeCheck, WslServerRuntime } from "./types"
+import { Brand } from "@opencode-ai/brand"
 
 export const wslRuntimeRetryable = (runtime: WslServerRuntime) =>
   runtime.kind === "failed" || runtime.kind === "stopped"
@@ -14,6 +15,6 @@ export async function enterWslOpencodeStep(
 
 export function wslOpencodeAction(check?: WslOpencodeCheck) {
   if (!check) return
-  if (!check.resolvedPath) return "Install OpenCode"
-  if (check.matchesDesktop === false) return "Update OpenCode"
+  if (!check.resolvedPath) return `Install ${Brand.name}`
+  if (check.matchesDesktop === false) return `Update ${Brand.name}`
 }

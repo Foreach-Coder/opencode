@@ -107,7 +107,7 @@ export function WslServerSettings(props: {
                 <Show when={props.controller.canDefault() && props.controller.defaultKey() === key}>
                   <Tag>{language.t("dialog.server.status.default")}</Tag>
                 </Show>
-                <Show when={opencodeAction()}>
+                <Show when={api?.installOpencodeEnabled && opencodeAction()}>
                   {(label) => (
                     <ButtonV2
                       size="small"

@@ -15,6 +15,7 @@ import { FrontmatterError } from "@opencode-ai/core/v1/config/error"
 import { ConfigMarkdown } from "@/config/markdown"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Glob } from "@opencode-ai/core/util/glob"
+import { Brand } from "@opencode-ai/brand"
 import { Discovery } from "./discovery"
 import { isRecord } from "@/util/record"
 
@@ -30,8 +31,7 @@ const SKILL_PATTERN = "**/SKILL.md"
 // when the model is asked to touch opencode's own config files gives it the
 // actual schemas instead of guesses.
 const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
-const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
-  "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
+const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION = `Use ONLY when the user is editing or creating ${Brand.name}'s own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/${Brand.directory}/. Also use when creating or fixing ${Brand.name} agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring ${Brand.name} itself.`
 const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
 export const Info = Schema.Struct({

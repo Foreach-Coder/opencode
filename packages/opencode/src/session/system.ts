@@ -21,21 +21,26 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Reference } from "@opencode-ai/core/reference"
+import { Brand } from "@opencode-ai/brand"
+
+function productPrompt(value: string) {
+  return value.replaceAll("{{PRODUCT_NAME}}", Brand.name)
+}
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
-    return [PROMPT_BEAST]
+    return [productPrompt(PROMPT_BEAST)]
   if (model.api.id.includes("gpt")) {
     if (model.api.id.includes("codex")) {
-      return [PROMPT_CODEX]
+      return [productPrompt(PROMPT_CODEX)]
     }
-    return [PROMPT_GPT]
+    return [productPrompt(PROMPT_GPT)]
   }
-  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
-  if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
-  if (model.api.id.toLowerCase().includes("kimi")) return [PROMPT_KIMI]
-  return [PROMPT_DEFAULT]
+  if (model.api.id.includes("gemini-")) return [productPrompt(PROMPT_GEMINI)]
+  if (model.api.id.includes("claude")) return [productPrompt(PROMPT_ANTHROPIC)]
+  if (model.api.id.toLowerCase().includes("trinity")) return [productPrompt(PROMPT_TRINITY)]
+  if (model.api.id.toLowerCase().includes("kimi")) return [productPrompt(PROMPT_KIMI)]
+  return [productPrompt(PROMPT_DEFAULT)]
 }
 
 export interface Interface {

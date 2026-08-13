@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Brand } from "@opencode-ai/brand"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -18,7 +19,7 @@ describe("OpenRouterPlugin", () => {
     ),
   )
 
-  it.effect("applies legacy referer headers only to openrouter", () =>
+  it.effect("applies product identity headers only to openrouter", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
@@ -38,8 +39,7 @@ describe("OpenRouterPlugin", () => {
 
       expect((yield* catalog.provider.get(ProviderV2.ID.make("openrouter"))).request.headers).toEqual({
         Existing: "value",
-        "HTTP-Referer": "https://opencode.ai/",
-        "X-Title": "opencode",
+        "X-Title": Brand.name,
       })
       expect((yield* catalog.provider.get(ProviderV2.ID.make("nvidia"))).request.headers).toEqual({})
     }),

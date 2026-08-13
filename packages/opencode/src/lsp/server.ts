@@ -13,6 +13,7 @@ import { Module } from "@opencode-ai/core/util/module"
 import { spawn } from "./launch"
 import { Npm } from "@opencode-ai/core/npm"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
+import { Brand } from "@opencode-ai/brand"
 
 const pathExists = async (p: string) =>
   fs
@@ -1243,7 +1244,7 @@ export const JDTLS: Info = {
         }
       })(),
     )
-    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-jdtls-data"))
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `${Brand.slug}-jdtls-data`))
     return {
       process: spawn(
         java,

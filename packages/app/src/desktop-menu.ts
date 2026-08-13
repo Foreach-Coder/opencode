@@ -1,3 +1,5 @@
+import { Brand } from "@opencode-ai/brand"
+
 export type DesktopMenuPlatform = "macos" | "windows"
 
 export type DesktopMenuAction =
@@ -50,7 +52,6 @@ export type DesktopMenuItem = {
   role?: DesktopMenuRole
   href?: string
   accelerator?: Partial<Record<DesktopMenuPlatform, string>>
-  enabled?: "updater"
   platforms?: DesktopMenuPlatform[]
 }
 
@@ -72,11 +73,10 @@ export type DesktopMenu = {
 export const DESKTOP_MENU: DesktopMenu[] = [
   {
     id: "app",
-    label: "OpenCode",
+    label: Brand.name,
     platforms: ["macos"],
     items: [
       { type: "item", role: "about" },
-      { type: "item", label: "Check for Updates...", action: "app.checkForUpdates", enabled: "updater" },
       { type: "item", label: "Settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
       { type: "item", label: "Reload Webview", action: "view.reload" },
       { type: "item", label: "Restart", action: "app.relaunch" },
@@ -201,19 +201,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     label: "Help",
     items: [
       { type: "item", label: "OpenCode Documentation", href: "https://opencode.ai/docs" },
-      { type: "item", label: "Support Forum", href: "https://discord.com/invite/opencode" },
       { type: "item", label: "Export Logs...", command: "logs.export" },
-      { type: "separator" },
-      {
-        type: "item",
-        label: "Share Feedback",
-        href: "https://github.com/anomalyco/opencode/issues/new?template=feature_request.yml",
-      },
-      {
-        type: "item",
-        label: "Report a Bug",
-        href: "https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml",
-      },
     ],
   },
 ]

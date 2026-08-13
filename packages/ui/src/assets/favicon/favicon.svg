@@ -1,7 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512"><svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="512" height="512" fill="#131010"></rect>
-<path d="M320 224V352H192V224H320Z" fill="#5A5858"></path>
-<path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="white"></path>
-</svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
-@media (prefers-color-scheme: dark) { :root { filter: none; } }
-</style></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">ForeachCode application icon</title>
+  <desc id="description">A metallic rounded F and command prompt chevron on a dark rounded square.</desc>
+  <defs>
+    <linearGradient id="background" x1="164" y1="96" x2="860" y2="932" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#292A2D" />
+      <stop offset="0.48" stop-color="#191A1C" />
+      <stop offset="1" stop-color="#0D0E10" />
+    </linearGradient>
+    <radialGradient id="backgroundGlow" cx="0" cy="0" r="1" gradientTransform="translate(440 360) rotate(54) scale(650)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.055" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="metal" x1="336" y1="224" x2="712" y2="774" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" />
+      <stop offset="0.48" stop-color="#F4F5F6" />
+      <stop offset="1" stop-color="#CFD4DA" />
+    </linearGradient>
+    <linearGradient id="chevron" x1="540" y1="646" x2="652" y2="784" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3F6FA" />
+      <stop offset="1" stop-color="#AEB7C1" />
+    </linearGradient>
+    <filter id="surfaceShadow" x="18" y="26" width="988" height="992" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000000" flood-opacity="0.38" />
+    </filter>
+    <filter id="markShadow" x="278" y="170" width="508" height="690" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#000000" flood-opacity="0.58" />
+    </filter>
+  </defs>
+  <g filter="url(#surfaceShadow)">
+    <rect x="64" y="64" width="896" height="896" rx="224" fill="url(#background)" />
+    <rect x="76" y="76" width="872" height="872" rx="212" fill="url(#backgroundGlow)" />
+    <rect x="76" y="76" width="872" height="872" rx="212" fill="none" stroke="#FFFFFF" stroke-opacity="0.055" stroke-width="8" />
+  </g>
+  <g filter="url(#markShadow)" transform="translate(105 136) scale(0.75)">
+    <path d="M320 306C320 244.14 370.14 194 432 194H746C758.6 194 768.02 205.55 765.47 217.89L742.8 327.56C734.76 366.47 700.47 394.35 660.75 394.35H435.5C382.63 394.35 338.24 430.19 320 478V306Z" fill="url(#metal)" />
+    <path d="M320 548C320 486.14 370.14 436 432 436H678.22C690.94 436 700.38 447.75 697.62 460.16L674.18 565.71C665.57 604.45 631.22 632 591.54 632H500V696C500 757.86 449.86 808 388 808H320V548Z" fill="url(#metal)" />
+    <path d="M532 654H584L662 732L584 810H532L606 732L532 654Z" fill="url(#chevron)" />
+  </g>
+</svg>

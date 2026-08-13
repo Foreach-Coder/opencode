@@ -29,6 +29,7 @@ import {
   type SetSessionModeRequest,
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
+import { Brand } from "@opencode-ai/brand"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
@@ -91,17 +92,17 @@ export function make(input: {
   const initialize = Effect.fn("ACP.initialize")(function* (params: InitializeRequest) {
     const started = performance.now()
     const authMethod: AuthMethod = {
-      description: "Run `opencode auth login` in the terminal",
-      name: "Login with opencode",
+      description: `Run \`${Brand.cli} auth login\` in the terminal`,
+      name: `Login with ${Brand.name}`,
       id: AuthMethodID,
     }
 
     if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
       authMethod._meta = {
         "terminal-auth": {
-          command: "opencode",
+          command: Brand.cli,
           args: ["auth", "login"],
-          label: "OpenCode Login",
+          label: `${Brand.name} Login`,
         },
       }
     }
@@ -127,7 +128,7 @@ export function make(input: {
       },
       authMethods: [authMethod],
       agentInfo: {
-        name: "OpenCode",
+        name: Brand.name,
         version: InstallationVersion,
       },
     }
@@ -1010,7 +1011,7 @@ function fromUnknownError(error: unknown, service?: string): Error {
   if (isAuthRequired(error)) {
     return new ACPError.AuthRequiredError({ providerId: findProviderID(error) })
   }
-  return new ACPError.ServiceFailureError({ safeMessage: "OpenCode service failure", service })
+  return new ACPError.ServiceFailureError({ safeMessage: `${Brand.name} service failure`, service })
 }
 
 function isACPError(error: unknown): error is Error {

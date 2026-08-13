@@ -11,6 +11,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"))
 
+// brand:start
+const productName = "ForeachCode"
+const productSlug = "foreachcode"
+const productCli = "foreachcode"
+// brand:end
+
 const platformMap = {
   darwin: "darwin",
   linux: "linux",
@@ -24,9 +30,9 @@ const archMap = {
 
 const platform = platformMap[os.platform()] ?? os.platform()
 const arch = archMap[os.arch()] ?? os.arch()
-const base = `opencode-${platform}-${arch}`
-const sourceBinary = platform === "windows" ? "opencode.exe" : "opencode"
-const targetBinary = path.join(__dirname, "bin", "opencode.exe")
+const base = `${productSlug}-${platform}-${arch}`
+const sourceBinary = platform === "windows" ? `${productCli}.exe` : productCli
+const targetBinary = path.join(__dirname, "bin", sourceBinary)
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -127,7 +133,7 @@ function installPackage(name) {
   const version = packageJson.optionalDependencies?.[name]
   if (!version) return
 
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-install-"))
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), `${productSlug}-install-`))
   try {
     const result = childProcess.spawnSync(
       "npm",
@@ -175,7 +181,7 @@ function main() {
   }
 
   throw new Error(
-    `It seems your package manager failed to install the right opencode CLI package. Try manually installing ${packageNames()
+    `It seems your package manager failed to install the right ${productName} CLI package. Try manually installing ${packageNames()
       .map((name) => JSON.stringify(name))
       .join(" or ")}.`,
   )

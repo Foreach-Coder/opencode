@@ -1,12 +1,26 @@
 import { expect, test } from "bun:test"
 import type { Configuration } from "electron-builder"
-
-const legacyDesktopEntry = "resources/linux/opencode-desktop.desktop"
+import { Brand } from "@opencode-ai/brand"
 
 const channels = [
-  { channel: "dev", appId: "ai.opencode.desktop.dev" },
-  { channel: "beta", appId: "ai.opencode.desktop.beta" },
-  { channel: "prod", appId: "ai.opencode.desktop" },
+  {
+    channel: "dev",
+    appId: Brand.desktop.dev.appId,
+    productName: Brand.desktop.dev.name,
+    packageName: `${Brand.slug}-dev`,
+  },
+  {
+    channel: "beta",
+    appId: Brand.desktop.beta.appId,
+    productName: Brand.desktop.beta.name,
+    packageName: `${Brand.slug}-beta`,
+  },
+  {
+    channel: "prod",
+    appId: Brand.desktop.prod.appId,
+    productName: Brand.desktop.prod.name,
+    packageName: Brand.slug,
+  },
 ] as const
 
 for (const channel of channels) {
@@ -21,28 +35,16 @@ for (const channel of channels) {
     else process.env.OPENCODE_CHANNEL = previous
 
     expect(config.appId).toBe(channel.appId)
+    expect(config.productName).toBe(channel.productName)
     expect(config.extraMetadata?.desktopName).toBe(`${channel.appId}.desktop`)
+    expect(config.artifactName).toBe(`${Brand.slug}-desktop-\${os}-\${arch}.\${ext}`)
+    expect(config.protocols).toEqual({ name: channel.productName, schemes: [Brand.protocol] })
     expect(config.linux?.executableName).toBe(channel.appId)
     expect(config.linux?.desktop?.entry?.StartupWMClass).toBe(channel.appId)
+    expect(config.deb?.packageName).toBe(channel.packageName)
+    expect(config.rpm?.packageName).toBe(channel.packageName)
+    expect(config.publish).toBeUndefined()
+    expect(config.deb?.fpm).toBeUndefined()
+    expect(config.rpm?.fpm).toBeUndefined()
   })
 }
-
-test("keeps a hidden prod launcher for old Linux pins", async () => {
-  const previous = process.env.OPENCODE_CHANNEL
-  process.env.OPENCODE_CHANNEL = "prod"
-
-  const module = await import("./electron-builder.config.ts?compat=prod")
-  const config = module.default as Configuration
-
-  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
-  else process.env.OPENCODE_CHANNEL = previous
-
-  expect(config.deb?.fpm?.[0]).toEndWith(`${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`)
-  expect(config.rpm?.fpm?.[0]).toEndWith(`${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`)
-
-  const desktop = await Bun.file(legacyDesktopEntry).text()
-  expect(desktop).toContain("Exec=/opt/OpenCode/ai.opencode.desktop %U")
-  expect(desktop).toContain("Icon=ai.opencode.desktop")
-  expect(desktop).toContain("StartupWMClass=ai.opencode.desktop")
-  expect(desktop).toContain("NoDisplay=true")
-})

@@ -1,5 +1,6 @@
 import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
+import { Brand } from "@opencode-ai/brand"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { QuestionNotFoundError } from "../errors"
@@ -67,7 +68,7 @@ export const QuestionApi = HttpApi.make("question")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode HttpApi",
+      title: `${Brand.name} HttpApi`,
       version: "0.0.1",
       description: "Effect HttpApi surface for instance routes.",
     }),

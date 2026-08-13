@@ -3,7 +3,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import * as pty from "@lydell/node-pty"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "../../preload/types"
-import { wslTerminalArgs } from "./policy"
+import { WSL_EXECUTABLE_PROBE, wslInstallUnavailable, wslTerminalArgs } from "./policy"
 
 export type WslCommandLine = {
   stream: "stdout" | "stderr"
@@ -259,16 +259,8 @@ export async function installWslDistro(name: string, opts?: RunWslOptions) {
   )
 }
 
-export async function installWslOpencode(version: string, distro: string, opts?: RunWslOptions) {
-  return runInteractiveCommand(
-    resolveSystem32Command("wsl.exe"),
-    wslArgs(
-      ["bash", "-lc", `curl -fsSL https://opencode.ai/install | bash -s -- --version ${shellEscape(version)}`],
-      distro,
-    ),
-    withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
-    DEFAULT_WSL_INSTALL_TIMEOUT_MS,
-  )
+export async function installWslOpencode(_version: string, _distro: string, _opts?: RunWslOptions) {
+  return wslInstallUnavailable()
 }
 
 export async function probeWslDistro(name: string, opts?: RunWslOptions): Promise<WslDistroProbe> {
@@ -303,15 +295,7 @@ export async function probeWslDistro(name: string, opts?: RunWslOptions): Promis
 }
 
 export async function resolveWslOpencode(distro: string, opts?: RunWslOptions) {
-  return firstLine(
-    (
-      await runWslSh(
-        'if [ -x "$HOME/.opencode/bin/opencode" ]; then printf "%s\\n" "$HOME/.opencode/bin/opencode"; fi',
-        distro,
-        opts,
-      )
-    ).stdout,
-  )
+  return firstLine((await runWslSh(WSL_EXECUTABLE_PROBE, distro, opts)).stdout)
 }
 
 export async function readWslCommandVersion(command: string, distro: string, opts?: RunWslOptions) {

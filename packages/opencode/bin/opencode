@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 
-const childProcess = require("child_process")
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
+import childProcess from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import os from "node:os"
+import { fileURLToPath } from "node:url"
+
+// brand:start
+const productName = "ForeachCode"
+const productSlug = "foreachcode"
+const productCli = "foreachcode"
+const productDirectory = "foreachcode"
+// brand:end
 
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
@@ -45,11 +53,11 @@ function run(target) {
 
 const envPath = process.env.OPENCODE_BIN_PATH
 
-const scriptPath = fs.realpathSync(__filename)
+const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url))
 const scriptDir = path.dirname(scriptPath)
 
 //
-const cached = path.join(scriptDir, ".opencode")
+const cached = path.join(scriptDir, `.${productDirectory}`)
 
 const platformMap = {
   darwin: "darwin",
@@ -70,8 +78,8 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const base = productSlug + "-" + platform + "-" + arch
+const binary = platform === "windows" ? `${productCli}.exe` : productCli
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -189,7 +197,7 @@ function findBinary(startDir) {
 const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
 if (!resolved) {
   console.error(
-    "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
+    `It seems that your package manager failed to install the right version of the ${productName} CLI for your platform. You can try manually installing ` +
       names.map((n) => `\"${n}\"`).join(" or ") +
       " package",
   )

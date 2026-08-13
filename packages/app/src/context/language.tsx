@@ -1,4 +1,5 @@
 import * as i18n from "@solid-primitives/i18n"
+import { Brand } from "@opencode-ai/brand"
 import { createEffect, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
@@ -30,8 +31,13 @@ type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 type Source = { dict: Record<string, string> }
 
+const UPSTREAM_MODEL_SERVICE_KEYS = new Set<keyof Dictionary>([
+  "dialog.model.unpaid.freeModels.title",
+  "sidebar.gettingStarted.line1",
+])
+
 function cookie(locale: Locale) {
-  return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
+  return `${Brand.slug}_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
 }
 
 const LOCALES: readonly Locale[] = [
@@ -183,7 +189,7 @@ export function normalizeLocale(value: string): Locale {
 function readStoredLocale() {
   if (typeof localStorage !== "object") return
   try {
-    const raw = localStorage.getItem("opencode.global.dat:language")
+    const raw = localStorage.getItem(`${Brand.slug}.global.dat:language`)
     if (!raw) return
     const next = JSON.parse(raw) as { locale?: string }
     if (typeof next?.locale !== "string") return
@@ -215,10 +221,16 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       initialValue: dicts.get(initial) ?? base,
     })
 
-    const t = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as (
+    const translate = i18n.translator(() => dict() ?? base, i18n.resolveTemplate) as (
       key: keyof Dictionary,
       params?: Record<string, string | number | boolean>,
     ) => string
+    const t = (key: keyof Dictionary, params?: Record<string, string | number | boolean>) =>
+      translate(key, {
+        ...params,
+        product: UPSTREAM_MODEL_SERVICE_KEYS.has(key) ? "OpenCode Zen" : Brand.name,
+        cli: Brand.cli,
+      })
 
     const label = (value: Locale) => t(LABEL_KEY[value])
 

@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Brand } from "@opencode-ai/brand"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
@@ -17,7 +18,7 @@ describe("LLMGatewayPlugin", () => {
     })
   })
 
-  it.effect("is registered so legacy referer headers can be applied", () =>
+  it.effect("is registered so product identity headers can be applied", () =>
     Effect.sync(() =>
       expectPluginRegistered(
         ProviderPlugins.map((item) => item.id),
@@ -26,7 +27,7 @@ describe("LLMGatewayPlugin", () => {
     ),
   )
 
-  it.effect("applies legacy referer headers only to enabled llmgateway", () =>
+  it.effect("applies product identity headers only to enabled llmgateway", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
@@ -50,8 +51,7 @@ describe("LLMGatewayPlugin", () => {
       })
       expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({
         Existing: "value",
-        "HTTP-Referer": "https://opencode.ai/",
-        "X-Title": "opencode",
+        "X-Title": Brand.name,
         "X-Source": "opencode",
       })
       expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({})

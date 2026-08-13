@@ -1,4 +1,5 @@
 import * as i18n from "@solid-primitives/i18n"
+import { Brand } from "@opencode-ai/brand"
 
 import { dict as desktopEn } from "./en"
 import { dict as desktopZh } from "./zh"
@@ -172,7 +173,7 @@ state.dict = build(state.locale)
 const translate = i18n.translator(() => state.dict, i18n.resolveTemplate)
 
 export function t(key: keyof Dictionary, params?: Record<string, string | number>) {
-  return translate(key, params)
+  return translate(key, { ...params, product: Brand.name, cli: Brand.cli })
 }
 
 export function initI18n(): Promise<Locale> {
@@ -180,7 +181,7 @@ export function initI18n(): Promise<Locale> {
   if (cached) return cached
 
   const promise = (async () => {
-    const raw = await window.api.storeGet("opencode.global.dat", "language").catch(() => null)
+    const raw = await window.api.storeGet(`${Brand.slug}.global.dat`, "language").catch(() => null)
     const value = parseStored(raw)
     const next = pickLocale(value) ?? state.locale
 

@@ -5,6 +5,7 @@ import { isRecord } from "../util/record"
 import { useTuiPaths } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { editorIntegration } from "../editor"
+import { Brand } from "@opencode-ai/brand"
 
 const MCP_PROTOCOL_VERSION = "2025-11-25"
 
@@ -225,7 +226,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
         request("initialize", {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
-          clientInfo: { name: "opencode", version: "0.0.0" },
+          clientInfo: { name: Brand.slug, version: "0.0.0" },
         })
       })
 

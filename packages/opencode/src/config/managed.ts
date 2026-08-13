@@ -4,10 +4,11 @@ import { existsSync } from "fs"
 import os from "os"
 import path from "path"
 import { Process } from "@/util/process"
+import { Brand } from "@opencode-ai/brand"
 
-const MANAGED_PLIST_DOMAIN = "ai.opencode.managed"
+export const MANAGED_PLIST_DOMAIN = `ai.${Brand.slug}.managed`
 
-// Keys injected by macOS/MDM into the managed plist that are not OpenCode config
+// Keys injected by macOS/MDM into the managed plist that are not product config
 const PLIST_META = new Set([
   "PayloadDisplayName",
   "PayloadIdentifier",
@@ -17,14 +18,14 @@ const PLIST_META = new Set([
   "_manualProfile",
 ])
 
-function systemManagedConfigDir(): string {
-  switch (process.platform) {
+export function systemManagedConfigDir(platform = process.platform, programData = process.env.ProgramData) {
+  switch (platform) {
     case "darwin":
-      return "/Library/Application Support/opencode"
+      return `/Library/Application Support/${Brand.directory}`
     case "win32":
-      return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+      return path.win32.join(programData || "C:\\ProgramData", Brand.directory)
     default:
-      return "/etc/opencode"
+      return `/etc/${Brand.directory}`
   }
 }
 

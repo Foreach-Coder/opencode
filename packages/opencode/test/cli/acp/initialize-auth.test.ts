@@ -3,6 +3,7 @@ import type { AuthenticateResponse, InitializeResponse } from "@agentclientproto
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 import { createAcpClient, expectErrorCode, initialize } from "./helpers"
+import { Brand } from "@opencode-ai/brand"
 
 describe("opencode acp initialize/auth subprocess", () => {
   cliIt.live(
@@ -21,7 +22,7 @@ describe("opencode acp initialize/auth subprocess", () => {
         expect(initialized.agentCapabilities?.sessionCapabilities?.fork).toEqual({})
         expect(initialized.agentCapabilities?.sessionCapabilities?.list).toEqual({})
         expect(initialized.agentCapabilities?.sessionCapabilities?.resume).toEqual({})
-        expect(initialized.agentInfo?.name).toBe("OpenCode")
+        expect(initialized.agentInfo?.name).toBe(Brand.name)
       }),
     60_000,
   )

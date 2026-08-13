@@ -1,3 +1,4 @@
+import { Brand } from "@opencode-ai/brand"
 import { spawn } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createServer } from "node:net"
@@ -18,7 +19,7 @@ export async function spawnWslSidecar(
   opts: { onLine?: (line: WslCommandLine) => void; healthTimeoutMs?: number } = {},
 ): Promise<WslSidecar> {
   const opencode = await resolveWslOpencode(distro)
-  if (!opencode) throw new Error(`OpenCode is not installed in ${distro}`)
+  if (!opencode) throw new Error(`${Brand.name} is not installed in ${distro}`)
 
   const port = await allocatePort()
   const password = randomUUID()

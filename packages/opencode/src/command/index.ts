@@ -10,6 +10,7 @@ import { Skill } from "../skill"
 import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import { Brand } from "@opencode-ai/brand"
 
 type State = {
   commands: Record<string, Info>
@@ -80,9 +81,9 @@ export const layer = Layer.effect(
         description: "guided AGENTS.md setup",
         source: "command",
         get template() {
-          return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
+          return PROMPT_INITIALIZE.replace("${path}", ctx.worktree).replaceAll("{{PRODUCT_NAME}}", Brand.name)
         },
-        hints: hints(PROMPT_INITIALIZE),
+        hints: hints(PROMPT_INITIALIZE.replaceAll("{{PRODUCT_NAME}}", Brand.name)),
       }
       commands[Default.REVIEW] = {
         name: Default.REVIEW,

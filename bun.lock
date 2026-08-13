@@ -32,6 +32,7 @@
       "version": "1.17.9",
       "dependencies": {
         "@kobalte/core": "catalog:",
+        "@opencode-ai/brand": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
@@ -82,6 +83,15 @@
         "vite": "catalog:",
         "vite-plugin-icons-spritesheet": "3.0.1",
         "vite-plugin-solid": "catalog:",
+      },
+    },
+    "packages/brand": {
+      "name": "@opencode-ai/brand",
+      "version": "1.17.9",
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
       },
     },
     "packages/cli": {
@@ -273,6 +283,7 @@
         "@lydell/node-pty": "catalog:",
         "@npmcli/arborist": "9.4.0",
         "@npmcli/config": "10.8.1",
+        "@opencode-ai/brand": "workspace:*",
         "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
         "@opencode-ai/effect-sqlite-node": "workspace:*",
         "@opencode-ai/llm": "workspace:*",
@@ -346,6 +357,7 @@
         "@actions/artifact": "4.0.0",
         "@lydell/node-pty": "catalog:",
         "@opencode-ai/app": "workspace:*",
+        "@opencode-ai/brand": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@sentry/solid": "catalog:",
         "@sentry/vite-plugin": "catalog:",
@@ -414,6 +426,7 @@
       "version": "1.17.9",
       "dependencies": {
         "@hono/standard-validator": "catalog:",
+        "@opencode-ai/brand": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/ui": "workspace:*",
         "@pierre/diffs": "catalog:",
@@ -497,7 +510,7 @@
       "name": "opencode",
       "version": "1.17.9",
       "bin": {
-        "opencode": "./bin/opencode",
+        "foreachcode": "./bin/opencode",
       },
       "dependencies": {
         "@actions/core": "1.11.1",
@@ -532,6 +545,7 @@
         "@octokit/graphql": "9.0.2",
         "@octokit/rest": "catalog:",
         "@openauthjs/openauth": "catalog:",
+        "@opencode-ai/brand": "workspace:*",
         "@opencode-ai/llm": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/script": "workspace:*",
@@ -797,6 +811,7 @@
       "name": "@opencode-ai/tui",
       "version": "1.17.9",
       "dependencies": {
+        "@opencode-ai/brand": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
@@ -825,6 +840,7 @@
       "version": "1.17.9",
       "dependencies": {
         "@kobalte/core": "catalog:",
+        "@opencode-ai/brand": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
         "@pierre/diffs": "catalog:",
@@ -1769,6 +1785,8 @@
     "@openauthjs/openauth": ["@openauthjs/openauth@0.0.0-20250322224806", "", { "dependencies": { "@standard-schema/spec": "1.0.0-beta.3", "aws4fetch": "1.0.20", "jose": "5.9.6" }, "peerDependencies": { "arctic": "^2.2.2", "hono": "^4.0.0" } }, "sha512-p5IWSRXvABcwocH2dNI0w8c1QJelIOFulwhKk+aLLFfUbs8u1pr7kQbYe8yCSM2+bcLHiwbogpUQc2ovrGwCuw=="],
 
     "@opencode-ai/app": ["@opencode-ai/app@workspace:packages/app"],
+
+    "@opencode-ai/brand": ["@opencode-ai/brand@workspace:packages/brand"],
 
     "@opencode-ai/cli": ["@opencode-ai/cli@workspace:packages/cli"],
 

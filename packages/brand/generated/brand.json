@@ -1,0 +1,24 @@
+{
+  "name": "ForeachCode",
+  "slug": "foreachcode",
+  "cli": "foreachcode",
+  "protocol": "foreachcode",
+  "directory": "foreachcode",
+  "database": "foreachcode.db",
+  "log": "foreachcode.log",
+  "desktopAppId": "ai.foreachcode.desktop",
+  "desktop": {
+    "dev": {
+      "name": "ForeachCode Dev",
+      "appId": "ai.foreachcode.desktop.dev"
+    },
+    "beta": {
+      "name": "ForeachCode Beta",
+      "appId": "ai.foreachcode.desktop.beta"
+    },
+    "prod": {
+      "name": "ForeachCode",
+      "appId": "ai.foreachcode.desktop"
+    }
+  }
+}

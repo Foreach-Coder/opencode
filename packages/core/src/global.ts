@@ -6,13 +6,13 @@ import { Context, Effect, Layer } from "effect"
 import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { LayerNode } from "./effect/layer-node"
+import { Brand } from "@opencode-ai/brand"
 
-const app = "opencode"
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
-const tmp = path.join(os.tmpdir(), app)
+const data = path.join(xdgData!, Brand.directory)
+const cache = path.join(xdgCache!, Brand.directory)
+const config = path.join(xdgConfig!, Brand.directory)
+const state = path.join(xdgState!, Brand.directory)
+const tmp = path.join(os.tmpdir(), Brand.directory)
 
 const paths = {
   get home() {

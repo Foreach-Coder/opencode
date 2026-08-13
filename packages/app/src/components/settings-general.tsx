@@ -748,7 +748,9 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <UpdatesSection />
+        <Show when={platform.updater}>
+          <UpdatesSection />
+        </Show>
 
         <DisplaySection />
 

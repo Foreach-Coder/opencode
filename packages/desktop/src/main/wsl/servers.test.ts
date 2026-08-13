@@ -7,6 +7,7 @@ import {
   wslServerIdsToStartOnInitialize,
 } from "./startup"
 import { createWslServersController, type WslServerConfig } from "./servers"
+import { Brand } from "@opencode-ai/brand"
 
 let persistedServers: WslServerConfig[] = []
 let releaseOpencodeResolve: (() => void) | undefined
@@ -23,7 +24,7 @@ test("starts every configured WSL server on initialization", () => {
 test("rejects an update that did not install the desktop version", () => {
   expect(() => expectOpencodeVersion("1.16.2", "1.16.2")).not.toThrow()
   expect(() => expectOpencodeVersion("1.14.35", "1.16.2")).toThrow(
-    "OpenCode update finished but Debian still reports 1.14.35; expected 1.16.2",
+    `${Brand.name} update finished but Debian still reports 1.14.35; expected 1.16.2`,
   )
 })
 
@@ -49,7 +50,7 @@ test("clears cached distro probes when removing a WSL server", () => {
       {
         Debian: {
           distro: "Debian",
-          resolvedPath: "/home/luke/.opencode/bin/opencode",
+          resolvedPath: `/home/luke/.${Brand.directory}/bin/${Brand.cli}`,
           version: "1.16.2",
           expectedVersion: "1.16.2",
           matchesDesktop: true,
@@ -161,7 +162,7 @@ function testControllerOptions() {
       await new Promise<void>((resolve) => {
         releaseOpencodeResolve = resolve
       })
-      return "/home/me/.opencode/bin/opencode"
+      return `/home/me/.${Brand.directory}/bin/${Brand.cli}`
     },
   }
 }

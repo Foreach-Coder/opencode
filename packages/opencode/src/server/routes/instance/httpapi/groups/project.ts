@@ -1,5 +1,6 @@
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { Brand } from "@opencode-ai/brand"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProjectNotFoundError } from "../errors"
@@ -26,7 +27,7 @@ export const ProjectApi = HttpApi.make("project")
           OpenApi.annotations({
             identifier: "project.list",
             summary: "List all projects",
-            description: "Get a list of projects that have been opened with OpenCode.",
+            description: `Get a list of projects that have been opened with ${Brand.name}.`,
           }),
         ),
         HttpApiEndpoint.get("current", `${root}/current`, {
@@ -36,7 +37,7 @@ export const ProjectApi = HttpApi.make("project")
           OpenApi.annotations({
             identifier: "project.current",
             summary: "Get current project",
-            description: "Retrieve the currently active project that OpenCode is working with.",
+            description: `Retrieve the currently active project that ${Brand.name} is working with.`,
           }),
         ),
         HttpApiEndpoint.post("initGit", `${root}/git/init`, {
@@ -86,7 +87,7 @@ export const ProjectApi = HttpApi.make("project")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode experimental HttpApi",
+      title: `${Brand.name} experimental HttpApi`,
       version: "0.0.1",
       description: "Experimental HttpApi surface for selected instance routes.",
     }),

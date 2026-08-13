@@ -17,6 +17,7 @@ import { Process } from "@/util/process"
 import { errorMessage } from "@/util/error"
 import { text } from "node:stream/consumers"
 import { Effect, Option } from "effect"
+import { Brand } from "@opencode-ai/brand"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -304,7 +305,7 @@ export const ProvidersLoginCommand = effectCmd({
   builder: (yargs: Argv) =>
     yargs
       .positional("url", {
-        describe: "opencode auth provider",
+        describe: `${Brand.cli} auth provider`,
         type: "string",
       })
       .option("provider", {

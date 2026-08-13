@@ -71,6 +71,7 @@ export type WslServersState = {
 export type WslServersEvent = { type: "state"; state: WslServersState }
 
 export type WslServersPlatform = {
+  installOpencodeEnabled: boolean
   getState(): Promise<WslServersState>
   subscribe(cb: (event: WslServersEvent) => void): () => void
   probeRuntime(): Promise<void>

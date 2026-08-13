@@ -3,6 +3,7 @@ import { OtlpLogger } from "effect/unstable/observability"
 import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
 import { runID } from "./shared"
+import { Brand } from "@opencode-ai/brand"
 
 const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
 
@@ -35,7 +36,7 @@ function resourceAttributes() {
 
 export function resource(): { serviceName: string; serviceVersion: string; attributes: Record<string, string> } {
   return {
-    serviceName: "opencode",
+    serviceName: Brand.slug,
     serviceVersion: InstallationVersion,
     attributes: {
       ...resourceAttributes(),

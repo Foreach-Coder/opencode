@@ -40,7 +40,10 @@ export default defineConfig({
       rollupOptions: {
         input: { index: "src/main/index.ts", sidecar: "src/main/sidecar.ts" },
       },
-      externalizeDeps: { include: [nodePtyPkg] },
+      externalizeDeps: {
+        include: [nodePtyPkg],
+        exclude: ["@opencode-ai/brand"],
+      },
     },
     plugins: [
       {
@@ -80,6 +83,9 @@ export default defineConfig({
     },
   },
   renderer: {
+    define: {
+      "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+    },
     plugins: [appPlugin, sentry],
     publicDir: "../../../app/public",
     root: "src/renderer",

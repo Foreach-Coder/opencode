@@ -103,37 +103,51 @@ describe("ShareNext", () => {
     ),
   )
 
-  it.live("request uses default URL when no enterprise config", () =>
+  it.live("request fails closed when no enterprise share URL is configured", () =>
     provideTmpdirInstance(() =>
       ShareNext.Service.use((svc) =>
         Effect.gen(function* () {
-          const req = yield* svc.request()
+          const exit = yield* Effect.exit(svc.request())
 
-          expect(req.baseUrl).toBe("https://opncd.ai")
-          expect(req.api.create).toBe("/api/share")
-          expect(req.headers).toEqual({})
+          expect(Exit.isFailure(exit)).toBe(true)
         }),
       ).pipe(Effect.provide(requestLayer(none))),
     ),
   )
 
+  it.live("request rejects OpenCode public product service URLs even when configured", () =>
+    provideTmpdirInstance(
+      () =>
+        ShareNext.Service.use((svc) =>
+          Effect.gen(function* () {
+            const exit = yield* Effect.exit(svc.request())
+
+            expect(Exit.isFailure(exit)).toBe(true)
+          }),
+        ).pipe(Effect.provide(requestLayer(none))),
+      { config: { enterprise: { url: "https://console.opencode.ai" } } },
+    ),
+  )
+
   it.live("request uses org share API with auth headers when account is active", () =>
-    provideTmpdirInstance(() =>
-      Effect.gen(function* () {
-        yield* seed("https://control.example.com", "org-1")
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          yield* seed("https://control.example.com", "org-1")
 
-        const req = yield* ShareNext.use.request()
+          const req = yield* ShareNext.use.request()
 
-        expect(req.api.create).toBe("/api/shares")
-        expect(req.api.sync("shr_123")).toBe("/api/shares/shr_123/sync")
-        expect(req.api.remove("shr_123")).toBe("/api/shares/shr_123")
-        expect(req.api.data("shr_123")).toBe("/api/shares/shr_123/data")
-        expect(req.baseUrl).toBe("https://control.example.com")
-        expect(req.headers).toEqual({
-          authorization: "Bearer st_test_token",
-          "x-org-id": "org-1",
-        })
-      }).pipe(Effect.provide(requestLayer(none))),
+          expect(req.api.create).toBe("/api/shares")
+          expect(req.api.sync("shr_123")).toBe("/api/shares/shr_123/sync")
+          expect(req.api.remove("shr_123")).toBe("/api/shares/shr_123")
+          expect(req.api.data("shr_123")).toBe("/api/shares/shr_123/data")
+          expect(req.baseUrl).toBe("https://internal.example.com")
+          expect(req.headers).toEqual({
+            authorization: "Bearer st_test_token",
+            "x-org-id": "org-1",
+          })
+        }).pipe(Effect.provide(requestLayer(HttpClient.make((req) => Effect.succeed(json(req, {})))))),
+      { config: { enterprise: { url: "https://internal.example.com" } } },
     ),
   )
 

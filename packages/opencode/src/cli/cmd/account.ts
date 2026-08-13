@@ -3,7 +3,7 @@ import { Duration, Effect, Match, Option } from "effect"
 import { UI } from "../ui"
 import { Account } from "@/account/account"
 import { AccountID, OrgID, PollExpired, type PollResult, type AccountError } from "@/account/schema"
-import { effectCmd } from "../effect-cmd"
+import { CliError, effectCmd } from "../effect-cmd"
 import * as Prompt from "../effect/prompt"
 import open from "open"
 
@@ -14,8 +14,6 @@ const println = (msg: string) => Effect.sync(() => UI.println(msg))
 const dim = (value: string) => UI.Style.TEXT_DIM + value + UI.Style.TEXT_NORMAL
 
 const activeSuffix = (isActive: boolean) => (isActive ? dim(" (active)") : "")
-
-export const defaultConsoleUrl = "https://console.opencode.ai"
 
 export const formatAccountLabel = (account: { email: string; url: string }, isActive: boolean) =>
   `${account.email} ${dim(account.url)}${activeSuffix(isActive)}`
@@ -185,7 +183,8 @@ export const LoginCommand = effectCmd({
     }),
   handler: Effect.fn("Cli.account.login")(function* (args) {
     UI.empty()
-    yield* Effect.orDie(loginEffect(args.url ?? defaultConsoleUrl))
+    if (!args.url) return yield* Effect.fail(new CliError({ message: "An internal console URL is required" }))
+    yield* Effect.orDie(loginEffect(args.url))
   }),
 })
 

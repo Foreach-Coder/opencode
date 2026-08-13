@@ -15,6 +15,7 @@ const api: ElectronAPI = {
   installCli: () => ipcRenderer.invoke("install-cli"),
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
   wslServers: {
+    installOpencodeEnabled: false,
     getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
     subscribe: (cb) => {
       const handler = (_: unknown, event: WslServersEvent) => cb(event)

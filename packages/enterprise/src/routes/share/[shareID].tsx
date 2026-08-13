@@ -8,7 +8,6 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
-import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { iife } from "@opencode-ai/core/util/iife"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -21,8 +20,8 @@ import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { FileSSR } from "@opencode-ai/ui/file-ssr"
 import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
-import { Base64 } from "js-base64"
 import { getRequestEvent } from "solid-js/web"
+import { Brand } from "@opencode-ai/brand"
 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   import("@opencode-ai/ui/pierre/worker").then((m) => ({
@@ -158,38 +157,14 @@ export default function () {
           const match = createMemo(() => Binary.search(data().session, data().sessionID, (s) => s.id))
           if (!match().found) throw new Error(`Session ${data().sessionID} not found`)
           const info = createMemo(() => data().session[match().index])
-          const ogImage = createMemo(() => {
-            const models = new Set<string>()
-            const messages = data().message[data().sessionID] ?? []
-            for (const msg of messages) {
-              if (msg.role === "assistant" && msg.modelID) {
-                models.add(msg.modelID)
-              }
-            }
-            const modelIDs = Array.from(models)
-            const encodedTitle = encodeURIComponent(Base64.encode(encodeURIComponent(info().title.substring(0, 700))))
-            let modelParam: string
-            if (modelIDs.length === 1) {
-              modelParam = modelIDs[0]
-            } else if (modelIDs.length === 2) {
-              modelParam = encodeURIComponent(`${modelIDs[0]} & ${modelIDs[1]}`)
-            } else if (modelIDs.length > 2) {
-              modelParam = encodeURIComponent(`${modelIDs[0]} & ${modelIDs.length - 1} others`)
-            } else {
-              modelParam = "unknown"
-            }
-            const version = `v${info().version}`
-            return `https://social-cards.sst.dev/opencode-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${data().shareID}`
-          })
-
           return (
             <>
               <Show when={info().title}>
-                <Title>{info().title} | OpenCode</Title>
+                <Title>
+                  {info().title} | {Brand.name}
+                </Title>
               </Show>
-              <Meta name="description" content="opencode - The AI coding agent built for the terminal." />
-              <Meta property="og:image" content={ogImage()} />
-              <Meta name="twitter:image" content={ogImage()} />
+              <Meta name="description" content={`${Brand.name} - The AI coding agent built for the terminal.`} />
               <ClientOnlyWorkerPoolProvider>
                 <FileComponentProvider component={FileSSR}>
                   <DataProvider data={data()} directory={info().directory}>
@@ -274,25 +249,7 @@ export default function () {
                         <div class="relative bg-background-stronger w-screen h-screen overflow-hidden flex flex-col">
                           <header class="h-12 px-6 py-2 flex items-center justify-between self-stretch bg-background-base border-b border-border-weak-base">
                             <div class="">
-                              <a href="https://opencode.ai">
-                                <Mark />
-                              </a>
-                            </div>
-                            <div class="flex gap-3 items-center">
-                              <IconButton
-                                as={"a"}
-                                href="https://github.com/anomalyco/opencode"
-                                target="_blank"
-                                icon="github"
-                                variant="ghost"
-                              />
-                              <IconButton
-                                as={"a"}
-                                href="https://opencode.ai/discord"
-                                target="_blank"
-                                icon="discord"
-                                variant="ghost"
-                              />
+                              <Mark />
                             </div>
                           </header>
                           <div class="select-text flex flex-col flex-1 min-h-0">

@@ -1,3 +1,5 @@
+import { PRODUCT_NAME } from "./brand.gen.js"
+
 /**
  * Wrap whatever the generated client decoded from a non-2xx error body
  * into a real `Error` so downstream formatters (TUI, plugins) get a
@@ -37,7 +39,7 @@ export function wrapClientError(
 
   // Empty body / network failure / undefined / null / empty object.
   const reason = response ? "(empty response body)" : "network error (no response)"
-  return new Error(`opencode server ${describe(request, response)}: ${reason}`, {
+  return new Error(`${PRODUCT_NAME} server ${describe(request, response)}: ${reason}`, {
     cause: { body: error, status: response?.status },
   })
 }
