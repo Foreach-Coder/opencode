@@ -4,8 +4,8 @@ import { ToolFailure } from "@opencode-ai/llm"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
-import TurndownService from "turndown"
 import { PermissionV2 } from "../permission"
+import { convertHTMLToMarkdown } from "./html-markdown"
 import { collectBoundedResponseBody } from "./http-body"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -196,14 +196,4 @@ export function extractTextFromHTML(html: string) {
   return text.trim()
 }
 
-export function convertHTMLToMarkdown(html: string) {
-  const turndown = new TurndownService({
-    headingStyle: "atx",
-    hr: "---",
-    bulletListMarker: "-",
-    codeBlockStyle: "fenced",
-    emDelimiter: "*",
-  })
-  turndown.remove(["script", "style", "meta", "link"])
-  return turndown.turndown(html)
-}
+export { convertHTMLToMarkdown }
