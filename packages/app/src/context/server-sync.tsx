@@ -58,6 +58,28 @@ import { createCatalogSync } from "./server-sync/catalog"
 import { createConnectionSync } from "./server-sync/connection"
 import { usePlatform } from "./platform"
 
+export function captureSessionMove(
+  event: ServerEvent,
+  get: (sessionID: string) => { location: { directory: string } } | undefined,
+) {
+  if (event.current?.type !== "session.moved") return
+  return {
+    sessionID: event.current.data.sessionID,
+    from: get(event.current.data.sessionID)?.location.directory,
+  }
+}
+
+export function shouldRefreshWorkspaceSessions(event: ServerEvent) {
+  const type = event.current?.type ?? event.type
+  return (
+    type === "session.created" ||
+    type === "session.deleted" ||
+    type === "session.moved" ||
+    type === "session.renamed" ||
+    type === "session.forked"
+  )
+}
+
 type GlobalStore = {
   ready: boolean
   error?: InitError
@@ -564,6 +586,34 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     return event
   }
 
+  const reindexSession = (sessionID: string, from?: string) => {
+    const next = session.get(sessionID)
+    if (!next) return
+    indexSession(next)
+    if (!from) return
+    const source = children.children[directoryKey(from)]
+    if (!source) return
+    applyDirectoryEvent({
+      event: {
+        type: "session.moved",
+        properties: {
+          sessionID,
+          projectID: next.projectID,
+          location: next.location,
+          subpath: next.subpath,
+        },
+      },
+      directory: from,
+      store: source[0],
+      setStore: source[1],
+      push: queue.push,
+      retainedLimit: sessionMeta.get(directoryKey(from))?.limit,
+      sessionContent: false,
+      permission: session.data.permission,
+      loadLsp() {},
+    })
+  }
+
   const unsub = serverSDK.event.listen((e) => {
     const directory = e.name
     const key = directoryKey(directory)
@@ -574,8 +624,16 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         ? session.get(event.current.data.sessionID)?.location.directory
         : undefined
     markSessionListChanged(event, directory, previousDirectory)
+    const moved = captureSessionMove(event, session.get)
     if (event.current) session.applyV2(event.current)
     session.apply(event)
+    if (moved) reindexSession(moved.sessionID, moved.from)
+    if (shouldRefreshWorkspaceSessions(event)) {
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === serverSDK.scope && query.queryKey[2] === "settings-workspace-sessions",
+      })
+    }
     if (event.current?.type === "session.created")
       void session
         .resolve(event.current.data.sessionID, { force: true })
@@ -634,10 +692,6 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       return
     }
 
-    if (event.current?.type === "session.moved") {
-      const info = session.get(event.current.data.sessionID)
-      if (info) indexSession(info)
-    }
     if (event.current?.type === "session.forked")
       void session
         .resolve(event.current.data.sessionID, { force: true })
@@ -748,6 +802,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
     session: Object.assign(session, { hydrate: hydrateSession }),
+    reindexSession,
     homeSessions,
     mcp: {
       toggle: async (directory: string, name: string) => {

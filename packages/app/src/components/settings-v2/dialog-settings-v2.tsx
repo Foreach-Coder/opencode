@@ -14,6 +14,7 @@ import { SettingsServersV2 } from "./servers"
 import { SettingsProjectsV2 } from "./projects"
 import { SettingsExtensionsV2 } from "./extensions"
 import { SettingsServerScope } from "../settings-server-picker"
+import { SettingsWorkspacesV2 } from "./workspaces"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useTabs } from "@/context/tabs"
@@ -65,7 +66,6 @@ export const DialogSettings: Component<{
         <TabsV2.List>
           <div class="flex flex-col justify-between h-full w-full">
             <div class="flex flex-col gap-4 w-full">
-              {/* Group 1: Preferences */}
               <div class="flex flex-col gap-1 w-full">
                 <TabsV2.Trigger value="general">
                   <Icon name="sliders" />
@@ -85,8 +85,11 @@ export const DialogSettings: Component<{
                 </TabsV2.Trigger>
               </div>
 
-              {/* Group 2: Environment & Workspaces */}
               <div class="flex flex-col gap-1 w-full">
+                <TabsV2.Trigger value="workspaces">
+                  <Icon name="workspace-isolated" />
+                  {language.t("settings.tab.workspaces")}
+                </TabsV2.Trigger>
                 <TabsV2.Trigger value="servers">
                   <Icon name="server" />
                   {language.t("status.popover.tab.servers")}
@@ -97,7 +100,6 @@ export const DialogSettings: Component<{
                 </TabsV2.Trigger>
               </div>
 
-              {/* Group 3: Capabilities & Extensions */}
               <div class="flex flex-col gap-1 w-full">
                 <TabsV2.Trigger value="providers">
                   <Icon name="providers" />
@@ -132,6 +134,9 @@ export const DialogSettings: Component<{
         </TabsV2.Content>
         <TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds v2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="workspaces" class="settings-v2-panel">
+          <SettingsWorkspacesV2 activeDirectory={directory()} />
         </TabsV2.Content>
         <TabsV2.Content value="servers" class="settings-v2-panel">
           <SettingsServersV2 />

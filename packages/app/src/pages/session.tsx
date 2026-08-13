@@ -38,6 +38,7 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
+import { isWorkspaceDirectory } from "@/utils/workspace"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
@@ -101,6 +102,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { formatServerError, isLocalSessionNotFoundError, isSessionNotFoundError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
+import { canMoveSessionToWorkspace, WorkspaceOperation } from "@/utils/workspace-operation"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionLineage } from "./session/session-lineage"
 
@@ -518,6 +520,9 @@ export default function Page() {
     if (!controller.layout.view().reviewPanel.opened()) controller.layout.view().reviewPanel.open()
   }
 
+  const workspaceSession = createMemo(() =>
+    isWorkspaceDirectory(sync().project, controller.data.info()?.location.directory ?? sdk().directory),
+  )
   const timeline = createTimelineModel({ session: controller })
   const historyLoading = timeline.history.loading
   const historyMore = timeline.history.more
@@ -572,6 +577,7 @@ export default function Page() {
   const [store, setStore] = createStore({
     ...sessionViewState(),
     newSessionWorktree: "main",
+    sessionDetailsOpen: false,
     deferRender: false,
   })
 
@@ -676,14 +682,20 @@ export default function Page() {
         : skipToken,
     }
   })
-  const refreshVcs = debounce(() => {
-    void queryClient.invalidateQueries({ queryKey: vcsKey() })
-  }, 100)
-  onCleanup(
-    sdk().event.listen((event) => {
-      if (event.details.type === "filesystem.changed") refreshVcs()
-    }),
-  )
+  const sessionDetailsQuery = createQuery(() => ({
+    queryKey: [...vcsKey(), "git"] as const,
+    enabled: store.sessionDetailsOpen && sync().project?.vcs === "git",
+    queryFn: () =>
+      sdk()
+        .api.vcs.diff({ location: { directory: sdk().directory }, mode: "working" })
+        .then((result) => result.data)
+        .catch((error) => {
+          console.debug("[session-review] failed to load session details diff", { error })
+          return []
+        }),
+  }))
+  const sessionDetailsDiffs = () => (sessionDetailsQuery.isFetched ? (sessionDetailsQuery.data ?? []) : [])
+  const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   createEffect(
     on(
       () => desktopReviewOpen() || mobileChanges(),
@@ -1687,6 +1699,8 @@ export default function Page() {
   }
 
   const busy = (sessionID: string) => sync().data.session_working(sessionID)
+  const workspaceOperationPending = (sessionID: string) =>
+    WorkspaceOperation.get(serverSDK().scope, sessionID)?.status === "pending"
 
   const queuedFollowups = createMemo(() => {
     const id = controller.identity.params.id
@@ -1700,8 +1714,20 @@ export default function Page() {
     return followup.edit[id]
   })
 
+  const workspaceMoveEligible = createMemo(() => {
+    const id = controller.identity.params.id
+    if (!id) return false
+    return canMoveSessionToWorkspace({
+      queued: followup.items[id]?.length ?? 0,
+      failed: !!followup.failed[id],
+      paused: !!followup.paused[id],
+      editing: !!followup.edit[id],
+    })
+  })
+
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
+      if (workspaceOperationPending(input.sessionID)) return
       const owner = controller.ownership.capture()
       const item = (followup.items[input.sessionID] ?? []).find((entry) => entry.id === input.id)
       if (!item) return
@@ -1711,6 +1737,7 @@ export default function Page() {
 
       const ok = await sendFollowupDraft({
         api: sdk().api.session,
+        scope: serverSDK().scope,
         sync: sync(),
         serverSync: serverSync(),
         session: () => sync().session.get(input.sessionID),
@@ -1779,6 +1806,7 @@ export default function Page() {
 
   const sendFollowup = (sessionID: string, id: string, opts?: { manual?: boolean }) => {
     if (sync().session.get(sessionID)?.parentID) return Promise.resolve()
+    if (workspaceOperationPending(sessionID)) return Promise.resolve()
     const item = (followup.items[sessionID] ?? []).find((entry) => entry.id === id)
     if (!item) return Promise.resolve()
     if (followupBusy(sessionID)) return Promise.resolve()
@@ -1818,6 +1846,7 @@ export default function Page() {
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {
+      if (workspaceOperationPending(input.sessionID)) return
       const api = sdk().api.session
       const target = sync()
       const last = target.session.get(input.sessionID)?.revert
@@ -1840,6 +1869,7 @@ export default function Page() {
     mutationFn: async (id: string) => {
       const sessionID = controller.identity.params.id
       if (!sessionID) return
+      if (workspaceOperationPending(sessionID)) return
 
       const api = sdk().api.session
       const target = sync()
@@ -1869,7 +1899,10 @@ export default function Page() {
     },
   }))
 
-  const reverting = createMemo(() => revertMutation.isPending || restoreMutation.isPending)
+  const reverting = createMemo(() => {
+    const id = controller.identity.params.id
+    return revertMutation.isPending || restoreMutation.isPending || (!!id && workspaceOperationPending(id))
+  })
   const restoring = createMemo(() => (restoreMutation.isPending ? restoreMutation.variables : undefined))
 
   const revert = (input: { sessionID: string; messageID: string }) => {
@@ -1929,6 +1962,7 @@ export default function Page() {
     if (controller.data.isChild()) return
     if (composer.blocked()) return
     if (controller.data.working()) return
+    if (workspaceOperationPending(sessionID)) return
 
     void sendFollowup(sessionID, item.id)
   })
@@ -2036,7 +2070,7 @@ export default function Page() {
         >
           {hasReview()
             ? language.t("session.review.filesChanged", { count: reviewCount() })
-            : language.t("session.review.change.other")}
+            : language.plural("session.review.change", 0)}
         </Tabs.Trigger>
       </Tabs.List>
     </Tabs>
@@ -2102,6 +2136,9 @@ export default function Page() {
                     if (root) scheduleScrollState(root)
                   }}
                   userMessages={visibleUserMessages()}
+                  diffs={sessionDetailsDiffs}
+                  workspaceMoveEligible={workspaceMoveEligible()}
+                  onSummaryOpenChange={(open) => setStore("sessionDetailsOpen", open)}
                   setHistoryAnchor={(handlers) => {
                     captureHistoryAnchor = handlers.capture
                     restoreHistoryAnchor = handlers.restore
@@ -2229,7 +2266,13 @@ export default function Page() {
                         setFollowup("paused", id, true)
                       },
                     })
-                    return <PromptInputV2Composer controller={promptInputController} borderUnderlay />
+                    return (
+                      <PromptInputV2Composer
+                        controller={promptInputController}
+                        borderUnderlay
+                        accentSubmit={workspaceSession()}
+                      />
+                    )
                   }}
                 </Show>
               }

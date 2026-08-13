@@ -783,9 +783,7 @@ export function SessionSidePanel(props: {
                           fallback={
                             <>
                               {props.reviewCount}{" "}
-                              {language.t(
-                                props.reviewCount === 1 ? "session.review.change.one" : "session.review.change.other",
-                              )}
+                              {language.plural("session.review.change", props.reviewCount)}
                             </>
                           }
                         >

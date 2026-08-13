@@ -1,6 +1,7 @@
 import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { PartGroup } from "@opencode-ai/session-ui/message-part"
 import { Data, Equal } from "effect"
+import type { WorkspaceOperationState } from "@/utils/workspace-operation"
 
 export type SummaryDiff = FileDiffInfo
 
@@ -43,6 +44,10 @@ export namespace TimelineRow {
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
   }> {}
+  export class WorkspaceLifecycle extends Data.TaggedClass("WorkspaceLifecycle")<{
+    userMessageID: string
+    notice: { type: "operation"; operation: WorkspaceOperationState }
+  }> {}
 
   export type TimelineRow =
     | TurnGap
@@ -55,6 +60,7 @@ export namespace TimelineRow {
     | DiffSummary
     | Error
     | Retry
+    | WorkspaceLifecycle
 
   export const key = (row: TimelineRow) => {
     switch (row._tag) {
@@ -78,6 +84,8 @@ export namespace TimelineRow {
         return `error:${row.userMessageID}`
       case "Retry":
         return `retry:${row.userMessageID}`
+      case "WorkspaceLifecycle":
+        return `workspace-lifecycle:${row.userMessageID}:${row.notice.type}`
     }
   }
 
