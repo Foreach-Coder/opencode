@@ -29,6 +29,8 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { LLMPerformance } from "./llm/performance"
+import { randomUUID } from "node:crypto"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -81,8 +83,10 @@ const live: Layer.Layer<
     const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
+    const logPerformance = (entry: LLMPerformance.Entry) => Effect.logInfo(entry.message, entry.data)
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const performanceStarted = Date.now()
       yield* Effect.logInfo("stream", {
         providerID: input.model.providerID,
         modelID: input.model.id,
@@ -116,6 +120,23 @@ const live: Layer.Layer<
       // from the workflow service are executed via opencode's tool system
       // and results sent back over the WebSocket.
       const bridge = yield* EffectBridge.make()
+      const performance = LLMPerformance.create(
+        {
+          requestID: randomUUID(),
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+          sessionID: input.sessionID,
+          agent: input.agent.name,
+          mode: input.agent.mode,
+          small: input.small ?? false,
+          retries: input.retries ?? 0,
+          system: prepared.system,
+          messages: prepared.messages,
+          tools: prepared.tools,
+        },
+        { started: performanceStarted },
+      )
+      yield* logPerformance(performance.start())
       if (language instanceof GitLabWorkflowLanguageModel) {
         const workflowModel = language as GitLabWorkflowLanguageModel & {
           sessionID?: string
@@ -241,6 +262,7 @@ const live: Layer.Layer<
           abort: input.abort,
         })
         if (native.type === "supported") {
+          yield* logPerformance(performance.attempt().entry)
           yield* Effect.logInfo("llm runtime selected", {
             "llm.runtime": "native",
             "llm.provider": input.model.providerID,
@@ -249,6 +271,7 @@ const live: Layer.Layer<
           return {
             type: "native" as const,
             stream: native.stream,
+            performance,
           }
         }
         yield* Effect.logInfo("llm runtime selected", {
@@ -277,19 +300,11 @@ const live: Layer.Layer<
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
         type: "ai-sdk" as const,
+        performance,
         result: streamText({
           onError(error) {
-            bridge.fork(
-              Effect.logError("stream error", {
-                providerID: input.model.providerID,
-                modelID: input.model.id,
-                "session.id": input.sessionID,
-                small: (input.small ?? false).toString(),
-                agent: input.agent.name,
-                mode: input.agent.mode,
-                error,
-              }),
-            )
+            const entry = performance.fail(error)
+            if (entry) bridge.fork(logPerformance(entry))
           },
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
@@ -338,6 +353,20 @@ const live: Layer.Layer<
                   }
                   return args.params
                 },
+                wrapStream({ doStream, params }) {
+                  const attempt = performance.attempt()
+                  bridge.fork(logPerformance(attempt.entry))
+                  return Promise.resolve(doStream()).then(
+                    (response) => {
+                      bridge.fork(logPerformance(performance.response(attempt, response.request?.body ?? params)))
+                      return response
+                    },
+                    (error) => {
+                      bridge.fork(logPerformance(performance.attemptError(attempt, error)))
+                      throw error
+                    },
+                  )
+                },
               },
             ],
           }),
@@ -364,17 +393,35 @@ const live: Layer.Layer<
             )
 
             const result = yield* run({ ...input, abort: ctrl.signal })
+            const monitor = (source: Stream.Stream<LLMEvent, unknown>) =>
+              source.pipe(
+                Stream.tap((event) =>
+                  Effect.forEach(result.performance.observe(event), logPerformance, { discard: true }),
+                ),
+                Stream.tapError((error) => {
+                  const entry = result.performance.fail(error)
+                  return entry ? logPerformance(entry) : Effect.void
+                }),
+                Stream.ensuring(
+                  Effect.suspend(() => {
+                    const entry = result.performance.end()
+                    return entry ? logPerformance(entry) : Effect.void
+                  }),
+                ),
+              )
 
-            if (result.type === "native") return result.stream
+            if (result.type === "native") return monitor(result.stream)
 
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
-            return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
-              e instanceof Error ? e : new Error(String(e)),
-            ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
-              Stream.flatMap((events) => Stream.fromIterable(events)),
+            return monitor(
+              Stream.fromAsyncIterable(result.result.fullStream, (e) =>
+                e instanceof Error ? e : new Error(String(e)),
+              ).pipe(
+                Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
+                Stream.flatMap((events) => Stream.fromIterable(events)),
+              ),
             )
           }),
         ),
