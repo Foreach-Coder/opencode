@@ -78,14 +78,34 @@ async function writeBrandedAppIcon(name: string, source: string, target: string)
   const sourcePath = path.resolve(source)
   const file = Bun.file(sourcePath)
   if (!(await file.exists())) throw new Error(`app icon SVG does not exist: ${sourcePath}`)
-  const content = await file.text()
-  const viewBox = validateSvg(content, "app icon")
+  const content = await inlineLocalPng(await file.text(), sourcePath)
+  const viewBox = validateSvg(content, "app icon", true)
   if (viewBox[2] !== viewBox[3]) throw new Error(`App icon SVG viewBox must be square: ${sourcePath}`)
   const title = `${escapeXml(name)} application icon`
   const normalized = /<title\b([^>]*)>[\s\S]*?<\/title>/i.test(content)
     ? content.replace(/<title\b([^>]*)>[\s\S]*?<\/title>/i, `<title$1>${title}</title>`)
     : content.replace(/<svg\b[^>]*>/i, (root) => `${root}<title>${title}</title>`)
   await Bun.write(target, normalized)
+}
+
+async function inlineLocalPng(content: string, source: string) {
+  const references = Array.from(content.matchAll(/(?:href|xlink:href)\s*=\s*["']([^"']*)["']/gi), (match) => match[1]!)
+  const local = [...new Set(references.filter((reference) => !reference.startsWith("#") && !isPngDataUri(reference)))]
+  if (local.length === 0) return content
+  if (local.length !== 1 || !/^(?:\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.png$/i.test(local[0]!))
+    throw new Error("Unsafe SVG external reference in app icon")
+
+  const target = path.resolve(path.dirname(source), local[0]!)
+  if (path.dirname(target) !== path.dirname(source)) throw new Error("Unsafe SVG external reference in app icon")
+  const file = Bun.file(target)
+  if (!(await file.exists())) throw new Error(`app icon PNG does not exist: ${target}`)
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10]
+  if (bytes.length < 24 || signature.some((value, index) => bytes[index] !== value))
+    throw new Error(`Invalid app icon PNG: ${target}`)
+  const dimensions = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (dimensions.getUint32(16) !== dimensions.getUint32(20)) throw new Error(`App icon PNG must be square: ${target}`)
+  return content.replaceAll(local[0]!, `data:image/png;base64,${bytes.toBase64()}`)
 }
 
 function escapeXml(value: string) {
@@ -100,12 +120,12 @@ async function readSvg(source: string, role: string, square = false): Promise<Re
   const file = Bun.file(target)
   if (!(await file.exists())) throw new Error(`${role} SVG does not exist: ${target}`)
   const content = await file.text()
-  const viewBox = validateSvg(content, role)
+  const viewBox = validateSvg(content, role, square)
   if (square && viewBox[2] !== viewBox[3]) throw new Error(`App icon SVG viewBox must be square: ${target}`)
   return Object.freeze({ path: target, sha256: hash(content), viewBox: Object.freeze(viewBox) })
 }
 
-function validateSvg(content: string, role: string): [number, number, number, number] {
+function validateSvg(content: string, role: string, allowEmbeddedPng = false): [number, number, number, number] {
   const root = content.match(/<svg\b[^>]*>/i)?.[0]
   if (!root) throw new Error(`Invalid ${role} SVG: missing svg root`)
   if (
@@ -120,7 +140,10 @@ function validateSvg(content: string, role: string): [number, number, number, nu
 
   const references = Array.from(content.matchAll(/(?:href|xlink:href)\s*=\s*["']([^"']*)["']/gi), (match) => match[1])
   const urls = Array.from(content.matchAll(/url\(\s*["']?([^)'"\s]+)["']?\s*\)/gi), (match) => match[1])
-  if ([...references, ...urls].some((reference) => !reference?.startsWith("#")))
+  if (
+    references.some((reference) => !reference?.startsWith("#") && !(allowEmbeddedPng && isPngDataUri(reference!))) ||
+    urls.some((reference) => !reference?.startsWith("#"))
+  )
     throw new Error(`Unsafe SVG external reference in ${role}`)
 
   const value = root.match(/\bviewBox\s*=\s*["']([^"']+)["']/i)?.[1]
@@ -137,6 +160,10 @@ function validateSvg(content: string, role: string): [number, number, number, nu
   )
     throw new Error(`Invalid ${role} SVG viewBox`)
   return [viewBox[0]!, viewBox[1]!, viewBox[2]!, viewBox[3]!]
+}
+
+function isPngDataUri(value: string) {
+  return /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)
 }
 
 async function readTuiWordmark(source: string): Promise<ResolvedTuiWordmark> {

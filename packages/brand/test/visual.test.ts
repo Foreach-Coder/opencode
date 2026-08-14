@@ -108,6 +108,29 @@ describe("resolveVisuals", () => {
     expect(await Bun.file(custom).text()).toContain("Another Product")
   })
 
+  test("embeds a same-directory PNG app icon into the staged SVG", async () => {
+    const fixture = await assets()
+    const png = path.join(fixture.directory, "app-icon.png")
+    const wrapper = path.join(fixture.directory, "app-icon-wrapper.svg")
+    await Bun.write(
+      png,
+      Uint8Array.fromBase64(
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR4nGP4z8DAwMDAxMDAwMAAAAwABf4C/qkAAAAASUVORK5CYII=",
+      ),
+    )
+    await Bun.write(
+      wrapper,
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><image width="2" height="2" href="./app-icon.png"/></svg>',
+    )
+
+    const result = await resolveVisuals({ appIconSvg: wrapper }, options(fixture, profiles(fixture.files), "BluedCode"))
+    const staged = await Bun.file(result.appIcon.path).text()
+
+    expect(staged).toContain("<title>BluedCode application icon</title>")
+    expect(staged).toContain('href="data:image/png;base64,iVBORw0KGgo')
+    expect(staged).not.toContain("./app-icon.png")
+  })
+
   test("independently overrides each visual from a profile", async () => {
     const base = await assets("base")
     const override = await assets("override")

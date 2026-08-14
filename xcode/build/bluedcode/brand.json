@@ -1,0 +1,9 @@
+{
+  "name": "BluedCode",
+  "slug": "bluedcode",
+  "channel": "prod",
+  "desktopAppId": "ai.bluedcode.desktop",
+  "appIconSvg": "app-icon.svg",
+  "wordmarkSvg": "wordmark.svg",
+  "tuiWordmarkGrid": "tui.json"
+}
