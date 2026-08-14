@@ -24,6 +24,12 @@ export function shouldShowFileTree(input: { visible: boolean; opened: boolean })
   return input.opened && input.visible
 }
 
+export function fileTreePreferenceAction(input: { ready: boolean; enabled: boolean; previous?: boolean }) {
+  if (!input.ready) return
+  if (input.enabled && input.previous !== true) return "open" as const
+  if (!input.enabled && input.previous === true) return "close" as const
+}
+
 export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)

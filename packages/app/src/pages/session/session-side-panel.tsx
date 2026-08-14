@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, onCleanup, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, on, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -26,6 +26,7 @@ import { FileTabContent } from "@/pages/session/file-tabs"
 import {
   createOpenSessionFileTab,
   createSessionTabs,
+  fileTreePreferenceAction,
   getTabReorderIndex,
   shouldShowFileTree,
   type Sizing,
@@ -63,6 +64,21 @@ export function SessionSidePanel(props: {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const shown = settings.visibility.fileTree
+
+  createEffect(
+    on(
+      () => [settings.ready(), settings.general.showFileTree()] as const,
+      ([ready, enabled], previous) => {
+        const action = fileTreePreferenceAction({
+          ready,
+          enabled,
+          previous: previous?.[0] ? previous[1] : undefined,
+        })
+        if (action === "open") layout.fileTree.open()
+        if (action === "close") layout.fileTree.close()
+      },
+    ),
+  )
 
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const fileOpen = createMemo(

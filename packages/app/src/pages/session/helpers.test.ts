@@ -6,6 +6,7 @@ import {
   createOpenSessionFileTab,
   createSessionTabs,
   focusTerminalById,
+  fileTreePreferenceAction,
   getTabReorderIndex,
   shouldFocusTerminalOnKeyDown,
   shouldShowFileTree,
@@ -15,6 +16,20 @@ describe("shouldShowFileTree", () => {
   test("does not reserve space for a disabled file tree", () => {
     expect(shouldShowFileTree({ visible: false, opened: true })).toBe(false)
     expect(shouldShowFileTree({ visible: true, opened: true })).toBe(true)
+  })
+})
+
+describe("fileTreePreferenceAction", () => {
+  test("opens the file tree when an enabled preference becomes ready", () => {
+    expect(fileTreePreferenceAction({ ready: true, enabled: true })).toBe("open")
+    expect(fileTreePreferenceAction({ ready: true, enabled: true, previous: true })).toBeUndefined()
+  })
+
+  test("syncs preference changes without overriding the legacy initial layout", () => {
+    expect(fileTreePreferenceAction({ ready: false, enabled: true })).toBeUndefined()
+    expect(fileTreePreferenceAction({ ready: true, enabled: false })).toBeUndefined()
+    expect(fileTreePreferenceAction({ ready: true, enabled: true, previous: false })).toBe("open")
+    expect(fileTreePreferenceAction({ ready: true, enabled: false, previous: true })).toBe("close")
   })
 })
 
