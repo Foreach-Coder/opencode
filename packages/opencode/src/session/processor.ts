@@ -82,6 +82,7 @@ interface ProcessorContext extends Input {
   currentText: SessionV1.TextPart | undefined
   currentTextID: string | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  pendingReasoning: { id: string; part: SessionV1.ReasoningPart } | undefined
   v2AssistantMessageID: SessionMessage.ID | undefined
 }
 
@@ -124,6 +125,7 @@ export const layer = Layer.effect(
         currentText: undefined,
         currentTextID: undefined,
         reasoningMap: {},
+        pendingReasoning: undefined,
         v2AssistantMessageID: undefined,
       }
       const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
@@ -245,24 +247,28 @@ export const layer = Layer.effect(
         return true
       })
 
-      const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* (reasoningID: string) {
-        if (!(reasoningID in ctx.reasoningMap)) return
+      const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* () {
+        if (!ctx.pendingReasoning) return
+        const reasoning = ctx.pendingReasoning
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
         if (mirrorAssistant) {
           yield* events.publish(SessionEvent.Reasoning.Ended, {
             sessionID: ctx.sessionID,
             assistantMessageID: yield* currentV2AssistantMessage(),
-            reasoningID,
-            text: ctx.reasoningMap[reasoningID].text,
-            providerMetadata: ctx.reasoningMap[reasoningID].metadata,
+            reasoningID: reasoning.id,
+            text: reasoning.part.text,
+            providerMetadata: reasoning.part.metadata,
             timestamp: DateTime.makeUnsafe(Date.now()),
           })
         }
         // oxlint-disable-next-line no-self-assign -- reactivity trigger
-        ctx.reasoningMap[reasoningID].text = ctx.reasoningMap[reasoningID].text
-        ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
-        yield* session.updatePart(ctx.reasoningMap[reasoningID])
-        delete ctx.reasoningMap[reasoningID]
+        reasoning.part.text = reasoning.part.text
+        reasoning.part.time = { ...reasoning.part.time, end: Date.now() }
+        yield* session.updatePart(reasoning.part)
+        Object.entries(ctx.reasoningMap)
+          .filter(([, part]) => part === reasoning.part)
+          .forEach(([id]) => delete ctx.reasoningMap[id])
+        ctx.pendingReasoning = undefined
       })
 
       const flushV2Fragments = Effect.fn("SessionProcessor.flushV2Fragments")(function* () {
@@ -276,20 +282,16 @@ export const layer = Layer.effect(
             timestamp: DateTime.makeUnsafe(Date.now()),
           })
         }
-        yield* Effect.forEach(Object.entries(ctx.reasoningMap), ([reasoningID, part]) =>
-          currentV2AssistantMessage().pipe(
-            Effect.flatMap((assistantMessageID) =>
-              events.publish(SessionEvent.Reasoning.Ended, {
-                sessionID: ctx.sessionID,
-                assistantMessageID,
-                reasoningID,
-                text: part.text,
-                providerMetadata: part.metadata,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              }),
-            ),
-          ),
-        )
+        if (ctx.pendingReasoning) {
+          yield* events.publish(SessionEvent.Reasoning.Ended, {
+            sessionID: ctx.sessionID,
+            assistantMessageID: yield* currentV2AssistantMessage(),
+            reasoningID: ctx.pendingReasoning.id,
+            text: ctx.pendingReasoning.part.text,
+            providerMetadata: ctx.pendingReasoning.part.metadata,
+            timestamp: DateTime.makeUnsafe(Date.now()),
+          })
+        }
       })
 
       const ensureToolCall = Effect.fn("SessionProcessor.ensureToolCall")(function* (input: {
@@ -372,6 +374,18 @@ export const layer = Layer.effect(
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
+            // Some OpenAI-compatible GLM gateways close and reopen reasoning for every token.
+            // Signed provider blocks keep their original boundaries because their metadata is not mergeable.
+            if (
+              ctx.pendingReasoning &&
+              Object.keys(ctx.reasoningMap).length === 0 &&
+              !ctx.pendingReasoning.part.metadata &&
+              !value.providerMetadata
+            ) {
+              ctx.reasoningMap[value.id] = ctx.pendingReasoning.part
+              return
+            }
+            yield* finishReasoning()
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
             if (mirrorAssistant) {
               yield* events.publish(SessionEvent.Reasoning.Started, {
@@ -391,6 +405,7 @@ export const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            ctx.pendingReasoning = { id: value.id, part: ctx.reasoningMap[value.id] }
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
@@ -403,7 +418,8 @@ export const layer = Layer.effect(
               yield* events.publish(SessionEvent.Reasoning.Delta, {
                 sessionID: ctx.sessionID,
                 assistantMessageID: yield* currentV2AssistantMessage(),
-                reasoningID: value.id,
+                reasoningID:
+                  ctx.pendingReasoning?.part === ctx.reasoningMap[value.id] ? ctx.pendingReasoning.id : value.id,
                 delta: value.text,
                 timestamp: DateTime.makeUnsafe(Date.now()),
               })
@@ -418,13 +434,14 @@ export const layer = Layer.effect(
             return
 
           case "reasoning-end":
-            if (value.providerMetadata && value.id in ctx.reasoningMap) {
-              ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            }
-            yield* finishReasoning(value.id)
+            if (!(value.id in ctx.reasoningMap)) return
+            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+            delete ctx.reasoningMap[value.id]
+            if (ctx.pendingReasoning?.part.metadata) yield* finishReasoning()
             return
 
           case "tool-input-start":
+            yield* finishReasoning()
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -466,6 +483,7 @@ export const layer = Layer.effect(
           }
 
           case "tool-call": {
+            yield* finishReasoning()
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -692,7 +710,7 @@ export const layer = Layer.effect(
 
           case "step-finish": {
             const completedSnapshot = yield* snapshot.track()
-            yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
+            yield* finishReasoning()
             const usage = Session.getUsage({
               model: ctx.model,
               usage: value.usage ?? new Usage({}),
@@ -757,6 +775,7 @@ export const layer = Layer.effect(
           }
 
           case "text-start":
+            yield* finishReasoning()
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
               if (mirrorAssistant) {
@@ -867,14 +886,15 @@ export const layer = Layer.effect(
           ctx.currentTextID = undefined
         }
 
-        for (const part of Object.values(ctx.reasoningMap)) {
+        if (ctx.pendingReasoning) {
           const end = Date.now()
           yield* session.updatePart({
-            ...part,
-            time: { start: part.time.start ?? end, end },
+            ...ctx.pendingReasoning.part,
+            time: { start: ctx.pendingReasoning.part.time.start ?? end, end },
           })
         }
         ctx.reasoningMap = {}
+        ctx.pendingReasoning = undefined
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -970,6 +990,7 @@ export const layer = Layer.effect(
             ctx.currentText = undefined
             ctx.currentTextID = undefined
             ctx.reasoningMap = {}
+            ctx.pendingReasoning = undefined
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
@@ -1008,7 +1029,8 @@ export const layer = Layer.effect(
                         timestamp: DateTime.makeUnsafe(Date.now()),
                       })
                     : Effect.void
-                  return flushV2Fragments().pipe(
+                  return finishReasoning().pipe(
+                    Effect.andThen(flushV2Fragments()),
                     Effect.andThen(event),
                     Effect.andThen(
                       status.set(ctx.sessionID, {
