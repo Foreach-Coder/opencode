@@ -5,6 +5,12 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
+import {
+  createProductCompileDefinitions,
+  resolveCliArtifact,
+  resolveCliBuildConfig,
+  type CliBuildTarget,
+} from "./build-config"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -15,15 +21,20 @@ process.chdir(dir)
 const generated = await import("./generate.ts")
 
 import { Script } from "@opencode-ai/script"
-import { Brand } from "@opencode-ai/brand"
 import pkg from "../package.json"
 
-const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
-const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
-const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+const config = resolveCliBuildConfig({
+  directory: dir,
+  stage: process.env.PRODUCT_BUILD_STAGE,
+  brandPayload: process.env.PRODUCT_BRAND_JSON,
+  visualPayload: process.env.PRODUCT_VISUAL_JSON,
+  single: process.argv.includes("--single"),
+  skipInstall: process.argv.includes("--skip-install"),
+  skipEmbedWebUi: process.argv.includes("--skip-embed-web-ui"),
+})
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
@@ -49,14 +60,9 @@ const createEmbeddedWebUIBundle = async () => {
   ].join("\n")
 }
 
-const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
+const embeddedFileMap = config.skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
 
-const allTargets: {
-  os: string
-  arch: "arm64" | "x64"
-  abi?: "musl"
-  avx2?: false
-}[] = [
+const allTargets: CliBuildTarget[] = [
   {
     os: "linux",
     arch: "arm64",
@@ -114,7 +120,7 @@ const allTargets: {
   },
 ]
 
-const targets = singleFlag
+const targets = config.single
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
         return false
@@ -135,27 +141,18 @@ const targets = singleFlag
     })
   : allTargets
 
-await $`rm -rf dist`
+await $`rm -rf ${config.outputRoot}`
 
 const binaries: Record<string, string> = {}
-if (!skipInstall) {
+if (!config.skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
   await $`bun install --os="*" --cpu="*" @ff-labs/fff-bun@${pkg.dependencies["@ff-labs/fff-bun"]}`
 }
 for (const item of targets) {
-  const name = [
-    Brand.slug,
-    // changing to win32 flags npm for some reason
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
-  console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  const artifact = resolveCliArtifact(config, item)
+  console.log(`building ${artifact.name}`)
+  await $`mkdir -p ${artifact.bin}`
 
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
@@ -180,9 +177,17 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(Brand.slug, "bun") as any,
-      outfile: `dist/${name}/bin/${Brand.cli}`,
-      execArgv: [`--user-agent=${Brand.slug}/${Script.version}`, "--use-system-ca", "--"],
+      target: [
+        "bun",
+        item.os === "win32" ? "windows" : item.os,
+        item.arch,
+        item.avx2 === false ? "baseline" : undefined,
+        item.abi,
+      ]
+        .filter(Boolean)
+        .join("-") as any,
+      outfile: artifact.binary,
+      execArgv: [`--user-agent=${config.brand.slug}/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
     files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
@@ -196,41 +201,42 @@ for (const item of targets) {
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
       ...(item.os === "linux" ? { "process.env.OPENTUI_LIBC": JSON.stringify(item.abi ?? "glibc") } : {}),
+      ...createProductCompileDefinitions(config.brandPayload, config.visualPayload),
     },
   })
 
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
-    const binaryPath = `dist/${name}/bin/${Brand.cli}`
-    console.log(`Running smoke test: ${binaryPath} --version`)
+    console.log(`Running smoke test: ${artifact.binary} --version`)
     try {
-      const versionOutput = await $`${binaryPath} --version`.text()
+      const versionOutput = await $`${artifact.binary} --version`.text()
       console.log(`Smoke test passed: ${versionOutput.trim()}`)
     } catch (e) {
-      console.error(`Smoke test failed for ${name}:`, e)
+      console.error(`Smoke test failed for ${artifact.name}:`, e)
       process.exit(1)
     }
   }
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
+  await $`rm -rf ${path.join(artifact.bin, "tui")}`
+  await Bun.file(artifact.manifest).write(
     JSON.stringify(
       {
-        name,
+        name: artifact.name,
         version: Script.version,
         preferUnplugged: true,
         os: [item.os],
         cpu: [item.arch],
         ...(item.abi ? { libc: [item.abi] } : {}),
+        ...(config.product ? { bin: { [config.brand.cli]: `./${path.basename(artifact.binary)}` } } : {}),
       },
       null,
       2,
     ),
   )
-  binaries[name] = Script.version
+  binaries[artifact.name] = Script.version
 }
 
-if (Script.release) {
+if (Script.release && !config.product) {
   for (const key of Object.keys(binaries)) {
     if (key.includes("linux")) {
       await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)

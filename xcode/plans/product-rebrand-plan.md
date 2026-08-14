@@ -3,7 +3,7 @@
 - 状态：实现完成，验证通过
 - 基线：OpenCode `1.17.9`
 - 目标产品：`ForeachCode`
-- 规格来源：`foreachcode/specs/product-rebrand.md`
+- 规格来源：`xcode/specs/product-rebrand.md`
 - 计划更新时间：2026-08-13
 
 ## 0. 实施结果

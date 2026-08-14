@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, test } from "bun:test"
 import { Brand } from "@opencode-ai/brand"
 
-const src = await Bun.file(new URL("../public/oc-theme-preload.js", import.meta.url)).text()
+const src = (await Bun.file(new URL("../public/oc-theme-preload.js", import.meta.url)).text()).replace(
+  '"__PRODUCT_SLUG__"',
+  JSON.stringify(Brand.slug),
+)
 
 const run = () => Function(src)()
 

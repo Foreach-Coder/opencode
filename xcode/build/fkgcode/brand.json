@@ -1,0 +1,9 @@
+{
+  "name": "FKGCODE",
+  "slug": "fkgcode",
+  "channel": "prod",
+  "desktopAppId": "ai.fkgcode.desktop",
+  "appIconSvg": "app-icon.svg",
+  "wordmarkSvg": "wordmark.svg",
+  "tuiWordmarkGrid": "tui.json"
+}

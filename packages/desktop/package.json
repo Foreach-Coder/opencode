@@ -5,7 +5,7 @@
   "type": "module",
   "license": "MIT",
   "author": {
-    "name": "ForeachCode"
+    "name": "__PRODUCT_NAME__"
   },
   "scripts": {
     "typecheck": "tsgo -b",

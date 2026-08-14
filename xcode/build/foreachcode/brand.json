@@ -1,0 +1,9 @@
+{
+  "name": "ForeachCode",
+  "slug": "foreachcode",
+  "channel": "prod",
+  "desktopAppId": "ai.foreachcode.desktop",
+  "appIconSvg": "app-icon.svg",
+  "wordmarkSvg": "wordmark.svg",
+  "tuiWordmarkGrid": "tui.json"
+}

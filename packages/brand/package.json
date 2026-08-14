@@ -10,7 +10,11 @@
     "typecheck": "tsgo --noEmit"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./assets": "./src/assets.ts",
+    "./assets-config": "./src/assets-config.ts",
+    "./visual": "./src/visual.ts"
   },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",

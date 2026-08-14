@@ -2,6 +2,12 @@ import { defineConfig, PluginOption } from "vite"
 import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import tailwindcss from "@tailwindcss/vite"
+import { resolveBrandDefinition } from "@opencode-ai/brand/config"
+import { productIdentityPlugin } from "../app/product-identity-plugin"
+
+const productBrand = resolveBrandDefinition(process.env.PRODUCT_BRAND_JSON)
+const productVisualSource = process.env.PRODUCT_VISUAL_JSON
+if (!productVisualSource) throw new Error("PRODUCT_VISUAL_JSON is required")
 
 const nitroConfig: any = (() => {
   const target = process.env.OPENCODE_DEPLOYMENT_TARGET
@@ -18,7 +24,12 @@ const nitroConfig: any = (() => {
 })()
 
 export default defineConfig({
+  define: {
+    PRODUCT_BRAND_JSON: JSON.stringify(JSON.stringify(productBrand)),
+    PRODUCT_VISUAL_JSON: JSON.stringify(productVisualSource),
+  },
   plugins: [
+    productIdentityPlugin(productBrand.name),
     tailwindcss(),
     solidStart() as PluginOption,
     nitro({

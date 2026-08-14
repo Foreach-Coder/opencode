@@ -1,6 +1,6 @@
 {
-  "name": "ForeachCode",
-  "short_name": "ForeachCode",
+  "name": "__PRODUCT_NAME__",
+  "short_name": "__PRODUCT_NAME__",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",

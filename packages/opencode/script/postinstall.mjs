@@ -12,10 +12,13 @@ const require = createRequire(import.meta.url)
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"))
 
 // brand:start
-const productName = "ForeachCode"
-const productSlug = "foreachcode"
-const productCli = "foreachcode"
+const productName = "__PRODUCT_NAME__"
+const productSlug = "__PRODUCT_SLUG__"
+const productCli = "__PRODUCT_CLI__"
 // brand:end
+
+if (productName.startsWith("_" + "_PRODUCT_"))
+  throw new Error("postinstall must be rendered with an explicit brand config")
 
 const platformMap = {
   darwin: "darwin",

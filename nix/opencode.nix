@@ -15,7 +15,7 @@
 }:
 let
   # brand:start
-  product = "foreachcode";
+  product = "__PRODUCT_SLUG__";
   # brand:end
 in
 stdenvNoCC.mkDerivation (finalAttrs: {

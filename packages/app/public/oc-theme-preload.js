@@ -1,6 +1,6 @@
 ;(function () {
   // brand:start
-  var productSlug = "foreachcode"
+  var productSlug = "__PRODUCT_SLUG__"
   // brand:end
   var key = productSlug + "-theme-id"
   var themeId = localStorage.getItem(key) || "oc-2"

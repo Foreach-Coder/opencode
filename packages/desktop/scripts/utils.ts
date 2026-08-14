@@ -1,43 +1,45 @@
 import { $ } from "bun"
-import { Brand } from "@opencode-ai/brand"
+import { resolveBrandDefinition } from "@opencode-ai/brand/config"
+
+const ProductBrand = resolveBrandDefinition(process.env.PRODUCT_BRAND_JSON)
 
 export type Channel = "dev" | "beta" | "prod"
 
 export function resolveChannel(): Channel {
   const raw = Bun.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
-  return "dev"
+  return ProductBrand.channel
 }
 
 export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; assetExt: string }> = [
   {
     rustTarget: "aarch64-apple-darwin",
-    ocBinary: `${Brand.slug}-darwin-arm64`,
+    ocBinary: `${ProductBrand.slug}-darwin-arm64`,
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    ocBinary: `${Brand.slug}-darwin-x64-baseline`,
+    ocBinary: `${ProductBrand.slug}-darwin-x64-baseline`,
     assetExt: "zip",
   },
   {
     rustTarget: "aarch64-pc-windows-msvc",
-    ocBinary: `${Brand.slug}-windows-arm64`,
+    ocBinary: `${ProductBrand.slug}-windows-arm64`,
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    ocBinary: `${Brand.slug}-windows-x64-baseline`,
+    ocBinary: `${ProductBrand.slug}-windows-x64-baseline`,
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    ocBinary: `${Brand.slug}-linux-x64-baseline`,
+    ocBinary: `${ProductBrand.slug}-linux-x64-baseline`,
     assetExt: "tar.gz",
   },
   {
     rustTarget: "aarch64-unknown-linux-gnu",
-    ocBinary: `${Brand.slug}-linux-arm64`,
+    ocBinary: `${ProductBrand.slug}-linux-arm64`,
     assetExt: "tar.gz",
   },
 ]
@@ -62,7 +64,7 @@ export function getCurrentSidecar(target = RUST_TARGET ?? nativeTarget()) {
 export async function copyBinaryToSidecarFolder(source: string) {
   const dir = `resources`
   await $`mkdir -p ${dir}`
-  const dest = windowsify(`${dir}/${Brand.slug}-cli`)
+  const dest = windowsify(`${dir}/${ProductBrand.slug}-cli`)
   await $`cp ${source} ${dest}`
   if (process.platform === "win32" && process.env.GITHUB_ACTIONS === "true") {
     await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 ${dest}`

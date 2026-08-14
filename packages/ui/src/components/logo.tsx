@@ -1,59 +1,55 @@
-import { Brand, layoutPixelText, pixelAccentIndex } from "@opencode-ai/brand"
-import { For, type ComponentProps } from "solid-js"
+import { Brand } from "@opencode-ai/brand"
+import { VisualAssets } from "@opencode-ai/brand/assets"
+import { createUniqueId, Show, type ComponentProps } from "solid-js"
 
-const wordmark = layoutPixelText(Brand.name)
-const accent = pixelAccentIndex(Brand.name)
-const unit = 6
+export const Mark = (props: { class?: string }) => (
+  <svg
+    data-component="logo-mark"
+    classList={{ [props.class ?? ""]: !!props.class }}
+    viewBox={VisualAssets.appIcon.viewBox.join(" ")}
+    role="img"
+    aria-label={Brand.name}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <image href={VisualAssets.appIcon.dataUri} width="100%" height="100%" />
+  </svg>
+)
 
-export const Mark = (props: { class?: string }) => {
-  return (
-    <svg
-      data-component="logo-mark"
-      classList={{ [props.class ?? ""]: !!props.class }}
-      viewBox="0 0 16 20"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path data-slot="logo-logo-mark-shadow" d="M12 16H4V8H12V16Z" fill="var(--icon-weak-base)" />
-      <path data-slot="logo-logo-mark-o" d="M12 4H4V16H12V4ZM16 20H0V0H16V20Z" fill="var(--icon-strong-base)" />
-    </svg>
-  )
-}
-
-export const Splash = (props: Pick<ComponentProps<"svg">, "ref" | "class">) => {
-  return (
-    <svg
-      ref={props.ref}
-      data-component="logo-splash"
-      classList={{ [props.class ?? ""]: !!props.class }}
-      viewBox="0 0 80 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="M60 80H20V40H60V80Z" fill="var(--icon-base)" />
-      <path d="M60 20H20V80H60V20ZM80 100H0V0H80V100Z" fill="var(--icon-strong-base)" />
-    </svg>
-  )
-}
+export const Splash = (props: Pick<ComponentProps<"svg">, "ref" | "class">) => (
+  <svg
+    ref={props.ref}
+    data-component="logo-splash"
+    classList={{ [props.class ?? ""]: !!props.class }}
+    viewBox={VisualAssets.appIcon.viewBox.join(" ")}
+    role="img"
+    aria-label={Brand.name}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <image href={VisualAssets.appIcon.dataUri} width="100%" height="100%" />
+  </svg>
+)
 
 export const Logo = (props: { class?: string }) => {
+  const mask = createUniqueId()
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox={`0 0 ${wordmark.width * unit} ${(wordmark.height + 2) * unit}`}
-      fill="none"
+      viewBox={VisualAssets.wordmark.viewBox.join(" ")}
       classList={{ [props.class ?? ""]: !!props.class }}
+      role="img"
+      aria-label={Brand.name}
     >
-      <g fill="var(--icon-base)">
-        <For each={wordmark.cells.filter((cell) => cell.character < accent)}>
-          {(cell) => <rect x={cell.x * unit} y={(cell.y + 1) * unit} width={unit} height={unit} />}
-        </For>
-      </g>
-      <g fill="var(--icon-strong-base)">
-        <For each={wordmark.cells.filter((cell) => cell.character >= accent)}>
-          {(cell) => <rect x={cell.x * unit} y={(cell.y + 1) * unit} width={unit} height={unit} />}
-        </For>
-      </g>
+      <Show
+        when={VisualAssets.wordmark.usesCurrentColor}
+        fallback={<image href={VisualAssets.wordmark.dataUri} width="100%" height="100%" />}
+      >
+        <defs>
+          <mask id={mask} style={{ "mask-type": "alpha" }}>
+            <image href={VisualAssets.wordmark.dataUri} width="100%" height="100%" />
+          </mask>
+        </defs>
+        <rect width="100%" height="100%" fill="currentColor" mask={`url(#${mask})`} />
+      </Show>
     </svg>
   )
 }

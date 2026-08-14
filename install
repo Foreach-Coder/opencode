@@ -2,9 +2,15 @@
 set -euo pipefail
 
 # brand:start
-APP=foreachcode
-PRODUCT_NAME=ForeachCode
+APP=__PRODUCT_SLUG__
+PRODUCT_NAME=__PRODUCT_NAME__
 # brand:end
+
+template_prefix="_""_PRODUCT_"
+if [[ "$APP" == "$template_prefix"* || "$PRODUCT_NAME" == "$template_prefix"* ]]; then
+    echo "Installer must be rendered with an explicit brand config" >&2
+    exit 1
+fi
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'

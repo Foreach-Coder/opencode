@@ -3,7 +3,9 @@
 import { $ } from "bun"
 import path from "node:path"
 import { parseArgs } from "node:util"
-import { Brand } from "@opencode-ai/brand"
+import { resolveBrandDefinition } from "@opencode-ai/brand/config"
+
+const Brand = resolveBrandDefinition(process.env.PRODUCT_BRAND_JSON)
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),

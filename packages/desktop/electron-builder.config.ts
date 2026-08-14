@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
 import type { Configuration } from "electron-builder"
-import { Brand } from "@opencode-ai/brand"
+import { resolveBrandDefinition } from "@opencode-ai/brand/config"
 
 const execFileAsync = promisify(execFile)
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
@@ -22,32 +22,43 @@ async function signWindows(configuration: { path: string }) {
   )
 }
 
+const productBrand = resolveBrandDefinition(process.env.PRODUCT_BRAND_JSON)
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
-  return "dev"
+  return productBrand.channel
 })()
 
 const APP_IDS = {
-  dev: Brand.desktop.dev.appId,
-  beta: Brand.desktop.beta.appId,
-  prod: Brand.desktop.prod.appId,
+  dev: productBrand.desktop.dev.appId,
+  beta: productBrand.desktop.beta.appId,
+  prod: productBrand.desktop.prod.appId,
 } as const
+const buildResources = process.env.PRODUCT_BUILD_STAGE ? `${process.env.PRODUCT_BUILD_STAGE}/resources` : "resources"
+const productIcon = process.env.PRODUCT_BUILD_STAGE ? `${buildResources}/icons/app-icon.svg` : undefined
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: `${Brand.slug}-desktop-\${os}-\${arch}.\${ext}`,
+  artifactName: `${productBrand.slug}-desktop-\${os}-\${arch}.\${ext}`,
   directories: {
-    output: "dist",
-    buildResources: "resources",
+    output: process.env.PRODUCT_BUILD_STAGE ? `${process.env.PRODUCT_BUILD_STAGE}/artifacts` : "dist",
+    buildResources,
   },
   // Linux launchers are .desktop files, so this is the desktop file name,
   // not just the app id. Otherwise Electron appends another desktop suffix.
   // https://developer.gnome.org/documentation/guidelines/maintainer/integrating.html
   // https://www.electron.build/docs/linux/
   extraMetadata: {
+    author: { name: productBrand.name },
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*"],
+  files: process.env.PRODUCT_BUILD_STAGE
+    ? [
+        "package.json",
+        "node_modules/**/*",
+        { from: `${process.env.PRODUCT_BUILD_STAGE}/out`, to: "out", filter: ["**/*"] },
+        { from: `${process.env.PRODUCT_BUILD_STAGE}/resources`, to: "resources", filter: ["**/*"] },
+      ]
+    : ["out/**/*", "resources/**/*"],
   extraResources: [
     {
       from: "native/",
@@ -57,7 +68,7 @@ const getBase = (appId: string): Configuration => ({
   ],
   mac: {
     category: "public.app-category.developer-tools",
-    icon: `resources/icons/icon.icns`,
+    icon: productIcon ?? `${buildResources}/icons/icon.icns`,
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",
@@ -69,11 +80,11 @@ const getBase = (appId: string): Configuration => ({
     sign: true,
   },
   protocols: {
-    name: Brand.name,
-    schemes: [Brand.protocol],
+    name: productBrand.name,
+    schemes: [productBrand.protocol],
   },
   win: {
-    icon: `resources/icons/icon.ico`,
+    icon: productIcon ?? `${buildResources}/icons/icon.ico`,
     signtoolOptions: {
       sign: signWindows,
     },
@@ -83,11 +94,11 @@ const getBase = (appId: string): Configuration => ({
   nsis: {
     oneClick: true,
     perMachine: false,
-    installerIcon: `resources/icons/icon.ico`,
-    installerHeaderIcon: `resources/icons/icon.ico`,
+    installerIcon: productIcon ? undefined : `${buildResources}/icons/icon.ico`,
+    installerHeaderIcon: productIcon ? undefined : `${buildResources}/icons/icon.ico`,
   },
   linux: {
-    icon: `resources/icons`,
+    icon: productIcon ?? `${buildResources}/icons`,
     category: "Development",
     executableName: appId,
     desktop: {
@@ -110,30 +121,30 @@ function getConfig() {
       return {
         ...base,
         appId,
-        productName: Brand.desktop.dev.name,
-        protocols: { name: Brand.desktop.dev.name, schemes: [Brand.protocol] },
-        deb: { packageName: `${Brand.slug}-dev` },
-        rpm: { packageName: `${Brand.slug}-dev` },
+        productName: productBrand.desktop.dev.name,
+        protocols: { name: productBrand.desktop.dev.name, schemes: [productBrand.protocol] },
+        deb: { packageName: `${productBrand.slug}-dev` },
+        rpm: { packageName: `${productBrand.slug}-dev` },
       }
     }
     case "beta": {
       return {
         ...base,
         appId,
-        productName: Brand.desktop.beta.name,
-        protocols: { name: Brand.desktop.beta.name, schemes: [Brand.protocol] },
-        deb: { packageName: `${Brand.slug}-beta` },
-        rpm: { packageName: `${Brand.slug}-beta` },
+        productName: productBrand.desktop.beta.name,
+        protocols: { name: productBrand.desktop.beta.name, schemes: [productBrand.protocol] },
+        deb: { packageName: `${productBrand.slug}-beta` },
+        rpm: { packageName: `${productBrand.slug}-beta` },
       }
     }
     case "prod": {
       return {
         ...base,
         appId,
-        productName: Brand.name,
-        protocols: { name: Brand.name, schemes: [Brand.protocol] },
-        deb: { packageName: Brand.slug },
-        rpm: { packageName: Brand.slug },
+        productName: productBrand.name,
+        protocols: { name: productBrand.name, schemes: [productBrand.protocol] },
+        deb: { packageName: productBrand.slug },
+        rpm: { packageName: productBrand.slug },
       }
     }
   }

@@ -48,3 +48,44 @@ for (const channel of channels) {
     expect(config.rpm?.fpm).toBeUndefined()
   })
 }
+
+test("uses the injected product brand and isolated output paths", async () => {
+  const previousBrand = process.env.PRODUCT_BRAND_JSON
+  const previousStage = process.env.PRODUCT_BUILD_STAGE
+  const brand = {
+    ...Brand,
+    name: "FKGCODE",
+    slug: "fkgcode",
+    cli: "fkgcode",
+    protocol: "fkgcode",
+    directory: "fkgcode",
+    database: "fkgcode.db",
+    log: "fkgcode.log",
+    desktopAppId: "ai.fkgcode.desktop",
+    channel: "prod",
+    desktop: {
+      dev: { name: "FKGCODE Dev", appId: "ai.fkgcode.desktop.dev" },
+      beta: { name: "FKGCODE Beta", appId: "ai.fkgcode.desktop.beta" },
+      prod: { name: "FKGCODE", appId: "ai.fkgcode.desktop" },
+    },
+  }
+  process.env.PRODUCT_BRAND_JSON = JSON.stringify(brand)
+  process.env.PRODUCT_BUILD_STAGE = "D:/product-build/fkgcode/prod"
+  process.env.OPENCODE_CHANNEL = "prod"
+  const module = await import(`./electron-builder.config.ts?brand=${Date.now()}`)
+  if (previousBrand === undefined) delete process.env.PRODUCT_BRAND_JSON
+  else process.env.PRODUCT_BRAND_JSON = previousBrand
+  if (previousStage === undefined) delete process.env.PRODUCT_BUILD_STAGE
+  else process.env.PRODUCT_BUILD_STAGE = previousStage
+  const config = module.default as Configuration
+
+  expect(config.productName).toBe("FKGCODE")
+  expect(config.extraMetadata?.author).toEqual({ name: "FKGCODE" })
+  expect(config.appId).toBe("ai.fkgcode.desktop")
+  expect(config.artifactName).toBe("fkgcode-desktop-${os}-${arch}.${ext}")
+  expect(config.directories?.output).toBe("D:/product-build/fkgcode/prod/artifacts")
+  expect(config.directories?.buildResources).toBe("D:/product-build/fkgcode/prod/resources")
+  expect(config.win?.icon).toBe("D:/product-build/fkgcode/prod/resources/icons/app-icon.svg")
+  expect(config.mac?.icon).toBe("D:/product-build/fkgcode/prod/resources/icons/app-icon.svg")
+  expect(config.linux?.icon).toBe("D:/product-build/fkgcode/prod/resources/icons/app-icon.svg")
+})

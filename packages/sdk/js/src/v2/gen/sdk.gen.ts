@@ -528,7 +528,7 @@ export class App extends HeyApiClient {
   /**
    * List agents
    *
-   * Get a list of all available AI agents in the ForeachCode system.
+   * Get a list of all available AI agents in the product.
    */
   public agents<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -558,7 +558,7 @@ export class App extends HeyApiClient {
   /**
    * List skills
    *
-   * Get a list of all available skills in the ForeachCode system.
+   * Get a list of all available skills in the product.
    */
   public skills<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -633,7 +633,7 @@ export class Capabilities extends HeyApiClient {
   /**
    * Get experimental capabilities
    *
-   * Get experimental features enabled on the ForeachCode server.
+   * Get experimental features enabled on the product server.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -737,7 +737,7 @@ export class Console extends HeyApiClient {
   /**
    * Switch active Console org
    *
-   * Persist a new active Console account/org selection for the current local ForeachCode state.
+   * Persist a new active Console account/org selection for the current local product state.
    */
   public switchOrg<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -778,7 +778,7 @@ export class Session extends HeyApiClient {
   /**
    * List sessions
    *
-   * Get a list of all ForeachCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.
+   * Get a list of all product sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1253,7 +1253,7 @@ export class Config extends HeyApiClient {
   /**
    * Get global configuration
    *
-   * Retrieve the current global ForeachCode configuration settings and preferences.
+   * Retrieve the current global product configuration settings and preferences.
    */
   public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<GlobalConfigGetResponses, GlobalConfigGetErrors, ThrowOnError>({
@@ -1265,7 +1265,7 @@ export class Config extends HeyApiClient {
   /**
    * Update global configuration
    *
-   * Update global ForeachCode configuration settings and preferences.
+   * Update global product configuration settings and preferences.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1291,7 +1291,7 @@ export class Global extends HeyApiClient {
   /**
    * Get health
    *
-   * Get health information about the ForeachCode server.
+   * Get health information about the product server.
    */
   public health<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<GlobalHealthResponses, GlobalHealthErrors, ThrowOnError>({
@@ -1303,7 +1303,7 @@ export class Global extends HeyApiClient {
   /**
    * Get global events
    *
-   * Subscribe to global events from the ForeachCode system using server-sent events.
+   * Subscribe to global product events using server-sent events.
    */
   public event<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<GlobalEventResponses, GlobalEventErrors, ThrowOnError>({
@@ -1315,7 +1315,7 @@ export class Global extends HeyApiClient {
   /**
    * Dispose instance
    *
-   * Clean up and dispose all ForeachCode instances, releasing all resources.
+   * Clean up and dispose all product instances, releasing all resources.
    */
   public dispose<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).post<GlobalDisposeResponses, GlobalDisposeErrors, ThrowOnError>({
@@ -1325,9 +1325,9 @@ export class Global extends HeyApiClient {
   }
 
   /**
-   * Upgrade ForeachCode
+   * Upgrade the product
    *
-   * Upgrade ForeachCode to the specified version or latest if not specified.
+   * Upgrade the product to the specified version or latest if not specified.
    */
   public upgrade<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1390,7 +1390,7 @@ export class Config2 extends HeyApiClient {
   /**
    * Get configuration
    *
-   * Retrieve the current ForeachCode configuration settings and preferences.
+   * Retrieve the current product configuration settings and preferences.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1420,7 +1420,7 @@ export class Config2 extends HeyApiClient {
   /**
    * Update configuration
    *
-   * Update ForeachCode configuration settings and preferences.
+   * Update product configuration settings and preferences.
    */
   public update<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1898,7 +1898,7 @@ export class Instance extends HeyApiClient {
   /**
    * Dispose instance
    *
-   * Clean up and dispose the current ForeachCode instance, releasing all resources.
+   * Clean up and dispose the current product instance, releasing all resources.
    */
   public dispose<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -1930,7 +1930,7 @@ export class Path extends HeyApiClient {
   /**
    * Get paths
    *
-   * Retrieve the current working directory and related path information for the ForeachCode instance.
+   * Retrieve the current working directory and related path information for the product instance.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2132,7 +2132,7 @@ export class Command extends HeyApiClient {
   /**
    * List commands
    *
-   * Get a list of all available commands in the ForeachCode system.
+   * Get a list of all available product commands.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2503,7 +2503,7 @@ export class Project extends HeyApiClient {
   /**
    * List all projects
    *
-   * Get a list of projects that have been opened with ForeachCode.
+   * Get a list of projects that have been opened with the product.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2533,7 +2533,7 @@ export class Project extends HeyApiClient {
   /**
    * Get current project
    *
-   * Retrieve the currently active project that ForeachCode is working with.
+   * Retrieve the currently active project that the product is working with.
    */
   public current<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2709,7 +2709,7 @@ export class Pty extends HeyApiClient {
   /**
    * List PTY sessions
    *
-   * Get a list of all active pseudo-terminal (PTY) sessions managed by ForeachCode.
+   * Get a list of all active pseudo-terminal (PTY) sessions managed by the product.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3344,7 +3344,7 @@ export class Session2 extends HeyApiClient {
   /**
    * List sessions
    *
-   * Get a list of all ForeachCode sessions, sorted by most recently updated.
+   * Get a list of all product sessions, sorted by most recently updated.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3386,7 +3386,7 @@ export class Session2 extends HeyApiClient {
   /**
    * Create session
    *
-   * Create a new ForeachCode session for interacting with AI assistants and managing conversations.
+   * Create a new product session for interacting with AI assistants and managing conversations.
    */
   public create<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -3503,7 +3503,7 @@ export class Session2 extends HeyApiClient {
   /**
    * Get session
    *
-   * Retrieve detailed information about a specific ForeachCode session.
+   * Retrieve detailed information about a specific product session.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {

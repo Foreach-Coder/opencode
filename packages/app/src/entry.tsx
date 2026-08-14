@@ -11,6 +11,7 @@ import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
 import { Brand } from "@opencode-ai/brand"
+import { VisualAssets } from "@opencode-ai/brand/assets"
 
 const DEFAULT_SERVER_URL_KEY = `${Brand.slug}.settings.dat:defaultServerUrl`
 
@@ -70,7 +71,7 @@ const notify: Platform["notify"] = async (title, description, href) => {
 
   const notification = new Notification(title, {
     body: description ?? "",
-    icon: "/favicon-v3.svg",
+    icon: VisualAssets.appIcon.dataUri,
   })
 
   notification.onclick = () => {

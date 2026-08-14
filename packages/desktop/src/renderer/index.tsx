@@ -30,6 +30,7 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { UPDATER_ENABLED } from "../features"
 import { Brand } from "@opencode-ai/brand"
+import { VisualAssets } from "@opencode-ai/brand/assets"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -220,7 +221,7 @@ const createPlatform = (): Platform => {
 
       const notification = new Notification(title, {
         body: description ?? "",
-        icon: "/favicon-v3.svg",
+        icon: VisualAssets.appIcon.dataUri,
       })
       notification.onclick = () => {
         void window.api.showWindow()

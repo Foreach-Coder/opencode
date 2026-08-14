@@ -1,42 +1,41 @@
-import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
-import * as fs from "node:fs/promises"
+import { productIdentityPlugin } from "../app/product-identity-plugin"
+import { resolveBrandDefinition } from "@opencode-ai/brand/config"
+import { readFile, readdir, writeFile } from "node:fs/promises"
+import { createRequire } from "node:module"
+import path from "node:path"
 
-const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+const OPENCODE_SERVER_DIST = process.env.PRODUCT_BUILD_STAGE
+  ? `${process.env.PRODUCT_BUILD_STAGE}/server`
+  : "../opencode/dist/node"
 
+const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+const productBrandSource = process.env.PRODUCT_BRAND_JSON
+const productBrand = resolveBrandDefinition(productBrandSource)
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
-  if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
-  return "dev"
+  if (raw === "latest") return "prod"
+  return productBrand.channel
 })()
-
-const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
-
-const sentry =
-  process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
-    ? sentryVitePlugin({
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-        telemetry: false,
-        release: {
-          name: process.env.SENTRY_RELEASE ?? process.env.VITE_SENTRY_RELEASE,
-        },
-        sourcemaps: {
-          assets: "./out/renderer/**",
-          filesToDeleteAfterUpload: "./out/renderer/**/*.map",
-        },
-      })
-    : false
+const productBrandDefine = JSON.stringify(JSON.stringify(productBrand))
+if (!process.env.PRODUCT_VISUAL_JSON) throw new Error("PRODUCT_VISUAL_JSON is required")
+const productVisualDefine = JSON.stringify(process.env.PRODUCT_VISUAL_JSON)
+const productBuildStage = process.env.PRODUCT_BUILD_STAGE
+const jsoncParserEsm = createRequire(new URL("../opencode/package.json", import.meta.url)).resolve(
+  "jsonc-parser/lib/esm/main.js",
+)
 
 export default defineConfig({
   main: {
     define: {
       "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+      PRODUCT_BRAND_JSON: productBrandDefine,
+      PRODUCT_VISUAL_JSON: productVisualDefine,
     },
     build: {
+      outDir: productBuildStage ? `${productBuildStage}/out/main` : undefined,
       rollupOptions: {
         input: { index: "src/main/index.ts", sidecar: "src/main/sidecar.ts" },
       },
@@ -46,6 +45,13 @@ export default defineConfig({
       },
     },
     plugins: [
+      {
+        name: "opencode:jsonc-parser-esm",
+        enforce: "pre",
+        resolveId(id) {
+          if (id === "jsonc-parser") return jsoncParserEsm
+        },
+      },
       {
         name: "opencode:node-pty-narrower",
         enforce: "pre",
@@ -63,16 +69,24 @@ export default defineConfig({
       {
         name: "opencode:copy-server-assets",
         async writeBundle() {
-          for (const l of await fs.readdir(OPENCODE_SERVER_DIST)) {
-            if (!l.endsWith(".wasm")) continue
-            await fs.writeFile(`./out/main/chunks/${l}`, await fs.readFile(`${OPENCODE_SERVER_DIST}/${l}`))
+          for (const file of await readdir(OPENCODE_SERVER_DIST)) {
+            if (!file.endsWith(".wasm")) continue
+            await writeFile(
+              path.join(productBuildStage ?? ".", "out", "main", "chunks", file),
+              await readFile(path.join(OPENCODE_SERVER_DIST, file)),
+            )
           }
         },
       },
     ],
   },
   preload: {
+    define: {
+      PRODUCT_BRAND_JSON: productBrandDefine,
+      PRODUCT_VISUAL_JSON: productVisualDefine,
+    },
     build: {
+      outDir: productBuildStage ? `${productBuildStage}/out/preload` : undefined,
       rollupOptions: {
         input: { index: "src/preload/index.ts" },
         output: {
@@ -85,12 +99,33 @@ export default defineConfig({
   renderer: {
     define: {
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+      PRODUCT_BRAND_JSON: productBrandDefine,
+      PRODUCT_VISUAL_JSON: productVisualDefine,
     },
-    plugins: [appPlugin, sentry],
-    publicDir: "../../../app/public",
+    plugins: [
+      appPlugin,
+      productIdentityPlugin(productBrand.name),
+      {
+        name: "opencode:product-title",
+        transformIndexHtml(html) {
+          const title = productBrand.name.replace(
+            /[&<>"]/g,
+            (value) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[value]!,
+          )
+          const branded = html.replace(/<title>.*?<\/title>/s, `<title>${title}</title>`)
+          if (!productBuildStage) return branded
+          return branded
+            .replace(/\s*<link rel="(?:icon|shortcut icon|apple-touch-icon)"[^>]*>/g, "")
+            .replace(/\s*<meta property="(?:og:image|twitter:image)"[^>]*>/g, "")
+            .replace("</title>", '</title>\n    <link rel="icon" type="image/svg+xml" href="./app-icon.svg" />')
+        },
+      },
+    ],
+    publicDir: productBuildStage ? `${productBuildStage}/public` : "../../../app/public",
     root: "src/renderer",
     build: {
-      sourcemap: true,
+      outDir: productBuildStage ? `${productBuildStage}/out/renderer` : undefined,
+      sourcemap: productBuildStage ? false : true,
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",

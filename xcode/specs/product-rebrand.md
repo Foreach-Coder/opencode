@@ -291,7 +291,7 @@ ForeachCode 的可变产品身份必须集中定义，不能继续把产品名�
 
 ### 7.3 应用图标
 
-目标源文件：`foreachcode/specs/assets/foreachcode-app-icon.svg`
+目标源文件：`xcode/build/foreachcode/app-icon.svg`
 
 要求：
 

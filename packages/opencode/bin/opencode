@@ -7,11 +7,14 @@ import os from "node:os"
 import { fileURLToPath } from "node:url"
 
 // brand:start
-const productName = "ForeachCode"
-const productSlug = "foreachcode"
-const productCli = "foreachcode"
-const productDirectory = "foreachcode"
+const productName = "__PRODUCT_NAME__"
+const productSlug = "__PRODUCT_SLUG__"
+const productCli = "__PRODUCT_CLI__"
+const productDirectory = "__PRODUCT_DIRECTORY__"
 // brand:end
+
+if (productName.startsWith("_" + "_PRODUCT_"))
+  throw new Error("CLI launcher must be rendered with an explicit brand config")
 
 const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
 
