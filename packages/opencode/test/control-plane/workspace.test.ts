@@ -34,6 +34,7 @@ import { Vcs } from "@/project/vcs"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { Brand } from "@opencode-ai/brand"
 
 const originalEnv = {
   OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
@@ -489,9 +490,15 @@ describe("workspace CRUD", () => {
         })
         expect(recorded.calls.create[0].env.OPENCODE_WORKSPACE_ID).toBe(workspaceID)
         expect(recorded.calls.create[0].env.OPENCODE_EXPERIMENTAL_WORKSPACES).toBe("true")
-        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_HEADERS).toBe("authorization=otel")
-        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("https://otel.test")
-        expect(recorded.calls.create[0].env.OTEL_RESOURCE_ATTRIBUTES).toBe("service.name=opencode-test")
+        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_HEADERS).toBe(
+          Brand.enterprise ? undefined : "authorization=otel",
+        )
+        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
+          Brand.enterprise ? undefined : "https://otel.test",
+        )
+        expect(recorded.calls.create[0].env.OTEL_RESOURCE_ATTRIBUTES).toBe(
+          Brand.enterprise ? undefined : "service.name=opencode-test",
+        )
         expect((yield* workspace.status()).find((item) => item.workspaceID === workspaceID)?.status).toBe("connected")
 
         yield* workspace.remove(workspaceID)

@@ -5,6 +5,8 @@ import { resolveBrandDefinition } from "@opencode-ai/brand/config"
 import { readFile, readdir, writeFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import path from "node:path"
+import pkg from "./package.json"
+import { requireProductVersion } from "./product-version"
 
 const OPENCODE_SERVER_DIST = process.env.PRODUCT_BUILD_STAGE
   ? `${process.env.PRODUCT_BUILD_STAGE}/server`
@@ -23,6 +25,9 @@ const productBrandDefine = JSON.stringify(JSON.stringify(productBrand))
 if (!process.env.PRODUCT_VISUAL_JSON) throw new Error("PRODUCT_VISUAL_JSON is required")
 const productVisualDefine = JSON.stringify(process.env.PRODUCT_VISUAL_JSON)
 const productBuildStage = process.env.PRODUCT_BUILD_STAGE
+const productVersion = productBuildStage
+  ? requireProductVersion(process.env.OPENCODE_VERSION)
+  : process.env.OPENCODE_VERSION || pkg.version
 const jsoncParserEsm = createRequire(new URL("../opencode/package.json", import.meta.url)).resolve(
   "jsonc-parser/lib/esm/main.js",
 )
@@ -99,6 +104,7 @@ export default defineConfig({
   renderer: {
     define: {
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.VITE_PRODUCT_VERSION": JSON.stringify(productVersion),
       PRODUCT_BRAND_JSON: productBrandDefine,
       PRODUCT_VISUAL_JSON: productVisualDefine,
     },

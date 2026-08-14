@@ -5,7 +5,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { fileLogger } from "../../src/observability/logging"
-import { resource } from "../../src/observability/otlp"
+import { loggers, resource, tracingLayer } from "../../src/observability/otlp"
 import { Global } from "../../src/global"
 import { Brand } from "@opencode-ai/brand"
 
@@ -51,6 +51,13 @@ describe("resource", () => {
     })
     expect(resource().attributes["service.instance.id"]).not.toBe("override")
     expect(resource().attributes["opencode.run"]).toMatch(/^[0-9a-f]{8}$/)
+  })
+})
+
+describe.skipIf(!Brand.enterprise)("enterprise telemetry policy", () => {
+  test("does not initialize OTLP exporters from inherited environment", async () => {
+    expect(loggers()).toEqual([])
+    expect(await tracingLayer()).toBe(Layer.empty)
   })
 })
 

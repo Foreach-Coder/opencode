@@ -43,7 +43,7 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
 
     const list = Effect.fn("ProviderHttpApi.list")(function* () {
       const connected = yield* provider.list()
-      if (Brand.disableProviderConnections) {
+      if (Brand.enterprise) {
         return {
           all: Object.values(connected).map(Provider.toPublicInfo),
           default: Provider.defaultModelIDs(connected),

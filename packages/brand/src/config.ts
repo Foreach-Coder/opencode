@@ -5,7 +5,7 @@ export type BrandInput = {
   slug?: string
   channel?: string
   desktopAppId?: string
-  disableProviderConnections: boolean
+  enterprise: boolean
 }
 
 export type ResolveBrandInput = {
@@ -22,7 +22,7 @@ export type ResolvedBrand = Readonly<{
   log: string
   desktopAppId: string
   channel: BrandChannel
-  disableProviderConnections: boolean
+  enterprise: boolean
   desktop: Readonly<Record<BrandChannel, Readonly<{ name: string; appId: string }>>>
 }>
 
@@ -34,7 +34,7 @@ export function resolveBrand(input: ResolveBrandInput = {}): ResolvedBrand {
   const slug = requireSlug(input.cli?.slug ?? deriveSlug(name))
   const desktopAppId = requireDesktopAppId(input.cli?.desktopAppId ?? `ai.${slug}.desktop`)
   const channel = requireChannel(input.cli?.channel)
-  const disableProviderConnections = requireProviderConnectionPolicy(input.cli?.disableProviderConnections)
+  const enterprise = requireEnterprise(input.cli?.enterprise)
 
   return Object.freeze({
     name,
@@ -46,7 +46,7 @@ export function resolveBrand(input: ResolveBrandInput = {}): ResolvedBrand {
     log: `${slug}.log`,
     desktopAppId,
     channel,
-    disableProviderConnections,
+    enterprise,
     desktop: Object.freeze({
       dev: Object.freeze({ name: `${name} Dev`, appId: `${desktopAppId}.dev` }),
       beta: Object.freeze({ name: `${name} Beta`, appId: `${desktopAppId}.beta` }),
@@ -63,7 +63,7 @@ export function parseBrandDefinition(source: string): BrandInput {
     slug: optionalString(value, "slug"),
     channel: optionalString(value, "channel"),
     desktopAppId: optionalString(value, "desktopAppId"),
-    disableProviderConnections: requireProviderConnectionPolicy(Reflect.get(value, "disableProviderConnections")),
+    enterprise: requireEnterprise(Reflect.get(value, "enterprise")),
   }
 }
 
@@ -109,7 +109,7 @@ function requireChannel(value: string | undefined) {
   throw new Error(`Invalid product channel: ${value}`)
 }
 
-function requireProviderConnectionPolicy(value: unknown) {
+function requireEnterprise(value: unknown) {
   if (typeof value === "boolean") return value
-  throw new Error("An explicit disableProviderConnections boolean is required")
+  throw new Error("An explicit enterprise boolean is required")
 }

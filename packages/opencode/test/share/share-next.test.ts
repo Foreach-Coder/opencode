@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { pollWithTimeout, testEffect } from "../lib/effect"
+import { Brand } from "@opencode-ai/brand"
 
 const env = LayerNode.buildLayer(CrossSpawnSpawner.node)
 const it = testEffect(env)
@@ -84,6 +85,21 @@ beforeEach(async () => {
 })
 
 describe("ShareNext", () => {
+  describe.skipIf(!Brand.enterprise)("enterprise policy", () => {
+    it.live("rejects sharing at the service boundary without making an HTTP request", () =>
+      provideTmpdirInstance(
+        () =>
+          ShareNext.Service.use((svc) =>
+            Effect.gen(function* () {
+              expect(Exit.isFailure(yield* Effect.exit(svc.request()))).toBe(true)
+              expect(Exit.isFailure(yield* Effect.exit(svc.create("ses_enterprise" as SessionID)))).toBe(true)
+            }),
+          ).pipe(Effect.provide(requestLayer(none))),
+        { config: { enterprise: { url: "https://internal.example.com" } } },
+      ),
+    )
+  })
+
   it.live("request uses legacy share API without active org account", () =>
     provideTmpdirInstance(
       () =>

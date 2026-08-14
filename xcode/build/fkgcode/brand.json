@@ -3,7 +3,8 @@
   "slug": "fkgcode",
   "channel": "prod",
   "desktopAppId": "ai.fkgcode.desktop",
-  "disableProviderConnections": true,
+  "enterprise": true,
+  "release": "260814-01",
   "appIconSvg": "app-icon.svg",
   "wordmarkSvg": "wordmark.svg",
   "tuiWordmarkGrid": "tui.json"

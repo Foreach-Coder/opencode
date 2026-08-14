@@ -83,7 +83,7 @@ bun run product:build --brand-config xcode/build/fkgcode/brand.json
 | `brand-config` | 是   | `xcode/build/fkgcode/brand.json` | 唯一品牌清单；相对资产路径以该文件所在目录为基准 |
 | `prepare-only` | 否   | 无值开关                         | 只校验并生成隔离暂存区，不执行编译和打包         |
 
-品牌清单必须显式提供 `name`、`channel`、`appIconSvg`、`wordmarkSvg` 和 `tuiWordmarkGrid`；`slug` 仅在名称可无损派生时可省略，`desktopAppId` 可按 slug 派生。三类视觉资源均不得省略、自动生成或回退到其他品牌资产。
+品牌清单必须显式提供 `name`、`channel`、`appIconSvg`、`wordmarkSvg` 和 `tuiWordmarkGrid`；`slug` 仅在名称可无损派生时可省略，`desktopAppId` 可按 slug 派生。`release` 有值时必须使用 `YYMMDD-NN` 格式；缺失或为空时，由构建入口使用构建机器的本地日期和当前 Git `HEAD` 的短提交号生成 `YYMMDD-<shortCommitId>`。发行号与仓库基础版本组合为最终软件版本，例如 `1.17.9-260814-01` 或 `1.17.9-260814-a1b2c3d`。三类视觉资源均不得省略、自动生成或回退到其他品牌资产。
 
 ### 5.3 环境变量
 
@@ -155,7 +155,7 @@ slug 必须满足：
 需要物化静态品牌值时，构建系统必须使用独立暂存目录，例如：
 
 ```text
-.tmp/product-build/<slug>/<channel>/
+dist/product-build/<slug>/<channel>/<release>/
 ```
 
 要求：

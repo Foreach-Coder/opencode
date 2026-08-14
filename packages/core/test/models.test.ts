@@ -292,7 +292,7 @@ describe("ModelsDev Service", () => {
   )
 })
 
-describe.skipIf(!Brand.disableProviderConnections)("disabled provider connections", () => {
+describe.skipIf(!Brand.enterprise)("enterprise provider policy", () => {
   it.live("never fetches the model catalog", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

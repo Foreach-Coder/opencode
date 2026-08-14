@@ -33,6 +33,7 @@ import { Vcs } from "@/project/vcs"
 import { InstanceStore } from "@/project/instance-store"
 import { InstanceBootstrap } from "@/project/bootstrap"
 import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
+import { Brand } from "@opencode-ai/brand"
 
 export const Info = Schema.Struct({
   ...WorkspaceInfoSchema.fields,
@@ -546,9 +547,9 @@ export const layer = Layer.effect(
         OPENCODE_AUTH_CONTENT: JSON.stringify(yield* auth.all()),
         OPENCODE_WORKSPACE_ID: config.id,
         OPENCODE_EXPERIMENTAL_WORKSPACES: "true",
-        OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
-        OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
-        OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
+        OTEL_EXPORTER_OTLP_HEADERS: Brand.enterprise ? undefined : process.env.OTEL_EXPORTER_OTLP_HEADERS,
+        OTEL_EXPORTER_OTLP_ENDPOINT: Brand.enterprise ? undefined : process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        OTEL_RESOURCE_ATTRIBUTES: Brand.enterprise ? undefined : process.env.OTEL_RESOURCE_ATTRIBUTES,
       }
 
       yield* WorkspaceAdapterRuntime.create(adapter, config, env)

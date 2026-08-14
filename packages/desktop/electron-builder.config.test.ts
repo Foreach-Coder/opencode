@@ -52,6 +52,7 @@ for (const channel of channels) {
 test("uses the injected product brand and isolated output paths", async () => {
   const previousBrand = process.env.PRODUCT_BRAND_JSON
   const previousStage = process.env.PRODUCT_BUILD_STAGE
+  const previousVersion = process.env.OPENCODE_VERSION
   const brand = {
     ...Brand,
     name: "FKGCODE",
@@ -72,15 +73,19 @@ test("uses the injected product brand and isolated output paths", async () => {
   process.env.PRODUCT_BRAND_JSON = JSON.stringify(brand)
   process.env.PRODUCT_BUILD_STAGE = "D:/product-build/fkgcode/prod"
   process.env.OPENCODE_CHANNEL = "prod"
+  process.env.OPENCODE_VERSION = "1.17.9-260814-01"
   const module = await import(`./electron-builder.config.ts?brand=${Date.now()}`)
   if (previousBrand === undefined) delete process.env.PRODUCT_BRAND_JSON
   else process.env.PRODUCT_BRAND_JSON = previousBrand
   if (previousStage === undefined) delete process.env.PRODUCT_BUILD_STAGE
   else process.env.PRODUCT_BUILD_STAGE = previousStage
+  if (previousVersion === undefined) delete process.env.OPENCODE_VERSION
+  else process.env.OPENCODE_VERSION = previousVersion
   const config = module.default as Configuration
 
   expect(config.productName).toBe("FKGCODE")
   expect(config.extraMetadata?.author).toEqual({ name: "FKGCODE" })
+  expect(config.extraMetadata?.version).toBe("1.17.9-260814-01")
   expect(config.appId).toBe("ai.fkgcode.desktop")
   expect(config.artifactName).toBe("fkgcode-desktop-${os}-${arch}.${ext}")
   expect(config.directories?.output).toBe("D:/product-build/fkgcode/prod/artifacts")
@@ -88,4 +93,22 @@ test("uses the injected product brand and isolated output paths", async () => {
   expect(config.win?.icon).toBe("D:/product-build/fkgcode/prod/resources/icons/app-icon.svg")
   expect(config.mac?.icon).toBe("D:/product-build/fkgcode/prod/resources/icons/app-icon.svg")
   expect(config.linux?.icon).toBe("D:/product-build/fkgcode/prod/resources/icons/app-icon.svg")
+})
+
+test("rejects a staged product build without an explicit combined version", async () => {
+  const previousBrand = process.env.PRODUCT_BRAND_JSON
+  const previousStage = process.env.PRODUCT_BUILD_STAGE
+  const previousVersion = process.env.OPENCODE_VERSION
+  process.env.PRODUCT_BRAND_JSON = JSON.stringify(Brand)
+  process.env.PRODUCT_BUILD_STAGE = "D:/product-build/strict-version/prod"
+  delete process.env.OPENCODE_VERSION
+
+  await expect(import(`./electron-builder.config.ts?missing-version=${Date.now()}`)).rejects.toThrow("OPENCODE_VERSION")
+
+  if (previousBrand === undefined) delete process.env.PRODUCT_BRAND_JSON
+  else process.env.PRODUCT_BRAND_JSON = previousBrand
+  if (previousStage === undefined) delete process.env.PRODUCT_BUILD_STAGE
+  else process.env.PRODUCT_BUILD_STAGE = previousStage
+  if (previousVersion === undefined) delete process.env.OPENCODE_VERSION
+  else process.env.OPENCODE_VERSION = previousVersion
 })

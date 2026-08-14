@@ -31,7 +31,7 @@ describe("desktop metainfo", () => {
     roots.push(directory)
     await mkdir(directory, { recursive: true })
     const brand = resolveBrand({
-      cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", disableProviderConnections: true },
+      cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", enterprise: true },
     })
 
     const target = await generateMetainfo("prod", directory, brand)
@@ -49,7 +49,7 @@ test("generates valid XML for a readable product identity", async () => {
   roots.push(root)
   await mkdir(root, { recursive: true })
   const brand = resolveBrand({
-    cli: { name: "企业代码", slug: "enterprise-code", channel: "prod", disableProviderConnections: true },
+    cli: { name: "企业代码", slug: "enterprise-code", channel: "prod", enterprise: true },
   })
   const target = await generateMetainfo("prod", root, brand)
   expect(await Bun.file(target).text()).toContain("<name>企业代码</name>")

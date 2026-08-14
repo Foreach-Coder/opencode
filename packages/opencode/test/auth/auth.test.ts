@@ -77,7 +77,7 @@ describe("Auth", () => {
   )
 })
 
-describe.skipIf(!Brand.disableProviderConnections)("config-only provider policy", () => {
+describe.skipIf(!Brand.enterprise)("enterprise provider policy", () => {
   it.instance("rejects provider credential writes", () =>
     Effect.gen(function* () {
       const auth = yield* Auth.Service

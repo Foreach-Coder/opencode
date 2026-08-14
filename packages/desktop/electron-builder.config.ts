@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process"
+import { access } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 
 import type { Configuration } from "electron-builder"
 import { resolveBrandDefinition } from "@opencode-ai/brand/config"
+import { requireProductVersion } from "./product-version"
+import { setWindowsProductVersion } from "./scripts/windows-product-version"
 
 const execFileAsync = promisify(execFile)
 const packageDir = path.dirname(fileURLToPath(import.meta.url))
@@ -13,6 +16,15 @@ const signScript = path.join(rootDir, "script", "sign-windows.ps1")
 
 async function signWindows(configuration: { path: string }) {
   if (process.platform !== "win32") return
+  if (
+    productVersion &&
+    (await access(path.join(path.dirname(configuration.path), "resources", "app.asar")).then(
+      () => true,
+      () => false,
+    ))
+  ) {
+    await setWindowsProductVersion(configuration.path, productVersion)
+  }
   if (process.env.GITHUB_ACTIONS !== "true") return
 
   await execFileAsync(
@@ -36,6 +48,7 @@ const APP_IDS = {
 } as const
 const buildResources = process.env.PRODUCT_BUILD_STAGE ? `${process.env.PRODUCT_BUILD_STAGE}/resources` : "resources"
 const productIcon = process.env.PRODUCT_BUILD_STAGE ? `${buildResources}/icons/app-icon.svg` : undefined
+const productVersion = process.env.PRODUCT_BUILD_STAGE ? requireProductVersion(process.env.OPENCODE_VERSION) : undefined
 
 const getBase = (appId: string): Configuration => ({
   artifactName: `${productBrand.slug}-desktop-\${os}-\${arch}.\${ext}`,
@@ -50,6 +63,7 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     author: { name: productBrand.name },
     desktopName: `${appId}.desktop`,
+    ...(productVersion ? { version: productVersion } : {}),
   },
   files: process.env.PRODUCT_BUILD_STAGE
     ? [

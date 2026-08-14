@@ -27,7 +27,7 @@ export const ModelsCommand = effectCmd({
   handler: Effect.fn("Cli.models")(function* (args) {
     const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
     if (args.refresh) {
-      if (Brand.disableProviderConnections) {
+      if (Brand.enterprise) {
         return yield* fail("Model catalog refresh is disabled by this product build")
       }
       yield* ModelsDev.Service.use((s) => s.refresh(true))

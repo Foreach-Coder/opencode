@@ -8,10 +8,12 @@ import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { useLanguage } from "@/context/language"
 import { DialogCustomProvider } from "./dialog-custom-provider"
+import { Brand } from "@opencode-ai/brand"
 
 const CUSTOM_ID = "_custom"
 
 export const DialogSelectProvider: Component = () => {
+  if (Brand.enterprise) return null
   const dialog = useDialog()
   const providers = useProviders()
   const language = useLanguage()

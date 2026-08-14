@@ -243,7 +243,7 @@ export const ProvidersCommand = cmd({
   describe: "manage AI providers and credentials",
   builder: (yargs) => {
     const commands = yargs.command(ProvidersListCommand)
-    return (Brand.disableProviderConnections ? commands : commands.command(ProvidersLoginCommand))
+    return (Brand.enterprise ? commands : commands.command(ProvidersLoginCommand))
       .command(ProvidersLogoutCommand)
       .demandCommand()
   },
@@ -275,7 +275,7 @@ export const ProvidersListCommand = effectCmd({
 
     yield* Prompt.outro(`${results.length} credentials`)
 
-    if (Brand.disableProviderConnections) return
+    if (Brand.enterprise) return
 
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
@@ -325,7 +325,7 @@ export const ProvidersLoginCommand = effectCmd({
         type: "string",
       }),
   handler: Effect.fn("Cli.providers.login")(function* (args) {
-    if (Brand.disableProviderConnections) {
+    if (Brand.enterprise) {
       return yield* fail(
         "Provider connections are disabled by this product build; configure providers in opencode.json",
       )

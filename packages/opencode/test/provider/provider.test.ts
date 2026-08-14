@@ -115,7 +115,7 @@ it.instance("provider loaded from env variable", () =>
   }),
 )
 
-describe.skipIf(!Brand.disableProviderConnections)("config-only provider policy", () => {
+describe.skipIf(!Brand.enterprise)("enterprise provider policy", () => {
   it.instance("ignores environment and stored credentials", () =>
     Effect.gen(function* () {
       yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
@@ -1153,8 +1153,7 @@ it.instance(
   Effect.gen(function* () {
     const providers = yield* list
     expect(providers[ProviderV2.ID.make("nvidia")].options.headers).toEqual({
-      "HTTP-Referer": "https://opencode.ai/",
-      "X-Title": "opencode",
+      "X-Title": Brand.name,
       "X-BILLING-INVOKE-ORIGIN": "OpenCode",
     })
   }),
@@ -1166,8 +1165,7 @@ it.instance(
   Effect.gen(function* () {
     const providers = yield* list
     expect(providers[ProviderV2.ID.make("nvidia")].options.headers).toEqual({
-      "HTTP-Referer": "https://opencode.ai/",
-      "X-Title": "opencode",
+      "X-Title": Brand.name,
       "X-BILLING-INVOKE-ORIGIN": "OpenCode",
     })
   }),

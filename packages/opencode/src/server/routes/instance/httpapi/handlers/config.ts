@@ -19,7 +19,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
 
     const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
       if (
-        Brand.disableProviderConnections &&
+        Brand.enterprise &&
         (ctx.payload.provider !== undefined ||
           ctx.payload.enabled_providers !== undefined ||
           ctx.payload.disabled_providers !== undefined)

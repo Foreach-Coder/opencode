@@ -20,7 +20,6 @@ import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
-import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { initializationData, initializationReady } from "./initialization"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
@@ -41,7 +40,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
-    release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${pkg.version}`,
+    release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${import.meta.env.VITE_PRODUCT_VERSION}`,
     initialScope: {
       tags: {
         platform: "desktop",
@@ -138,7 +137,7 @@ const createPlatform = (): Platform => {
   return {
     platform: "desktop",
     os,
-    version: pkg.version,
+    version: import.meta.env.VITE_PRODUCT_VERSION,
 
     async openDirectoryPickerDialog(opts) {
       return window.api.openDirectoryPicker({

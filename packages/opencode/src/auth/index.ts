@@ -72,7 +72,7 @@ export const layer = Layer.effect(
     })
 
     const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
-      if (Brand.disableProviderConnections) {
+      if (Brand.enterprise) {
         return yield* new AuthError({
           message: "Provider credential storage is disabled; configure providers in opencode.json",
         })

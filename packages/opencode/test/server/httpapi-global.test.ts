@@ -44,7 +44,7 @@ const apiLayer = HttpRouter.serve(
 const it = testEffect(apiLayer)
 
 describe("global HttpApi", () => {
-  describe.skipIf(!Brand.disableProviderConnections)("disabled provider connections", () => {
+  describe.skipIf(!Brand.enterprise)("enterprise provider policy", () => {
     it.live("rejects provider updates", () =>
       Effect.gen(function* () {
         const response = yield* HttpClientRequest.patch(GlobalPaths.config).pipe(

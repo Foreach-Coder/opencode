@@ -1309,11 +1309,10 @@ export const layer = Layer.effect(
           [providerID: string]: CustomDiscoverModels
         } = {}
         const dep = {
-          auth: (id: string) =>
-            Brand.disableProviderConnections ? Effect.succeed(undefined) : auth.get(id).pipe(Effect.orDie),
+          auth: (id: string) => (Brand.enterprise ? Effect.succeed(undefined) : auth.get(id).pipe(Effect.orDie)),
           config: () => config.get(),
-          env: () => (Brand.disableProviderConnections ? Effect.succeed({}) : env.all()),
-          get: (key: string) => (Brand.disableProviderConnections ? Effect.succeed(undefined) : env.get(key)),
+          env: () => (Brand.enterprise ? Effect.succeed({}) : env.all()),
+          get: (key: string) => (Brand.enterprise ? Effect.succeed(undefined) : env.get(key)),
         }
 
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
@@ -1339,7 +1338,7 @@ export const layer = Layer.effect(
         const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
 
         function isProviderAllowed(providerID: ProviderV2.ID): boolean {
-          if (Brand.disableProviderConnections && !configured.has(providerID)) return false
+          if (Brand.enterprise && !configured.has(providerID)) return false
           if (enabled && !enabled.has(providerID)) return false
           if (disabled.has(providerID)) return false
           return true
@@ -1351,14 +1350,12 @@ export const layer = Layer.effect(
           if (!p || !models) continue
 
           const providerID = ProviderV2.ID.make(p.id)
-          if (Brand.disableProviderConnections && !configured.has(providerID)) continue
+          if (Brand.enterprise && !configured.has(providerID)) continue
           if (disabled.has(providerID)) continue
 
           const provider = database[providerID]
           if (!provider) continue
-          const pluginAuth = Brand.disableProviderConnections
-            ? undefined
-            : yield* auth.get(providerID).pipe(Effect.orDie)
+          const pluginAuth = Brand.enterprise ? undefined : yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
             const next = await models(toPublicInfo(provider), { auth: pluginAuth })
@@ -1470,7 +1467,7 @@ export const layer = Layer.effect(
         }
 
         // load env
-        if (!Brand.disableProviderConnections) {
+        if (!Brand.enterprise) {
           const envs = yield* env.all()
           for (const [id, provider] of Object.entries(database)) {
             const providerID = ProviderV2.ID.make(id)
@@ -1485,7 +1482,7 @@ export const layer = Layer.effect(
         }
 
         // load apikeys
-        if (!Brand.disableProviderConnections) {
+        if (!Brand.enterprise) {
           const auths = yield* auth.all().pipe(Effect.orDie)
           for (const [id, provider] of Object.entries(auths)) {
             const providerID = ProviderV2.ID.make(id)
@@ -1501,7 +1498,7 @@ export const layer = Layer.effect(
 
         // plugin auth loader - database now has entries for config providers
         for (const plugin of plugins) {
-          if (Brand.disableProviderConnections) continue
+          if (Brand.enterprise) continue
           if (!plugin.auth) continue
           const providerID = ProviderV2.ID.make(plugin.auth.provider)
           if (disabled.has(providerID)) continue
@@ -1523,7 +1520,7 @@ export const layer = Layer.effect(
 
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderV2.ID.make(id)
-          if (Brand.disableProviderConnections && !configured.has(providerID)) continue
+          if (Brand.enterprise && !configured.has(providerID)) continue
           if (disabled.has(providerID)) continue
           const data = database[providerID]
           if (!data) {

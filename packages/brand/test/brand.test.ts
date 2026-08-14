@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
-import { resolveBrand } from "../src/config"
+import { parseBrandDefinition, resolveBrand } from "../src/config"
 
 describe("resolveBrand", () => {
   test("rejects a missing explicit brand", () => {
@@ -8,15 +8,13 @@ describe("resolveBrand", () => {
   })
 
   test("derives a machine identity for an ASCII alphanumeric name", () => {
-    expect(
-      resolveBrand({ cli: { name: "ACMECODE", channel: "prod", disableProviderConnections: true } }),
-    ).toMatchObject({
+    expect(resolveBrand({ cli: { name: "ACMECODE", channel: "prod", enterprise: true } })).toMatchObject({
       name: "ACMECODE",
       slug: "acmecode",
       cli: "acmecode",
       desktopAppId: "ai.acmecode.desktop",
       channel: "prod",
-      disableProviderConnections: true,
+      enterprise: true,
     })
   })
 
@@ -28,19 +26,17 @@ describe("resolveBrand", () => {
           slug: "command",
           channel: "prod",
           desktopAppId: "com.example.command",
-          disableProviderConnections: false,
+          enterprise: false,
         },
       }),
     ).toMatchObject({ name: "Command", slug: "command", desktopAppId: "com.example.command", channel: "prod" })
   })
 
   test("requires an explicit slug when the selected name cannot be losslessly derived", () => {
-    expect(() =>
-      resolveBrand({ cli: { name: "企业代码", channel: "dev", disableProviderConnections: false } }),
-    ).toThrow("slug")
+    expect(() => resolveBrand({ cli: { name: "企业代码", channel: "dev", enterprise: false } })).toThrow("slug")
     expect(
       resolveBrand({
-        cli: { name: "企业代码", slug: "enterprise-code", channel: "dev", disableProviderConnections: true },
+        cli: { name: "企业代码", slug: "enterprise-code", channel: "dev", enterprise: true },
       }),
     ).toMatchObject({
       name: "企业代码",
@@ -50,16 +46,16 @@ describe("resolveBrand", () => {
 
   test("rejects markup delimiters in the product name", () => {
     for (const name of ["A<B", "A&B", 'A"B', "A'B", "A\\B"]) {
-      expect(() =>
-        resolveBrand({ cli: { name, slug: "safe-name", channel: "dev", disableProviderConnections: false } }),
-      ).toThrow("markup delimiters")
+      expect(() => resolveBrand({ cli: { name, slug: "safe-name", channel: "dev", enterprise: false } })).toThrow(
+        "markup delimiters",
+      )
     }
   })
 
   test("rejects invalid slug, desktop app ID, and channel before deriving consumers", () => {
-    expect(() =>
-      resolveBrand({ cli: { name: "Acme", slug: "Not_Valid", channel: "dev", disableProviderConnections: false } }),
-    ).toThrow("slug")
+    expect(() => resolveBrand({ cli: { name: "Acme", slug: "Not_Valid", channel: "dev", enterprise: false } })).toThrow(
+      "slug",
+    )
     expect(() =>
       resolveBrand({
         cli: {
@@ -67,13 +63,13 @@ describe("resolveBrand", () => {
           slug: "acme",
           desktopAppId: "not-an-app-id",
           channel: "dev",
-          disableProviderConnections: false,
+          enterprise: false,
         },
       }),
     ).toThrow("desktop app ID")
-    expect(() =>
-      resolveBrand({ cli: { name: "Acme", slug: "acme", channel: "nightly", disableProviderConnections: false } }),
-    ).toThrow("channel")
+    expect(() => resolveBrand({ cli: { name: "Acme", slug: "acme", channel: "nightly", enterprise: false } })).toThrow(
+      "channel",
+    )
   })
 
   test("derives every consumer and channel identity from one resolved machine identity", () => {
@@ -84,7 +80,7 @@ describe("resolveBrand", () => {
           slug: "acme-code",
           desktopAppId: "com.acme.code",
           channel: "dev",
-          disableProviderConnections: false,
+          enterprise: false,
         },
       }),
     ).toMatchObject({
@@ -103,7 +99,7 @@ describe("resolveBrand", () => {
   })
 
   test("deep-freezes the resolved identity", () => {
-    const brand = resolveBrand({ cli: { name: "ACMECODE", channel: "dev", disableProviderConnections: false } })
+    const brand = resolveBrand({ cli: { name: "ACMECODE", channel: "dev", enterprise: false } })
 
     expect(Object.isFrozen(brand)).toBe(true)
     expect(Object.isFrozen(brand.desktop)).toBe(true)
@@ -118,7 +114,7 @@ describe("resolveBrand", () => {
       target: "browser",
       define: {
         PRODUCT_BRAND_JSON: JSON.stringify(
-          JSON.stringify(resolveBrand({ cli: { name: "ACMECODE", channel: "dev", disableProviderConnections: true } })),
+          JSON.stringify(resolveBrand({ cli: { name: "ACMECODE", channel: "dev", enterprise: true } })),
         ),
       },
     })
@@ -131,9 +127,19 @@ describe("resolveBrand", () => {
     expect(output).not.toContain("Bun.env")
   })
 
-  test("requires an explicit provider connection policy", () => {
-    expect(() => resolveBrand({ cli: { name: "ACMECODE", channel: "prod" } as never })).toThrow(
-      "disableProviderConnections",
-    )
+  test("requires an explicit enterprise policy", () => {
+    expect(() => resolveBrand({ cli: { name: "ACMECODE", channel: "prod" } as never })).toThrow("enterprise")
+  })
+
+  test("rejects the removed provider-specific policy field", () => {
+    expect(() =>
+      parseBrandDefinition(
+        JSON.stringify({
+          name: "ACMECODE",
+          channel: "prod",
+          disableProviderConnections: true,
+        }),
+      ),
+    ).toThrow("enterprise")
   })
 })

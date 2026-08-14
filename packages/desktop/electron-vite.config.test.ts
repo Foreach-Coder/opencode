@@ -25,12 +25,35 @@ test("uses one build channel for the Electron main and renderer processes", () =
   )
 })
 
+test("uses the injected product version for the renderer platform", async () => {
+  const source = await Bun.file(new URL("./src/renderer/index.tsx", import.meta.url)).text()
+  expect(source).toContain("version: import.meta.env.VITE_PRODUCT_VERSION")
+  expect(source).not.toContain("version: pkg.version")
+})
+
+test("keeps the combined version in product dev without a staging directory", async () => {
+  const previousStage = process.env.PRODUCT_BUILD_STAGE
+  const previousVersion = process.env.OPENCODE_VERSION
+  delete process.env.PRODUCT_BUILD_STAGE
+  process.env.OPENCODE_VERSION = "1.17.9-260814-a1b2c3d"
+  const injected = await import(`./electron.vite.config.ts?product-dev=${Date.now()}`)
+  if (previousStage === undefined) delete process.env.PRODUCT_BUILD_STAGE
+  else process.env.PRODUCT_BUILD_STAGE = previousStage
+  if (previousVersion === undefined) delete process.env.OPENCODE_VERSION
+  else process.env.OPENCODE_VERSION = previousVersion
+
+  expect(injected.default.renderer?.define?.["import.meta.env.VITE_PRODUCT_VERSION"]).toBe(
+    JSON.stringify("1.17.9-260814-a1b2c3d"),
+  )
+})
+
 test("injects one resolved brand into main, preload, and renderer bundles", async () => {
   const previous = process.env.PRODUCT_BRAND_JSON
   const previousVisual = process.env.PRODUCT_VISUAL_JSON
   const previousStage = process.env.PRODUCT_BUILD_STAGE
+  const previousVersion = process.env.OPENCODE_VERSION
   const brand = resolveBrand({
-    cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", disableProviderConnections: true },
+    cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", enterprise: true },
   })
   process.env.PRODUCT_BRAND_JSON = JSON.stringify(brand)
   const visual = JSON.stringify({
@@ -40,6 +63,7 @@ test("injects one resolved brand into main, preload, and renderer bundles", asyn
   })
   process.env.PRODUCT_VISUAL_JSON = visual
   process.env.PRODUCT_BUILD_STAGE = "D:/product-build/fkgcode/prod"
+  process.env.OPENCODE_VERSION = "1.17.9-260814-01"
   const injected = await import(`./electron.vite.config.ts?brand=${Date.now()}`)
   if (previous === undefined) delete process.env.PRODUCT_BRAND_JSON
   else process.env.PRODUCT_BRAND_JSON = previous
@@ -47,6 +71,8 @@ test("injects one resolved brand into main, preload, and renderer bundles", asyn
   else process.env.PRODUCT_VISUAL_JSON = previousVisual
   if (previousStage === undefined) delete process.env.PRODUCT_BUILD_STAGE
   else process.env.PRODUCT_BUILD_STAGE = previousStage
+  if (previousVersion === undefined) delete process.env.OPENCODE_VERSION
+  else process.env.OPENCODE_VERSION = previousVersion
 
   const expected = JSON.stringify(JSON.stringify(brand))
   const expectedVisual = JSON.stringify(visual)
@@ -56,6 +82,9 @@ test("injects one resolved brand into main, preload, and renderer bundles", asyn
   expect(injected.default.main?.define?.PRODUCT_VISUAL_JSON).toBe(expectedVisual)
   expect(injected.default.preload?.define?.PRODUCT_VISUAL_JSON).toBe(expectedVisual)
   expect(injected.default.renderer?.define?.PRODUCT_VISUAL_JSON).toBe(expectedVisual)
+  expect(injected.default.renderer?.define?.["import.meta.env.VITE_PRODUCT_VERSION"]).toBe(
+    JSON.stringify("1.17.9-260814-01"),
+  )
   expect(injected.default.main?.build?.outDir).toBe("D:/product-build/fkgcode/prod/out/main")
   expect(injected.default.preload?.build?.outDir).toBe("D:/product-build/fkgcode/prod/out/preload")
   expect(injected.default.renderer?.build?.outDir).toBe("D:/product-build/fkgcode/prod/out/renderer")

@@ -84,7 +84,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
 
     const configUpdate = Effect.fn("GlobalHttpApi.configUpdate")(function* (ctx) {
       if (
-        Brand.disableProviderConnections &&
+        Brand.enterprise &&
         (ctx.payload.provider !== undefined ||
           ctx.payload.enabled_providers !== undefined ||
           ctx.payload.disabled_providers !== undefined)

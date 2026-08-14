@@ -42,11 +42,13 @@ export async function resolveProductBuild(options: ProductBuildOptions = {}) {
   const brand = resolveBrand({ cli: manifest })
   if (!channels.includes(brand.channel)) throw new Error(`Invalid product channel: ${brand.channel}`)
   const directory = path.dirname(configPath)
+  const release = manifest.release ?? automaticRelease(root)
 
   return Object.freeze({
     brand,
     channel: brand.channel,
     configPath,
+    release,
     visuals: Object.freeze({
       wordmarkSvg: path.resolve(directory, manifest.wordmarkSvg),
       appIconSvg: path.resolve(directory, manifest.appIconSvg),
@@ -58,7 +60,7 @@ export async function resolveProductBuild(options: ProductBuildOptions = {}) {
 export async function prepareProductBuild(options: ProductBuildOptions = {}) {
   const root = path.resolve(options.root ?? path.resolve(import.meta.dir, ".."))
   const resolved = await resolveProductBuild(options)
-  const stage = path.join(root, "dist", "product-build", resolved.brand.slug, resolved.channel)
+  const stage = path.join(root, "dist", "product-build", resolved.brand.slug, resolved.channel, resolved.release)
   const buildRoot = path.join(root, "dist", "product-build")
   if (path.relative(buildRoot, stage).startsWith("..")) throw new Error(`Unsafe product build staging path: ${stage}`)
   const modelsSnapshot = path.resolve(
@@ -143,7 +145,16 @@ export async function prepareProductBuild(options: ProductBuildOptions = {}) {
       display: "standalone",
     }),
   )
-  await Bun.write(path.join(stage, "brand.json"), JSON.stringify({ brand: resolved.brand, visuals }, null, 2) + "\n")
+
+  const manifest = await Bun.file(path.join(root, "packages", "opencode", "package.json")).json()
+  if (typeof manifest.version !== "string" || !/^\d+\.\d+\.\d+$/.test(manifest.version)) {
+    throw new Error("packages/opencode/package.json must declare a stable semantic base version")
+  }
+  const version = `${manifest.version}-${resolved.release}`
+  await Bun.write(
+    path.join(stage, "brand.json"),
+    JSON.stringify({ release: resolved.release, version, brand: resolved.brand, visuals }, null, 2) + "\n",
+  )
 
   const html = await Bun.file(path.join(root, "packages", "desktop", "src", "renderer", "index.html")).text()
   await Bun.write(
@@ -151,13 +162,9 @@ export async function prepareProductBuild(options: ProductBuildOptions = {}) {
     html.replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(resolved.brand.name)}</title>`),
   )
 
-  const manifest = await Bun.file(path.join(root, "packages", "opencode", "package.json")).json()
-  if (typeof manifest.version !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(manifest.version)) {
-    throw new Error("packages/opencode/package.json must declare a valid product version")
-  }
   await Bun.write(
     path.join(stage, "package.json"),
-    JSON.stringify({ ...manifest, bin: { [resolved.brand.cli]: "./bin/opencode" } }, null, 2) + "\n",
+    JSON.stringify({ ...manifest, version, bin: { [resolved.brand.cli]: "./bin/opencode" } }, null, 2) + "\n",
   )
   await Promise.all(
     [
@@ -187,7 +194,7 @@ export async function prepareProductBuild(options: ProductBuildOptions = {}) {
     root,
     stage,
     modelsSnapshot,
-    version: manifest.version,
+    version,
   })
 }
 
@@ -287,7 +294,8 @@ function requireManifest(value: unknown) {
     "slug",
     "channel",
     "desktopAppId",
-    "disableProviderConnections",
+    "enterprise",
+    "release",
     "wordmarkSvg",
     "appIconSvg",
     "tuiWordmarkGrid",
@@ -305,16 +313,49 @@ function requireManifest(value: unknown) {
     if (typeof item === "boolean") return item
     throw new Error(`Product brand config field ${key} must be a boolean`)
   }
+  const releaseValue = Reflect.get(value, "release")
+  if (releaseValue !== undefined && typeof releaseValue !== "string") {
+    throw new Error("Product brand config field release must be a string")
+  }
+  const release = releaseValue ? requireRelease(releaseValue) : undefined
   return Object.freeze({
     name: string("name", true),
     slug: string("slug"),
     channel: string("channel", true),
     desktopAppId: string("desktopAppId"),
-    disableProviderConnections: boolean("disableProviderConnections"),
+    enterprise: boolean("enterprise"),
+    release,
     wordmarkSvg: string("wordmarkSvg", true)!,
     appIconSvg: string("appIconSvg", true)!,
     tuiWordmarkGrid: string("tuiWordmarkGrid", true)!,
-  }) satisfies BrandInput & { appIconSvg: string; wordmarkSvg: string; tuiWordmarkGrid: string }
+  }) satisfies BrandInput & { release?: string; appIconSvg: string; wordmarkSvg: string; tuiWordmarkGrid: string }
+}
+
+function requireRelease(value: string) {
+  const match = /^(\d{2})(\d{2})(\d{2})-((?:0[1-9]|[1-9]\d))$/.exec(value)
+  if (!match) throw new Error("Product brand config field release must use YYMMDD-NN with a sequence from 01 to 99")
+  const date = new Date(Date.UTC(2000 + Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+  if (
+    date.getUTCFullYear() !== 2000 + Number(match[1]) ||
+    date.getUTCMonth() !== Number(match[2]) - 1 ||
+    date.getUTCDate() !== Number(match[3])
+  ) {
+    throw new Error("Product brand config field release must start with a valid calendar date")
+  }
+  return value
+}
+
+function automaticRelease(root: string) {
+  const date = formatReleaseDate(new Date())
+  const commit = git(root, "rev-parse", "--short", "HEAD").trim().toLowerCase()
+  if (!/^[0-9a-f]{4,40}$/.test(commit)) throw new Error("Unable to resolve a short Git commit ID for product release")
+  return `${date}-${commit}`
+}
+
+export function formatReleaseDate(value: Pick<Date, "getFullYear" | "getMonth" | "getDate">) {
+  return [value.getFullYear() % 100, value.getMonth() + 1, value.getDate()]
+    .map((value) => value.toString().padStart(2, "0"))
+    .join("")
 }
 
 function git(root: string, ...args: string[]) {
@@ -352,7 +393,19 @@ async function run(command: ProductBuildCommand) {
 
 async function main() {
   const build = await executeProductBuild()
-  console.log(JSON.stringify({ brand: build.brand, channel: build.channel, stage: build.stage }, null, 2))
+  console.log(
+    JSON.stringify(
+      {
+        brand: build.brand,
+        channel: build.channel,
+        release: build.release,
+        version: build.version,
+        stage: build.stage,
+      },
+      null,
+      2,
+    ),
+  )
 }
 
 if (import.meta.main) await main()

@@ -4,7 +4,7 @@ import { resolveBrand } from "@opencode-ai/brand/config"
 import { createProductCompileDefinitions, resolveCliBuildConfig, resolveCliArtifact } from "../script/build-config"
 
 const brand = resolveBrand({
-  cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", disableProviderConnections: true },
+  cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", enterprise: true },
 })
 const visual = JSON.stringify({
   tuiWordmarkGrid: { width: 2, height: 1, cells: [[1, 0]] },

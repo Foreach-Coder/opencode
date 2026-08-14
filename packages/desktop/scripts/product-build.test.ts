@@ -6,6 +6,7 @@ import {
   captureSourceTree,
   createProductBuildCommands,
   executeProductBuild,
+  formatReleaseDate,
   prepareProductBuild,
   resolveProductBuild,
   verifySourceTreeUnchanged,
@@ -18,6 +19,16 @@ afterEach(async () => {
 })
 
 describe("product build input", () => {
+  test("formats automatic releases from the build machine's local calendar date", () => {
+    expect(
+      formatReleaseDate({
+        getFullYear: () => 2026,
+        getMonth: () => 7,
+        getDate: () => 14,
+      }),
+    ).toBe("260814")
+  })
+
   test("requires one explicit brand config and rejects legacy inline brand flags", async () => {
     await expect(resolveProductBuild({ args: [], env: {} })).rejects.toThrow("--brand-config")
     await expect(resolveProductBuild({ args: ["--name", "ACMECODE"], env: {} })).rejects.toThrow(
@@ -33,8 +44,59 @@ describe("product build input", () => {
     expect(result.brand.slug).toBe("acmecode")
     expect(result.channel).toBe("prod")
     expect(result.brand.channel).toBe("prod")
-    expect(result.brand.disableProviderConnections).toBe(true)
+    expect(result.brand.enterprise).toBe(true)
+    expect(result.release).toBe("260814-01")
     expect(result.visuals.appIconSvg).toBe(path.join(root, "fixtures", "app-icon.svg"))
+  })
+
+  test("generates a date-commit release when the release field is missing or empty", async () => {
+    const root = await repository()
+    const missing = path.join(root, "missing-release.json")
+    const manifest = {
+      name: "ACMECODE",
+      slug: "acmecode",
+      channel: "prod",
+      enterprise: true,
+      appIconSvg: path.join(root, "fixtures", "app-icon.svg"),
+      wordmarkSvg: path.join(root, "fixtures", "wordmark.svg"),
+      tuiWordmarkGrid: path.join(root, "fixtures", "tui.json"),
+    }
+    await Bun.write(missing, JSON.stringify(manifest))
+    const omitted = await resolveProductBuild({ root, args: ["--brand-config", missing], env: {} })
+    const empty = await resolveProductBuild({ root, args: await brandArgs(root, { release: "" }), env: {} })
+    const commit = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: root }).stdout.toString().trim()
+
+    expect(omitted.release).toMatch(/^\d{6}-[0-9a-f]+$/)
+    expect(omitted.release).toEndWith(`-${commit}`)
+    expect(empty.release).toBe(omitted.release)
+    const build = await prepareProductBuild({ root, args: ["--brand-config", missing], env: {} })
+    expect(build.version).toBe(`1.17.9-${omitted.release}`)
+    expect(build.stage).toEndWith(path.join("acmecode", "prod", omitted.release))
+    expect(createProductBuildCommands(build).every((command) => command.env.OPENCODE_VERSION === build.version)).toBe(
+      true,
+    )
+  })
+
+  test("validates an explicit date-sequence release number", async () => {
+    const root = await repository()
+    const invalid = path.join(root, "invalid-release.json")
+    const invalidDate = path.join(root, "invalid-release-date.json")
+    const manifest = {
+      name: "ACMECODE",
+      slug: "acmecode",
+      channel: "prod",
+      enterprise: true,
+      appIconSvg: path.join(root, "fixtures", "app-icon.svg"),
+      wordmarkSvg: path.join(root, "fixtures", "wordmark.svg"),
+      tuiWordmarkGrid: path.join(root, "fixtures", "tui.json"),
+    }
+    await Bun.write(invalid, JSON.stringify({ ...manifest, release: "20260814-1" }))
+    await Bun.write(invalidDate, JSON.stringify({ ...manifest, release: "261332-01" }))
+
+    await expect(resolveProductBuild({ root, args: ["--brand-config", invalid], env: {} })).rejects.toThrow("YYMMDD-NN")
+    await expect(resolveProductBuild({ root, args: ["--brand-config", invalidDate], env: {} })).rejects.toThrow(
+      "calendar date",
+    )
   })
 
   test("rejects an incomplete visual resource set instead of generating missing brand assets", async () => {
@@ -46,7 +108,8 @@ describe("product build input", () => {
         name: "ACMECODE",
         slug: "acmecode",
         channel: "prod",
-        disableProviderConnections: true,
+        enterprise: true,
+        release: "260814-01",
         appIconSvg: path.join(root, "fixtures", "app-icon.svg"),
       }),
     )
@@ -68,8 +131,10 @@ describe("product build staging", () => {
       env: {},
     })
 
-    expect(result.stage).toBe(path.join(root, "dist", "product-build", "acmecode", "prod"))
+    expect(result.stage).toBe(path.join(root, "dist", "product-build", "acmecode", "prod", "260814-01"))
     expect(await Bun.file(path.join(result.stage, "brand.json")).json()).toMatchObject({
+      release: "260814-01",
+      version: "1.17.9-260814-01",
       brand: result.brand,
       visuals: { profile: "manifest", sha256: result.visuals.sha256 },
     })
@@ -80,6 +145,7 @@ describe("product build staging", () => {
     expect(themePreload).toContain('var productSlug = "acmecode"')
     expect(themePreload).not.toContain('var productSlug = "foreachcode"')
     expect(await Bun.file(path.join(result.stage, "package.json")).json()).toMatchObject({
+      version: "1.17.9-260814-01",
       bin: { acmecode: "./bin/opencode" },
     })
     const launcher = await Bun.file(path.join(result.stage, "bin", "opencode")).text()
@@ -185,8 +251,8 @@ describe("product build orchestration", () => {
     expect(build.visualPayload.appIconSvg).toContain("<svg")
     expect(commands.every((command) => command.env.PRODUCT_BUILD_STAGE === build.stage)).toBe(true)
     expect(commands.every((command) => command.env.OPENCODE_CHANNEL === "prod")).toBe(true)
-    expect(build.version).toBe("1.17.9")
-    expect(commands.every((command) => command.env.OPENCODE_VERSION === "1.17.9")).toBe(true)
+    expect(build.version).toBe("1.17.9-260814-01")
+    expect(commands.every((command) => command.env.OPENCODE_VERSION === "1.17.9-260814-01")).toBe(true)
   })
 
   test("prepare-only creates staging without invoking the build runner", async () => {
@@ -202,9 +268,9 @@ describe("product build orchestration", () => {
     )
 
     expect(commands).toEqual([])
-    expect(await Bun.file(path.join(root, "dist", "product-build", "acmecode", "prod", "brand.json")).exists()).toBe(
-      true,
-    )
+    expect(
+      await Bun.file(path.join(root, "dist", "product-build", "acmecode", "prod", "260814-01", "brand.json")).exists(),
+    ).toBe(true)
   })
 
   test("passes explicit visual overrides to the staged visual manifest", async () => {
@@ -304,7 +370,8 @@ async function brandArgs(root: string, override: Record<string, string> = {}) {
       name: "ACMECODE",
       slug: "acmecode",
       channel: "prod",
-      disableProviderConnections: true,
+      enterprise: true,
+      release: "260814-01",
       appIconSvg: path.join(root, "fixtures", "app-icon.svg"),
       wordmarkSvg: path.join(root, "fixtures", "wordmark.svg"),
       tuiWordmarkGrid: path.join(root, "fixtures", "tui.json"),

@@ -5,7 +5,7 @@ const brand = process.env.PRODUCT_BRAND_JSON
       slug: "acme-test-code",
       channel: "dev",
       desktopAppId: "com.acme.test-code",
-      disableProviderConnections: false,
+      enterprise: false,
     }
 const wordmarkSvg =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 5"><path fill="currentColor" d="M0 0h20v5H0z"/></svg>'

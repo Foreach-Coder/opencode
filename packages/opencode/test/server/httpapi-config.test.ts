@@ -31,7 +31,7 @@ afterEach(async () => {
 })
 
 describe("config HttpApi", () => {
-  describe.skipIf(!Brand.disableProviderConnections)("disabled provider connections", () => {
+  describe.skipIf(!Brand.enterprise)("enterprise provider policy", () => {
     it.live(
       "allows selecting configured models",
       Effect.gen(function* () {

@@ -354,7 +354,7 @@ export const layer = Layer.effect(
         }
 
         for (const [key, value] of Object.entries(auth)) {
-          if (Brand.disableProviderConnections) continue
+          if (Brand.enterprise) continue
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
             authEnv[value.key] = value.token
@@ -479,7 +479,7 @@ export const layer = Layer.effect(
         const activeAccount = Option.getOrUndefined(
           yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
         )
-        if (!Brand.disableProviderConnections && activeAccount?.active_org_id) {
+        if (!Brand.enterprise && activeAccount?.active_org_id) {
           const accountID = activeAccount.id
           const orgID = activeAccount.active_org_id
           const url = activeAccount.url

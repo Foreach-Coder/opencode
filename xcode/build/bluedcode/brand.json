@@ -3,7 +3,7 @@
   "slug": "bluedcode",
   "channel": "prod",
   "desktopAppId": "ai.bluedcode.desktop",
-  "disableProviderConnections": true,
+  "enterprise": true,
   "appIconSvg": "app-icon.svg",
   "wordmarkSvg": "wordmark.svg",
   "tuiWordmarkGrid": "tui.json"
