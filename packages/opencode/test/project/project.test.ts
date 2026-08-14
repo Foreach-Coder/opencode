@@ -348,7 +348,7 @@ describe("Project.fromDirectory with worktrees", () => {
     }),
   )
 
-  it.live("separate clones of the same repo should share project ID", () =>
+  it.live("separate clones of the same repo should share project ID without becoming sandboxes", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped({ git: true })
@@ -363,9 +363,12 @@ describe("Project.fromDirectory with worktrees", () => {
       yield* Effect.promise(() => $`git clone ${bare} ${clone}`.quiet())
 
       const result = yield* project.fromDirectory(tmp)
+      yield* project.addSandbox(result.project.id, clone)
       const next = yield* project.fromDirectory(clone)
 
       expect(next.project.id).toBe(result.project.id)
+      expect(next.project.worktree).toBe(result.project.worktree)
+      expect(next.project.sandboxes).not.toContain(clone)
     }),
   )
 

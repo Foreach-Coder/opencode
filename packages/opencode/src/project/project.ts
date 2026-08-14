@@ -267,12 +267,12 @@ export const layer = Layer.effect(
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
-      if (
-        projectID !== ProjectV2.ID.global &&
-        data.directory !== result.worktree &&
-        !result.sandboxes.includes(data.directory)
-      )
-        result.sandboxes.push(data.directory)
+      if (projectID !== ProjectV2.ID.global && data.directory !== result.worktree) {
+        const directory = FSUtil.resolve(data.directory)
+        result.sandboxes = result.sandboxes.filter((sandbox) => FSUtil.resolve(sandbox) !== directory)
+        if (data.vcs?.type === "git" && !FSUtil.contains(data.directory, data.vcs.store))
+          result.sandboxes.push(data.directory)
+      }
       result.sandboxes = yield* Effect.forEach(
         result.sandboxes,
         (s) =>
