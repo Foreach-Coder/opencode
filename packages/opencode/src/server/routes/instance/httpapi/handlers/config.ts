@@ -5,6 +5,8 @@ import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { markInstanceForDisposal } from "../lifecycle"
+import { Brand } from "@opencode-ai/brand"
+import { HttpApiError } from "effect/unstable/httpapi"
 
 export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (handlers) =>
   Effect.gen(function* () {
@@ -16,6 +18,14 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
     })
 
     const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
+      if (
+        Brand.disableProviderConnections &&
+        (ctx.payload.provider !== undefined ||
+          ctx.payload.enabled_providers !== undefined ||
+          ctx.payload.disabled_providers !== undefined)
+      ) {
+        return yield* new HttpApiError.BadRequest({})
+      }
       yield* configSvc.update(ctx.payload)
       yield* markInstanceForDisposal(yield* InstanceState.context)
       return ctx.payload

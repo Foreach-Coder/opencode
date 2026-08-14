@@ -12,7 +12,9 @@ afterEach(async () => {
 
 test("injects the resolved brand into a real Enterprise bundle", async () => {
   const previousBrand = process.env.PRODUCT_BRAND_JSON
-  const brand = resolveBrand({ cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod" } })
+  const brand = resolveBrand({
+    cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", disableProviderConnections: true },
+  })
   process.env.PRODUCT_BRAND_JSON = JSON.stringify(brand)
   const config = (await import(`./vite.config.ts?brand=${Date.now()}`)).default as InlineConfig
   if (previousBrand === undefined) delete process.env.PRODUCT_BRAND_JSON

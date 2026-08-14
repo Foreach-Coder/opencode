@@ -33,6 +33,7 @@ describe("product build input", () => {
     expect(result.brand.slug).toBe("acmecode")
     expect(result.channel).toBe("prod")
     expect(result.brand.channel).toBe("prod")
+    expect(result.brand.disableProviderConnections).toBe(true)
     expect(result.visuals.appIconSvg).toBe(path.join(root, "fixtures", "app-icon.svg"))
   })
 
@@ -45,6 +46,7 @@ describe("product build input", () => {
         name: "ACMECODE",
         slug: "acmecode",
         channel: "prod",
+        disableProviderConnections: true,
         appIconSvg: path.join(root, "fixtures", "app-icon.svg"),
       }),
     )
@@ -302,6 +304,7 @@ async function brandArgs(root: string, override: Record<string, string> = {}) {
       name: "ACMECODE",
       slug: "acmecode",
       channel: "prod",
+      disableProviderConnections: true,
       appIconSvg: path.join(root, "fixtures", "app-icon.svg"),
       wordmarkSvg: path.join(root, "fixtures", "wordmark.svg"),
       tuiWordmarkGrid: path.join(root, "fixtures", "tui.json"),

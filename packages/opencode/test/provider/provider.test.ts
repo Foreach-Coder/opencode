@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
@@ -20,6 +20,7 @@ import { InstanceLayer } from "@/project/instance-layer"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Brand } from "@opencode-ai/brand"
 
 const originalEnv = new Map<string, string | undefined>()
 
@@ -113,6 +114,37 @@ it.instance("provider loaded from env variable", () =>
     expect(providers[ProviderV2.ID.anthropic].options.headers["anthropic-beta"]).toBeDefined()
   }),
 )
+
+describe.skipIf(!Brand.disableProviderConnections)("config-only provider policy", () => {
+  it.instance("ignores environment and stored credentials", () =>
+    Effect.gen(function* () {
+      yield* setProcessEnv("ANTHROPIC_API_KEY", "test-api-key")
+      yield* setProcessEnv(
+        "OPENCODE_AUTH_CONTENT",
+        JSON.stringify({
+          openai: { type: "api", key: "stored-key" },
+          "https://example.com": { type: "wellknown", key: "TOKEN", token: "stored-token" },
+        }),
+      )
+
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.anthropic]).toBeUndefined()
+      expect(providers[ProviderV2.ID.openai]).toBeUndefined()
+    }),
+  )
+
+  it.instance(
+    "loads only providers explicitly declared in configuration",
+    Effect.gen(function* () {
+      yield* setProcessEnv("ANTHROPIC_API_KEY", "ambient-key")
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.anthropic]).toBeDefined()
+      expect(providers[ProviderV2.ID.anthropic].source).toBe("config")
+      expect(providers[ProviderV2.ID.openai]).toBeUndefined()
+    }),
+    { config: { provider: { anthropic: { options: { apiKey: "configured-key" } } } } },
+  )
+})
 
 it.instance(
   "provider loaded from config with apiKey option",

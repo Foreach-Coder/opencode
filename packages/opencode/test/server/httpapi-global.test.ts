@@ -44,6 +44,24 @@ const apiLayer = HttpRouter.serve(
 const it = testEffect(apiLayer)
 
 describe("global HttpApi", () => {
+  describe.skipIf(!Brand.disableProviderConnections)("disabled provider connections", () => {
+    it.live("rejects provider updates", () =>
+      Effect.gen(function* () {
+        const response = yield* HttpClientRequest.patch(GlobalPaths.config).pipe(
+          HttpClientRequest.setBody(
+            HttpBody.text(
+              JSON.stringify({ provider: { anthropic: { options: { apiKey: "secret" } } } }),
+              "application/json",
+            ),
+          ),
+          HttpClient.execute,
+        )
+
+        expect(response.status).toBe(400)
+      }),
+    )
+  })
+
   it.live("rejects upgrades without calling an update backend", () =>
     Effect.gen(function* () {
       const response = yield* HttpClient.post(GlobalPaths.upgrade)

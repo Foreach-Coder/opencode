@@ -1,8 +1,9 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Exit, Layer } from "effect"
 import { Auth } from "../../src/auth"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
+import { Brand } from "@opencode-ai/brand"
 
 const node = CrossSpawnSpawner.defaultLayer
 
@@ -72,6 +73,18 @@ describe("Auth", () => {
       yield* auth.remove("anthropic")
       const after = yield* auth.all()
       expect(after["anthropic"]).toBeUndefined()
+    }),
+  )
+})
+
+describe.skipIf(!Brand.disableProviderConnections)("config-only provider policy", () => {
+  it.instance("rejects provider credential writes", () =>
+    Effect.gen(function* () {
+      const auth = yield* Auth.Service
+      const result = yield* auth.set("anthropic", { type: "api", key: "sk-test" }).pipe(Effect.exit)
+
+      expect(Exit.isFailure(result)).toBe(true)
+      expect((yield* auth.all()).anthropic).toBeUndefined()
     }),
   )
 })

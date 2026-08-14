@@ -7,6 +7,7 @@ import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { Plugin } from "../plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Array as Arr, Effect, Layer, Record, Result, Context, Schema } from "effect"
+import { Brand } from "@opencode-ai/brand"
 
 const When = Schema.Struct({
   key: Schema.String,
@@ -83,7 +84,18 @@ export class ValidationFailed extends Schema.TaggedErrorClass<ValidationFailed>(
   message: Schema.String,
 }) {}
 
-export type Error = Auth.AuthError | OauthMissing | OauthCodeMissing | OauthCallbackFailed | ValidationFailed
+export class ConnectionsDisabled extends Schema.TaggedErrorClass<ConnectionsDisabled>()(
+  "ProviderAuthConnectionsDisabled",
+  {},
+) {}
+
+export type Error =
+  | Auth.AuthError
+  | OauthMissing
+  | OauthCodeMissing
+  | OauthCallbackFailed
+  | ValidationFailed
+  | ConnectionsDisabled
 
 type Hook = NonNullable<Hooks["auth"]>
 
@@ -113,7 +125,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
     const plugin = yield* Plugin.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("ProviderAuth.state")(function* () {
-        const plugins = yield* plugin.list()
+        const plugins = Brand.disableProviderConnections ? [] : yield* plugin.list()
         return {
           hooks: Record.fromEntries(
             Arr.filterMap(plugins, (x) =>
@@ -129,6 +141,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
 
     const decode = Schema.decodeUnknownSync(Methods)
     const methods = Effect.fn("ProviderAuth.methods")(function* () {
+      if (Brand.disableProviderConnections) return decode({})
       const hooks = (yield* InstanceState.get(state)).hooks
       return decode(
         Record.map(hooks, (item) =>
@@ -163,6 +176,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
     const authorize = Effect.fn("ProviderAuth.authorize")(function* (
       input: { providerID: ProviderV2.ID } & AuthorizeInput,
     ) {
+      if (Brand.disableProviderConnections) return yield* new ConnectionsDisabled({})
       const { hooks, pending } = yield* InstanceState.get(state)
       const method = hooks[input.providerID].methods[input.method]
       if (method.type !== "oauth") return
@@ -188,6 +202,7 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
     const callback = Effect.fn("ProviderAuth.callback")(function* (
       input: { providerID: ProviderV2.ID } & CallbackInput,
     ) {
+      if (Brand.disableProviderConnections) return yield* new ConnectionsDisabled({})
       const pending = (yield* InstanceState.get(state)).pending
       const match = pending.get(input.providerID)
       if (!match) return yield* new OauthMissing({ providerID: input.providerID })

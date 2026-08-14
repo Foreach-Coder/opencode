@@ -241,8 +241,12 @@ export const ProvidersCommand = cmd({
   command: "providers",
   aliases: ["auth"],
   describe: "manage AI providers and credentials",
-  builder: (yargs) =>
-    yargs.command(ProvidersListCommand).command(ProvidersLoginCommand).command(ProvidersLogoutCommand).demandCommand(),
+  builder: (yargs) => {
+    const commands = yargs.command(ProvidersListCommand)
+    return (Brand.disableProviderConnections ? commands : commands.command(ProvidersLoginCommand))
+      .command(ProvidersLogoutCommand)
+      .demandCommand()
+  },
   async handler() {},
 })
 
@@ -270,6 +274,8 @@ export const ProvidersListCommand = effectCmd({
     }
 
     yield* Prompt.outro(`${results.length} credentials`)
+
+    if (Brand.disableProviderConnections) return
 
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
@@ -319,6 +325,11 @@ export const ProvidersLoginCommand = effectCmd({
         type: "string",
       }),
   handler: Effect.fn("Cli.providers.login")(function* (args) {
+    if (Brand.disableProviderConnections) {
+      return yield* fail(
+        "Provider connections are disabled by this product build; configure providers in opencode.json",
+      )
+    }
     const authSvc = yield* Auth.Service
 
     UI.empty()

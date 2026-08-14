@@ -282,7 +282,16 @@ function parseFlags(args: string[]) {
 function requireManifest(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Product brand config must be an object")
-  const allowed = new Set(["name", "slug", "channel", "desktopAppId", "wordmarkSvg", "appIconSvg", "tuiWordmarkGrid"])
+  const allowed = new Set([
+    "name",
+    "slug",
+    "channel",
+    "desktopAppId",
+    "disableProviderConnections",
+    "wordmarkSvg",
+    "appIconSvg",
+    "tuiWordmarkGrid",
+  ])
   const unknown = Object.keys(value).filter((key) => !allowed.has(key))
   if (unknown.length) throw new Error(`Unknown product brand config field: ${unknown.join(", ")}`)
   const string = (key: string, required = false) => {
@@ -291,11 +300,17 @@ function requireManifest(value: unknown) {
     if (typeof item === "string" && item.length > 0) return item
     throw new Error(`Product brand config field ${key} must be a non-empty string`)
   }
+  const boolean = (key: string) => {
+    const item = Reflect.get(value, key)
+    if (typeof item === "boolean") return item
+    throw new Error(`Product brand config field ${key} must be a boolean`)
+  }
   return Object.freeze({
     name: string("name", true),
     slug: string("slug"),
     channel: string("channel", true),
     desktopAppId: string("desktopAppId"),
+    disableProviderConnections: boolean("disableProviderConnections"),
     wordmarkSvg: string("wordmarkSvg", true)!,
     appIconSvg: string("appIconSvg", true)!,
     tuiWordmarkGrid: string("tuiWordmarkGrid", true)!,

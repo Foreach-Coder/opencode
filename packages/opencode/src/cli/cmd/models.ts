@@ -4,6 +4,7 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Brand } from "@opencode-ai/brand"
 
 export const ModelsCommand = effectCmd({
   command: "models [provider]",
@@ -26,6 +27,9 @@ export const ModelsCommand = effectCmd({
   handler: Effect.fn("Cli.models")(function* (args) {
     const { Provider } = yield* Effect.promise(() => import("@/provider/provider"))
     if (args.refresh) {
+      if (Brand.disableProviderConnections) {
+        return yield* fail("Model catalog refresh is disabled by this product build")
+      }
       yield* ModelsDev.Service.use((s) => s.refresh(true))
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }

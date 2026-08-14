@@ -13,7 +13,9 @@ afterEach(async () => {
 test("injects the resolved brand and visuals into a real standalone Web App bundle", async () => {
   const previousBrand = process.env.PRODUCT_BRAND_JSON
   const previousVisual = process.env.PRODUCT_VISUAL_JSON
-  const brand = resolveBrand({ cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod" } })
+  const brand = resolveBrand({
+    cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", disableProviderConnections: true },
+  })
   const visual = JSON.stringify({
     wordmarkSvg: '<svg viewBox="0 0 8 2"><title>FKG wordmark</title></svg>',
     appIconSvg: '<svg viewBox="0 0 2 2"><title>FKG icon</title></svg>',

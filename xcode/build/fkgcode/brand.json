@@ -3,6 +3,7 @@
   "slug": "fkgcode",
   "channel": "prod",
   "desktopAppId": "ai.fkgcode.desktop",
+  "disableProviderConnections": true,
   "appIconSvg": "app-icon.svg",
   "wordmarkSvg": "wordmark.svg",
   "tuiWordmarkGrid": "tui.json"

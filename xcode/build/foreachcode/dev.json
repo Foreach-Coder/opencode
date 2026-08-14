@@ -3,6 +3,7 @@
   "slug": "foreachcode",
   "channel": "dev",
   "desktopAppId": "ai.foreachcode.desktop",
+  "disableProviderConnections": true,
   "appIconSvg": "app-icon.svg",
   "wordmarkSvg": "wordmark.svg",
   "tuiWordmarkGrid": "tui.json"

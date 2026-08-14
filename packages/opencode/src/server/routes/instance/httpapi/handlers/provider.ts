@@ -10,6 +10,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProviderAuthApiError } from "../groups/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Brand } from "@opencode-ai/brand"
 
 function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R>) {
   return self.pipe(
@@ -26,6 +27,9 @@ function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R
       if (error instanceof ProviderAuth.ValidationFailed) {
         return new ProviderAuthApiError({ name: error._tag, data: { field: error.field, message: error.message } })
       }
+      if (error instanceof ProviderAuth.ConnectionsDisabled) {
+        return new ProviderAuthApiError({ name: error._tag, data: {} })
+      }
       return new ProviderAuthApiError({ name: "BadRequest", data: {} })
     }),
   )
@@ -38,6 +42,14 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
     const svc = yield* ProviderAuth.Service
 
     const list = Effect.fn("ProviderHttpApi.list")(function* () {
+      const connected = yield* provider.list()
+      if (Brand.disableProviderConnections) {
+        return {
+          all: Object.values(connected).map(Provider.toPublicInfo),
+          default: Provider.defaultModelIDs(connected),
+          connected: Object.keys(connected),
+        }
+      }
       const config = yield* cfg.get()
       const all = yield* ModelsDev.Service.use((s) => s.get())
       const disabled = new Set(config.disabled_providers ?? [])
@@ -46,7 +58,6 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       for (const [key, value] of Object.entries(all)) {
         if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) filtered[key] = value
       }
-      const connected = yield* provider.list()
       const providers = Object.assign(
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
         connected,

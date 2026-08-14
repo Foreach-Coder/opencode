@@ -6,6 +6,7 @@ import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { it } from "../lib/effect"
 import { waitGlobalBusEvent } from "./global-bus"
+import { Brand } from "@opencode-ai/brand"
 
 function app() {
   return Server.Default().app
@@ -30,6 +31,36 @@ afterEach(async () => {
 })
 
 describe("config HttpApi", () => {
+  describe.skipIf(!Brand.disableProviderConnections)("disabled provider connections", () => {
+    it.live(
+      "allows selecting configured models",
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirEffect({ config: { formatter: false, lsp: false } })
+        const disposed = yield* waitDisposed(tmp.path).pipe(Effect.forkScoped({ startImmediately: true }))
+
+        const response = yield* Effect.promise(() =>
+          Promise.resolve(
+            app().request("/config", {
+              method: "PATCH",
+              headers: {
+                "content-type": "application/json",
+                "x-opencode-directory": tmp.path,
+              },
+              body: JSON.stringify({ model: "internal/default", small_model: "internal/small" }),
+            }),
+          ),
+        )
+
+        expect(response.status).toBe(200)
+        yield* Fiber.join(disposed)
+        expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "config.json")).json())).toMatchObject({
+          model: "internal/default",
+          small_model: "internal/small",
+        })
+      }),
+    )
+  })
+
   it.live(
     "serves config update through the default server app",
     Effect.gen(function* () {

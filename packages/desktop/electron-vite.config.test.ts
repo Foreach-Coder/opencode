@@ -29,7 +29,9 @@ test("injects one resolved brand into main, preload, and renderer bundles", asyn
   const previous = process.env.PRODUCT_BRAND_JSON
   const previousVisual = process.env.PRODUCT_VISUAL_JSON
   const previousStage = process.env.PRODUCT_BUILD_STAGE
-  const brand = resolveBrand({ cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod" } })
+  const brand = resolveBrand({
+    cli: { name: "FKGCODE", slug: "fkgcode", channel: "prod", disableProviderConnections: true },
+  })
   process.env.PRODUCT_BRAND_JSON = JSON.stringify(brand)
   const visual = JSON.stringify({
     wordmarkSvg: '<svg viewBox="0 0 1 1"/>',

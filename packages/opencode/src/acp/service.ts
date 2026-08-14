@@ -126,7 +126,7 @@ export function make(input: {
           resume: {},
         },
       },
-      authMethods: [authMethod],
+      authMethods: Brand.disableProviderConnections ? [] : [authMethod],
       agentInfo: {
         name: Brand.name,
         version: InstallationVersion,

@@ -9,6 +9,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { it } from "./lib/effect"
 import { readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
+import { Brand } from "@opencode-ai/brand"
 
 // test/preload.ts pins OPENCODE_MODELS_PATH to a fixture so other tests can
 // resolve providers without network. These tests need to drive the on-disk
@@ -288,5 +289,33 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBeGreaterThanOrEqual(1)
     }),
+  )
+})
+
+describe.skipIf(!Brand.disableProviderConnections)("disabled provider connections", () => {
+  it.live("never fetches the model catalog", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        Flag.OPENCODE_DISABLE_MODELS_FETCH = false
+      }),
+      () =>
+        Effect.gen(function* () {
+          const state = yield* Ref.make(initialState)
+          yield* provided(
+            state,
+            Effect.gen(function* () {
+              const svc = yield* ModelsDev.Service
+              yield* svc.get()
+              yield* svc.refresh(true)
+            }),
+          )
+
+          expect((yield* Ref.get(state)).calls).toEqual([])
+        }),
+      () =>
+        Effect.sync(() => {
+          Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+        }),
+    ),
   )
 })

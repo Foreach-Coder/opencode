@@ -1309,10 +1309,11 @@ export const layer = Layer.effect(
           [providerID: string]: CustomDiscoverModels
         } = {}
         const dep = {
-          auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+          auth: (id: string) =>
+            Brand.disableProviderConnections ? Effect.succeed(undefined) : auth.get(id).pipe(Effect.orDie),
           config: () => config.get(),
-          env: () => env.all(),
-          get: (key: string) => env.get(key),
+          env: () => (Brand.disableProviderConnections ? Effect.succeed({}) : env.all()),
+          get: (key: string) => (Brand.disableProviderConnections ? Effect.succeed(undefined) : env.get(key)),
         }
 
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
@@ -1333,10 +1334,12 @@ export const layer = Layer.effect(
 
         // now read config providers - includes any modifications from plugin config() hook
         const configProviders = Object.entries(cfg.provider ?? {})
+        const configured = new Set(configProviders.map(([id]) => ProviderV2.ID.make(id)))
         const disabled = new Set(cfg.disabled_providers ?? [])
         const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
 
         function isProviderAllowed(providerID: ProviderV2.ID): boolean {
+          if (Brand.disableProviderConnections && !configured.has(providerID)) return false
           if (enabled && !enabled.has(providerID)) return false
           if (disabled.has(providerID)) return false
           return true
@@ -1348,11 +1351,14 @@ export const layer = Layer.effect(
           if (!p || !models) continue
 
           const providerID = ProviderV2.ID.make(p.id)
+          if (Brand.disableProviderConnections && !configured.has(providerID)) continue
           if (disabled.has(providerID)) continue
 
           const provider = database[providerID]
           if (!provider) continue
-          const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+          const pluginAuth = Brand.disableProviderConnections
+            ? undefined
+            : yield* auth.get(providerID).pipe(Effect.orDie)
 
           provider.models = yield* Effect.promise(async () => {
             const next = await models(toPublicInfo(provider), { auth: pluginAuth })
@@ -1464,33 +1470,38 @@ export const layer = Layer.effect(
         }
 
         // load env
-        const envs = yield* env.all()
-        for (const [id, provider] of Object.entries(database)) {
-          const providerID = ProviderV2.ID.make(id)
-          if (disabled.has(providerID)) continue
-          const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
-          if (!apiKey) continue
-          mergeProvider(providerID, {
-            source: "env",
-            key: provider.env.length === 1 ? apiKey : undefined,
-          })
+        if (!Brand.disableProviderConnections) {
+          const envs = yield* env.all()
+          for (const [id, provider] of Object.entries(database)) {
+            const providerID = ProviderV2.ID.make(id)
+            if (disabled.has(providerID)) continue
+            const apiKey = provider.env.map((item) => envs[item]).find(Boolean)
+            if (!apiKey) continue
+            mergeProvider(providerID, {
+              source: "env",
+              key: provider.env.length === 1 ? apiKey : undefined,
+            })
+          }
         }
 
         // load apikeys
-        const auths = yield* auth.all().pipe(Effect.orDie)
-        for (const [id, provider] of Object.entries(auths)) {
-          const providerID = ProviderV2.ID.make(id)
-          if (disabled.has(providerID)) continue
-          if (provider.type === "api") {
-            mergeProvider(providerID, {
-              source: "api",
-              key: provider.key,
-            })
+        if (!Brand.disableProviderConnections) {
+          const auths = yield* auth.all().pipe(Effect.orDie)
+          for (const [id, provider] of Object.entries(auths)) {
+            const providerID = ProviderV2.ID.make(id)
+            if (disabled.has(providerID)) continue
+            if (provider.type === "api") {
+              mergeProvider(providerID, {
+                source: "api",
+                key: provider.key,
+              })
+            }
           }
         }
 
         // plugin auth loader - database now has entries for config providers
         for (const plugin of plugins) {
+          if (Brand.disableProviderConnections) continue
           if (!plugin.auth) continue
           const providerID = ProviderV2.ID.make(plugin.auth.provider)
           if (disabled.has(providerID)) continue
@@ -1512,6 +1523,7 @@ export const layer = Layer.effect(
 
         for (const [id, fn] of Object.entries(custom(dep))) {
           const providerID = ProviderV2.ID.make(id)
+          if (Brand.disableProviderConnections && !configured.has(providerID)) continue
           if (disabled.has(providerID)) continue
           const data = database[providerID]
           if (!data) {
