@@ -238,12 +238,16 @@ const layer = Layer.effect(
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
-      if (
-        projectID !== ProjectV2.ID.global &&
-        data.directory !== result.worktree &&
-        !result.sandboxes.includes(data.directory)
+      const sandboxDirectory = linkedSandboxDirectory({
+        directory: data.directory,
+        projectID,
+        store: data.vcs?.store,
+        worktree: result.worktree,
+      })
+      result.sandboxes = result.sandboxes.filter(
+        (sandbox) => sandbox !== data.directory || sandboxDirectory !== undefined,
       )
-        result.sandboxes.push(data.directory)
+      if (sandboxDirectory && !result.sandboxes.includes(sandboxDirectory)) result.sandboxes.push(sandboxDirectory)
       result.sandboxes = yield* Effect.forEach(
         result.sandboxes,
         (s) =>
@@ -308,6 +312,19 @@ const layer = Layer.effect(
       }
       return { project: result, sandbox: data.vcs ? data.directory : worktree }
     })
+
+    function linkedSandboxDirectory(input: {
+      directory: string
+      projectID: ProjectV2.ID
+      store: string | undefined
+      worktree: string
+    }) {
+      if (input.projectID === ProjectV2.ID.global) return undefined
+      if (input.directory === input.worktree) return undefined
+      if (!input.store) return undefined
+      if (FSUtil.contains(input.directory, input.store)) return undefined
+      return input.directory
+    }
 
     const discover = Effect.fn("Project.discover")(function* (input: Info) {
       if (input.vcs !== "git") return

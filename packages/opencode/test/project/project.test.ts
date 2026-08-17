@@ -359,6 +359,34 @@ describe("Project.fromDirectory with worktrees", () => {
       const next = yield* project.fromDirectory(clone)
 
       expect(next.project.id).toBe(result.project.id)
+      expect(next.project.worktree).toBe(result.project.worktree)
+      expect(next.project.sandboxes).not.toContain(clone)
+    }),
+  )
+
+  it.live("removes an independent clone that was previously stored as a sandbox", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+
+      const bare = tmp + "-sandbox-cleanup-bare"
+      const clone = tmp + "-sandbox-cleanup-clone"
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => $`rm -rf ${bare} ${clone}`.quiet().nothrow()).pipe(Effect.ignore),
+      )
+      yield* Effect.promise(() => $`git clone --bare ${tmp} ${bare}`.quiet())
+      yield* Effect.promise(() => $`git clone ${bare} ${clone}`.quiet())
+
+      const result = yield* project.fromDirectory(tmp)
+      yield* project.addSandbox(result.project.id, clone)
+      expect(yield* project.sandboxes(result.project.id)).toContain(clone)
+
+      const next = yield* project.fromDirectory(clone)
+
+      expect(next.project.id).toBe(result.project.id)
+      expect(next.project.worktree).toBe(result.project.worktree)
+      expect(next.project.sandboxes).not.toContain(clone)
+      expect(yield* project.sandboxes(result.project.id)).not.toContain(clone)
     }),
   )
 
