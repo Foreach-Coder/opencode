@@ -39,6 +39,8 @@ import { MAX_STEPS_PROMPT } from "./max-steps"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
+import { LLMPerformance } from "./performance"
+import { randomUUID } from "node:crypto"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -179,6 +181,7 @@ const layer = Layer.effect(
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
+      const performanceStarted = Date.now()
       const agent = yield* agents.select(session.agent)
       const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
@@ -214,6 +217,23 @@ const layer = Layer.effect(
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(continueAfterCompaction(currentStep))
+      const performance = LLMPerformance.create(
+        {
+          requestID: randomUUID(),
+          providerID: model.provider,
+          modelID: model.id,
+          sessionID: session.id,
+          agent: agent.id,
+          mode: agent.info?.mode ?? "primary",
+          small: session.model?.variant === "small",
+          retries: 0,
+          system: request.system,
+          messages: request.messages,
+          tools: request.tools,
+        },
+        { started: performanceStarted },
+      )
+      const logPerformance = (entry: LLMPerformance.Entry) => Effect.logInfo(entry.message, entry.data)
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
@@ -229,7 +249,7 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = llm.stream(request).pipe(
+      const providerStream = LLMPerformance.monitor(llm.stream(request), performance, logPerformance).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
