@@ -70,6 +70,33 @@ const cfg = {
   },
 }
 
+const testModel = {
+  id: ref.modelID,
+  providerID: ref.providerID,
+  name: "Test Model",
+  api: {
+    id: "test-model",
+    url: "http://localhost:1/v1",
+    npm: "@ai-sdk/openai-compatible",
+  },
+  status: "active",
+  headers: {},
+  options: {},
+  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+  limit: { context: 100000, output: 10000 },
+  capabilities: {
+    temperature: false,
+    reasoning: false,
+    attachment: false,
+    toolcall: true,
+    input: { text: true, audio: false, image: false, video: false, pdf: false },
+    output: { text: true, audio: false, image: false, video: false, pdf: false },
+    interleaved: false,
+  },
+  release_date: "2025-01-01",
+  variants: {},
+} satisfies Provider.Model
+
 function providerCfg(url: string) {
   return {
     ...cfg,
@@ -225,6 +252,50 @@ const fragmentFailureLLM = Layer.succeed(
 )
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
+
+const fragmentedReasoningLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({ id: "reasoning-1" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-1", text: "我" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-1" }),
+        LLMEvent.reasoningStart({ id: "reasoning-2" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-2", text: "先" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-2" }),
+        LLMEvent.reasoningStart({ id: "reasoning-3" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-3", text: "分析" }),
+        LLMEvent.reasoningEnd({ id: "reasoning-3" }),
+        LLMEvent.textStart({ id: "text-1" }),
+        LLMEvent.textDelta({ id: "text-1", text: "完成" }),
+        LLMEvent.textEnd({ id: "text-1" }),
+        LLMEvent.reasoningStart({
+          id: "reasoning-4",
+          providerMetadata: { anthropic: { signature: "signature-1" } },
+        }),
+        LLMEvent.reasoningDelta({ id: "reasoning-4", text: "复查" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-4",
+          providerMetadata: { anthropic: { signature: "signature-1" } },
+        }),
+        LLMEvent.reasoningStart({
+          id: "reasoning-5",
+          providerMetadata: { anthropic: { signature: "signature-2" } },
+        }),
+        LLMEvent.reasoningDelta({ id: "reasoning-5", text: "确认" }),
+        LLMEvent.reasoningEnd({
+          id: "reasoning-5",
+          providerMetadata: { anthropic: { signature: "signature-2" } },
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const fragmentedReasoningEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentedReasoningLLM]])
+const itFragmentedReasoning = testEffect(fragmentedReasoningEnv)
 
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
@@ -464,6 +535,50 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         expect(text?.text).toBe("done")
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+itFragmentedReasoning.live("session.processor merges adjacent unsigned reasoning parts only", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "reason")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: testModel,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: testModel,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "reason" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+        const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
+
+        expect(value).toBe("continue")
+        expect(reasoning.map((part) => part.text)).toEqual(["我先分析", "复查", "确认"])
+        expect(reasoning.every((part) => part.time?.end)).toBe(true)
+        expect(text?.text).toBe("完成")
+      }),
+    { config: cfg },
   ),
 )
 

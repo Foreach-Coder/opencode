@@ -118,6 +118,77 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     return { start, append, end, flush }
   }
 
+  const reasoningFragments = () => {
+    type Fragment = {
+      readonly publishID: string
+      readonly chunks: string[]
+      providerMetadata?: ProviderMetadata
+    }
+    const chunks = new Map<string, Fragment>()
+    let pending: Fragment | undefined
+    const publishEnded = Effect.fnUntraced(function* (fragment: Fragment) {
+      yield* events.publish(SessionEvent.Reasoning.Ended, {
+        sessionID: input.sessionID,
+        assistantMessageID: yield* currentAssistantMessageID(),
+        timestamp: yield* timestamp,
+        reasoningID: fragment.publishID,
+        text: fragment.chunks.join(""),
+        providerMetadata: fragment.providerMetadata,
+      })
+    })
+    const finishPending = Effect.fnUntraced(function* () {
+      if (!pending) return
+      yield* publishEnded(pending)
+      pending = undefined
+    })
+    const start = Effect.fnUntraced(function* (id: string, providerMetadata?: ProviderMetadata) {
+      if (chunks.has(id)) return yield* Effect.die(`Duplicate reasoning start: ${id}`)
+      if (pending && !pending.providerMetadata && !providerMetadata) {
+        chunks.set(id, pending)
+        pending = undefined
+        return
+      }
+      yield* finishPending()
+      chunks.set(id, { publishID: id, chunks: [], providerMetadata })
+      yield* events.publish(SessionEvent.Reasoning.Started, {
+        sessionID: input.sessionID,
+        assistantMessageID: yield* startAssistant(),
+        timestamp: yield* timestamp,
+        reasoningID: id,
+        providerMetadata,
+      })
+    })
+    const append = Effect.fnUntraced(function* (id: string, value: string, providerMetadata?: ProviderMetadata) {
+      const current = chunks.get(id)
+      if (!current) return yield* Effect.die(`reasoning delta before start: ${id}`)
+      current.chunks.push(value)
+      if (providerMetadata) current.providerMetadata = providerMetadata
+      yield* events.publish(SessionEvent.Reasoning.Delta, {
+        sessionID: input.sessionID,
+        assistantMessageID: yield* currentAssistantMessageID(),
+        timestamp: yield* timestamp,
+        reasoningID: current.publishID,
+        delta: value,
+      })
+    })
+    const end = Effect.fnUntraced(function* (id: string, providerMetadata?: ProviderMetadata) {
+      const current = chunks.get(id)
+      if (!current) return yield* Effect.die(`reasoning end before start: ${id}`)
+      if (providerMetadata) current.providerMetadata = providerMetadata
+      chunks.delete(id)
+      yield* finishPending()
+      pending = current
+    })
+    const flush = Effect.fnUntraced(function* () {
+      for (const id of Array.from(chunks.keys())) {
+        yield* end(id)
+        yield* finishPending()
+      }
+      yield* finishPending()
+    })
+    return { start, append, end, flush }
+  }
+
   const text = fragments("text", (textID, value) =>
     Effect.gen(function* () {
       yield* events.publish(SessionEvent.Text.Ended, {
@@ -129,18 +200,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       })
     }),
   )
-  const reasoning = fragments("reasoning", (reasoningID, value, providerMetadata) =>
-    Effect.gen(function* () {
-      yield* events.publish(SessionEvent.Reasoning.Ended, {
-        sessionID: input.sessionID,
-        assistantMessageID: yield* currentAssistantMessageID(),
-        timestamp: yield* timestamp,
-        reasoningID,
-        text: value,
-        providerMetadata,
-      })
-    }),
-  )
+  const reasoning = reasoningFragments()
   const toolInput = fragments("tool input", (callID, value) =>
     Effect.gen(function* () {
       const tool = tools.get(callID)
@@ -164,6 +224,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
+    yield* reasoning.flush()
     const assistantMessageID = yield* startAssistant()
     tools.set(event.id, {
       assistantMessageID,
@@ -244,6 +305,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       case "step-start":
         return
       case "text-start":
+        yield* reasoning.flush()
         yield* text.start(event.id)
         yield* events.publish(SessionEvent.Text.Started, {
           sessionID: input.sessionID,
@@ -266,24 +328,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* text.end(event.id)
         return
       case "reasoning-start":
-        yield* reasoning.start(event.id)
-        yield* events.publish(SessionEvent.Reasoning.Started, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* startAssistant(),
-          timestamp: yield* timestamp,
-          reasoningID: event.id,
-          providerMetadata: event.providerMetadata,
-        })
+        yield* reasoning.start(event.id, event.providerMetadata)
         return
       case "reasoning-delta":
-        yield* reasoning.append(event.id, event.text)
-        yield* events.publish(SessionEvent.Reasoning.Delta, {
-          sessionID: input.sessionID,
-          assistantMessageID: yield* currentAssistantMessageID(),
-          timestamp: yield* timestamp,
-          reasoningID: event.id,
-          delta: event.text,
-        })
+        yield* reasoning.append(event.id, event.text, event.providerMetadata)
         return
       case "reasoning-end":
         yield* reasoning.end(event.id, event.providerMetadata)

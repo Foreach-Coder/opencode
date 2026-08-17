@@ -49,6 +49,20 @@ const capture = () => {
   }
 }
 
+const record = (value: unknown) =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value)) : {}
+
+const reasoningEvents = (events: ReadonlyArray<{ readonly type: string; readonly data: unknown }>) =>
+  events
+    .filter((event) => event.type.includes("reasoning"))
+    .map((event) => ({
+      type: event.type,
+      id: record(event.data).reasoningID,
+      text: record(event.data).text,
+      delta: record(event.data).delta,
+      metadata: record(event.data).providerMetadata,
+    }))
+
 const call = LLMEvent.toolCall({ id: "call-image", name: "read", input: { path: "pixel.png" } })
 const result = LLMEvent.toolResult({
   id: "call-image",
@@ -133,4 +147,101 @@ test("step finish records settlement without publishing step ended", async () =>
 
   expect(published.some((event) => event.type === "session.next.step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
+})
+
+test("merges adjacent unsigned reasoning lifecycles before publishing a boundary", async () => {
+  const { published, publisher } = capture()
+  for (const event of [
+    LLMEvent.reasoningStart({ id: "reasoning-1" }),
+    LLMEvent.reasoningDelta({ id: "reasoning-1", text: "我" }),
+    LLMEvent.reasoningEnd({ id: "reasoning-1" }),
+    LLMEvent.reasoningStart({ id: "reasoning-2" }),
+    LLMEvent.reasoningDelta({ id: "reasoning-2", text: "先" }),
+    LLMEvent.reasoningEnd({ id: "reasoning-2" }),
+    LLMEvent.reasoningStart({ id: "reasoning-3" }),
+    LLMEvent.reasoningDelta({ id: "reasoning-3", text: "分析" }),
+    LLMEvent.reasoningEnd({ id: "reasoning-3" }),
+    LLMEvent.textStart({ id: "text-1" }),
+  ]) {
+    await Effect.runPromise(publisher.publish(event))
+  }
+  await Effect.runPromise(publisher.flush())
+
+  expect(reasoningEvents(published)).toEqual([
+    {
+      type: "session.next.reasoning.started.1",
+      id: "reasoning-1",
+      text: undefined,
+      delta: undefined,
+      metadata: undefined,
+    },
+    { type: "session.next.reasoning.delta", id: "reasoning-1", text: undefined, delta: "我", metadata: undefined },
+    { type: "session.next.reasoning.delta", id: "reasoning-1", text: undefined, delta: "先", metadata: undefined },
+    { type: "session.next.reasoning.delta", id: "reasoning-1", text: undefined, delta: "分析", metadata: undefined },
+    {
+      type: "session.next.reasoning.ended.1",
+      id: "reasoning-1",
+      text: "我先分析",
+      delta: undefined,
+      metadata: undefined,
+    },
+  ])
+})
+
+test("keeps signed reasoning blocks independent while merging unsigned fragments", async () => {
+  const { published, publisher } = capture()
+  for (const event of [
+    LLMEvent.reasoningStart({ id: "reasoning-1" }),
+    LLMEvent.reasoningDelta({ id: "reasoning-1", text: "我" }),
+    LLMEvent.reasoningEnd({ id: "reasoning-1" }),
+    LLMEvent.reasoningStart({ id: "reasoning-2" }),
+    LLMEvent.reasoningDelta({ id: "reasoning-2", text: "先" }),
+    LLMEvent.reasoningEnd({ id: "reasoning-2" }),
+    LLMEvent.reasoningStart({
+      id: "reasoning-3",
+      providerMetadata: { anthropic: { signature: "signature-1" } },
+    }),
+    LLMEvent.reasoningDelta({ id: "reasoning-3", text: "复查" }),
+    LLMEvent.reasoningEnd({
+      id: "reasoning-3",
+      providerMetadata: { anthropic: { signature: "signature-1" } },
+    }),
+  ]) {
+    await Effect.runPromise(publisher.publish(event))
+  }
+  await Effect.runPromise(publisher.flush())
+
+  expect(reasoningEvents(published)).toEqual([
+    {
+      type: "session.next.reasoning.started.1",
+      id: "reasoning-1",
+      text: undefined,
+      delta: undefined,
+      metadata: undefined,
+    },
+    { type: "session.next.reasoning.delta", id: "reasoning-1", text: undefined, delta: "我", metadata: undefined },
+    { type: "session.next.reasoning.delta", id: "reasoning-1", text: undefined, delta: "先", metadata: undefined },
+    {
+      type: "session.next.reasoning.ended.1",
+      id: "reasoning-1",
+      text: "我先",
+      delta: undefined,
+      metadata: undefined,
+    },
+    {
+      type: "session.next.reasoning.started.1",
+      id: "reasoning-3",
+      text: undefined,
+      delta: undefined,
+      metadata: { anthropic: { signature: "signature-1" } },
+    },
+    { type: "session.next.reasoning.delta", id: "reasoning-3", text: undefined, delta: "复查", metadata: undefined },
+    {
+      type: "session.next.reasoning.ended.1",
+      id: "reasoning-3",
+      text: "复查",
+      delta: undefined,
+      metadata: { anthropic: { signature: "signature-1" } },
+    },
+  ])
 })

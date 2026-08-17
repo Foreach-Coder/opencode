@@ -72,6 +72,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  pendingReasoning: { id: string; part: SessionV1.ReasoningPart } | undefined
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +112,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        pendingReasoning: undefined,
       }
       let aborted = false
 
@@ -204,13 +206,17 @@ const layer = Layer.effect(
         return true
       })
 
-      const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* (reasoningID: string) {
-        if (!(reasoningID in ctx.reasoningMap)) return
+      const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* () {
+        const reasoning = ctx.pendingReasoning
+        if (!reasoning) return
         // oxlint-disable-next-line no-self-assign -- reactivity trigger
-        ctx.reasoningMap[reasoningID].text = ctx.reasoningMap[reasoningID].text
-        ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
-        yield* session.updatePart(ctx.reasoningMap[reasoningID])
-        delete ctx.reasoningMap[reasoningID]
+        reasoning.part.text = reasoning.part.text
+        reasoning.part.time = { ...reasoning.part.time, end: Date.now() }
+        yield* session.updatePart(reasoning.part)
+        Object.entries(ctx.reasoningMap)
+          .filter(([, part]) => part === reasoning.part)
+          .forEach(([id]) => delete ctx.reasoningMap[id])
+        ctx.pendingReasoning = undefined
       })
 
       const ensureToolCall = Effect.fn("SessionProcessor.ensureToolCall")(function* (input: {
@@ -279,6 +285,16 @@ const layer = Layer.effect(
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
+            if (
+              ctx.pendingReasoning &&
+              Object.keys(ctx.reasoningMap).length === 0 &&
+              !ctx.pendingReasoning.part.metadata &&
+              !value.providerMetadata
+            ) {
+              ctx.reasoningMap[value.id] = ctx.pendingReasoning.part
+              return
+            }
+            yield* finishReasoning()
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -288,6 +304,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            ctx.pendingReasoning = { id: value.id, part: ctx.reasoningMap[value.id] }
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
@@ -306,24 +323,26 @@ const layer = Layer.effect(
             return
 
           case "reasoning-end":
-            if (value.providerMetadata && value.id in ctx.reasoningMap) {
-              ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            }
-            yield* finishReasoning(value.id)
+            if (!(value.id in ctx.reasoningMap)) return
+            if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
+            delete ctx.reasoningMap[value.id]
             return
 
           case "tool-input-start":
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
+            yield* finishReasoning()
             yield* ensureToolCall(value)
             return
 
           case "tool-input-delta":
+            yield* finishReasoning()
             yield* ensureToolCall(value)
             return
 
           case "tool-input-end": {
+            yield* finishReasoning()
             yield* ensureToolCall(value)
             return
           }
@@ -332,6 +351,7 @@ const layer = Layer.effect(
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
+            yield* finishReasoning()
             yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
             yield* updateToolCall(value.id, (match) => ({
@@ -419,6 +439,7 @@ const layer = Layer.effect(
           }
 
           case "provider-error":
+            yield* finishReasoning()
             throw new Error(value.message)
 
           case "step-start":
@@ -434,7 +455,7 @@ const layer = Layer.effect(
 
           case "step-finish": {
             const completedSnapshot = yield* snapshot.track()
-            yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
+            yield* finishReasoning()
             const usage = Session.getUsage({
               model: ctx.model,
               usage: value.usage ?? new Usage({}),
@@ -484,6 +505,7 @@ const layer = Layer.effect(
           }
 
           case "text-start":
+            yield* finishReasoning()
             ctx.currentText = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -559,6 +581,7 @@ const layer = Layer.effect(
           ctx.currentText = undefined
         }
 
+        yield* finishReasoning()
         for (const part of Object.values(ctx.reasoningMap)) {
           const end = Date.now()
           yield* session.updatePart({
@@ -567,6 +590,7 @@ const layer = Layer.effect(
           })
         }
         ctx.reasoningMap = {}
+        ctx.pendingReasoning = undefined
 
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
@@ -636,6 +660,7 @@ const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            ctx.pendingReasoning = undefined
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
