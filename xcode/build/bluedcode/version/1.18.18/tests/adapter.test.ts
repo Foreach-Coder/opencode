@@ -14,13 +14,16 @@ const identity: BuildIdentity = {
   version: "1.18.18-260816-01-31406ccc51",
   commit,
   shortCommit: commit.slice(0, 10),
-  artifactName: "BluedCode-1.18.18-260816-01-31406ccc51-windows-x64-portable.exe",
+  artifactDirectoryName: "BluedCode-1.18.18-260816-01-31406ccc51",
+  artifactName: "BluedCode-1.18.18-260816-01-31406ccc51-windows-x64.zip",
   tag: "bluedcode-v1.18.18-260816-01",
 }
 
 test("adapter keeps only static locale and renderer resource contracts", () => {
   expect(adapter11818.rules.every((rule) => rule.file === "packages/desktop/src/renderer/index.html")).toBe(true)
-  expect(adapter11818.modules.find((module) => module.file === "packages/desktop/src/renderer/index.tsx")?.rules).toEqual([])
+  expect(
+    adapter11818.modules.find((module) => module.file === "packages/desktop/src/renderer/index.tsx")?.rules,
+  ).toEqual([])
   expect(adapter11818.rules.map((rule) => rule.id)).not.toEqual(
     expect.arrayContaining(["renderer-platform-identity", "renderer-window-title", "renderer-notification-icon"]),
   )
@@ -48,7 +51,10 @@ test("同一 locale AST 字符串中的多个产品关键词以一个语义块�
 })
 
 test("renderer identity is source-owned and never invokes an upstream service", async () => {
-  const source = await readFile(new URL("../../../../../../packages/desktop/src/renderer/index.tsx", import.meta.url), "utf8")
+  const source = await readFile(
+    new URL("../../../../../../packages/desktop/src/renderer/index.tsx", import.meta.url),
+    "utf8",
+  )
   expect(source).toContain("desktopVisibleVersion(windowState)")
   expect(source).toContain("getDesktopInitialization")
   expect(source).not.toContain("pkg.version")

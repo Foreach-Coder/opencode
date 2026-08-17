@@ -4,6 +4,7 @@ import path from "node:path"
 import { Product } from "../../../../packages/product/src"
 import type { AuditReport } from "./audit"
 import type { GitSourceState } from "./config"
+import type { DistributionZipAudit } from "./distribution-zip"
 import {
   assertConcreteDirectory,
   assertSafeDirectory,
@@ -14,7 +15,6 @@ import {
   verifyConcreteFile,
 } from "./isolation"
 import type { BuildPaths } from "./paths"
-import { nsisControlPayload, portableExtractorLock, type PortablePayloadAudit } from "./portable"
 import type { BuildIdentity } from "./types"
 import type { UnifiedLedger } from "./ledger"
 import type { RuntimeAcceptanceEvidence } from "./runtime-acceptance"
@@ -89,16 +89,15 @@ export type ReleaseManifest = {
       appBuilderLib: string
       electronVite: string
       resedit: string
-      sevenZip: string
     }
     source: { before: GitSourceState; after: GitSourceState }
     digests: { framework: string; adapter: string; assets: string }
-    cache: { server: boolean; electronVite: boolean; portable: false; portableExtractorTool: boolean }
+    cache: { server: boolean; electronVite: boolean; distributionZip: false }
   }
   release: { targetTag: string | null; annotatedTagCommand: string | null }
   artifact: {
     file: string
-    format: "portable"
+    format: "windows-zip"
     size: number
     sha256: string
     unsigned: true
@@ -110,7 +109,7 @@ export type ReleaseManifest = {
     output: AuditReport
     package: PackageAudit
     pe: PeAudit
-    portable: PortablePayloadAudit & {
+    distributionZip: DistributionZipAudit & {
       applicationPe: PeAudit
       nativeExecutableSignatures: Array<{ file: string; signatureStatus: string }>
       resourceEdit: ResourceEditAudit
@@ -165,7 +164,7 @@ export function createReleaseManifest(input: ReleaseManifestInput): ReleaseManif
     release: { ...input.release },
     artifact: {
       file: input.identity.artifactName,
-      format: "portable",
+      format: "windows-zip",
       size: input.artifact.size,
       sha256: input.artifact.sha256,
       unsigned: true,
@@ -213,21 +212,21 @@ export async function digestBuildInputs(paths: Pick<BuildPaths, "frameworkRoot" 
 
 export async function publishRelease(input: {
   artifactsRoot: string
-  executable: string
+  artifactFile: string
   manifest: ReleaseManifest
   outputRoot: string
   repositoryRoot: string
 }) {
   const manifestContent = serializeReleaseManifest(input.manifest)
-  const executableDigest = input.manifest.artifact.sha256
+  const artifactDigest = input.manifest.artifact.sha256
   const manifestDigest = sha256(manifestContent)
-  const directoryDigest = sha256(`${executableDigest}\0${manifestDigest}`)
+  const directoryDigest = sha256(`${artifactDigest}\0${manifestDigest}`)
   const isolation = await prepareIsolation({ repositoryRoot: input.repositoryRoot, outputRoot: input.outputRoot })
   await assertSafeDirectory(isolation, input.outputRoot)
   await assertConcreteDirectory(input.repositoryRoot, input.outputRoot)
-  await verifyConcreteFile(input.outputRoot, input.executable, executableDigest)
-  const executableStats = await lstat(input.executable)
-  if (executableStats.size !== input.manifest.artifact.size) throw new Error("Portable EXE 大小与 manifest 不匹配")
+  await verifyConcreteFile(input.outputRoot, input.artifactFile, artifactDigest)
+  const artifactStats = await lstat(input.artifactFile)
+  if (artifactStats.size !== input.manifest.artifact.size) throw new Error("zip 产物大小与 manifest 不匹配")
   requireArtifactName(input.manifest.artifact.file)
   requireStrictDescendant(input.outputRoot, input.artifactsRoot)
   await ensureSafeDirectory(isolation, input.artifactsRoot)
@@ -248,8 +247,8 @@ export async function publishRelease(input: {
         isolation,
         temporary,
         path.join(temporary, input.manifest.artifact.file),
-        await readFile(input.executable),
-        executableDigest,
+        await readFile(input.artifactFile),
+        artifactDigest,
       ),
       publishImmutableFile(
         isolation,
@@ -303,77 +302,61 @@ function validateManifestInput(input: ReleaseManifestInput) {
     !input.audit.output.passed ||
     !input.audit.package.passed ||
     !input.audit.pe.passed ||
-    !input.audit.portable.passed
+    !input.audit.distributionZip.passed
   ) {
     throw new Error("manifest 不得记录未通过的审计")
   }
-  if (input.audit.pe.signatureStatus !== "NotSigned") throw new Error("Portable EXE 必须 unsigned")
-  const portableCache: unknown = Reflect.get(input.cache, "portable")
+  if (input.audit.pe.signatureStatus !== "NotSigned") throw new Error("品牌应用 EXE 必须 unsigned")
+  const distributionZipCache: unknown = Reflect.get(input.cache, "distributionZip")
   if (
-    JSON.stringify(Object.keys(input.cache).sort()) !==
-      JSON.stringify(["electronVite", "portable", "portableExtractorTool", "server"]) ||
+    JSON.stringify(Object.keys(input.cache).sort()) !== JSON.stringify(["distributionZip", "electronVite", "server"]) ||
     typeof input.cache.server !== "boolean" ||
     typeof input.cache.electronVite !== "boolean" ||
-    typeof portableCache !== "boolean" ||
-    portableCache ||
-    typeof input.cache.portableExtractorTool !== "boolean" ||
-    input.cache.portableExtractorTool !== input.audit.portable.extractor.cacheHit
+    typeof distributionZipCache !== "boolean" ||
+    distributionZipCache
   ) {
-    throw new Error("manifest cache exact schema 或 Portable 缓存语义无效")
+    throw new Error("manifest cache exact schema 或 zip 目录包缓存语义无效")
   }
   if (
     input.tools.electronBuilder !== "26.15.2" ||
     input.tools.appBuilderLib !== "26.15.2" ||
     input.tools.resedit !== "1.7.2" ||
-    input.tools.sevenZip !== "26.02" ||
-    input.audit.portable.extractor.version !== input.tools.sevenZip ||
-    input.audit.portable.extractor.cacheDirectory !== "tool-cache/7zip-26.02" ||
-    input.audit.portable.extractor.toolPath !== "tool-cache/7zip-26.02/7z.exe" ||
-    JSON.stringify(input.audit.portable.extractor.runner) !== JSON.stringify(portableExtractorLock.runner) ||
-    JSON.stringify(input.audit.portable.extractor.installer) !== JSON.stringify(portableExtractorLock.installer) ||
-    JSON.stringify(input.audit.portable.extractor.executable) !== JSON.stringify(portableExtractorLock.executable) ||
-    JSON.stringify(input.audit.portable.extractor.library) !== JSON.stringify(portableExtractorLock.library) ||
-    JSON.stringify(input.audit.portable.controlPayload) !== JSON.stringify(nsisControlPayload) ||
-    input.audit.portable.archive.type !== "Nsis" ||
-    input.audit.portable.archive.method !== "Deflate" ||
-    input.audit.portable.archive.subtype !== "NSIS-3 Unicode" ||
-    !input.audit.portable.payloadTreesEqual ||
-    !input.audit.portable.extractedApplicationAudited ||
-    input.audit.portable.siblingTree.files !== input.audit.portable.extractedTree.files ||
-    input.audit.portable.siblingTree.sha256 !== input.audit.portable.extractedTree.sha256
+    input.audit.distributionZip.topLevelDirectory !== input.identity.artifactDirectoryName ||
+    input.audit.distributionZip.sourceTree.files !== input.audit.distributionZip.zipTree.files ||
+    input.audit.distributionZip.sourceTree.sha256 !== input.audit.distributionZip.zipTree.sha256
   ) {
-    throw new Error("manifest 最终 Portable 提取审计无效")
+    throw new Error("manifest 最终 zip 目录包审计无效")
   }
   validateRuntimeAcceptance(input.audit.runtime, input.identity)
-  requireDigest(input.audit.portable.siblingTree.sha256, "manifest sibling payload tree digest")
-  requireDigest(input.audit.portable.extractedTree.sha256, "manifest extracted payload tree digest")
+  requireDigest(input.audit.distributionZip.sourceTree.sha256, "manifest source payload tree digest")
+  requireDigest(input.audit.distributionZip.zipTree.sha256, "manifest zip payload tree digest")
   if (
-    !Number.isSafeInteger(input.audit.portable.siblingTree.files) ||
-    input.audit.portable.siblingTree.files <= 0 ||
-    !Number.isSafeInteger(input.audit.portable.extractedTree.files) ||
-    input.audit.portable.extractedTree.files <= 0
+    !Number.isSafeInteger(input.audit.distributionZip.sourceTree.files) ||
+    input.audit.distributionZip.sourceTree.files <= 0 ||
+    !Number.isSafeInteger(input.audit.distributionZip.zipTree.files) ||
+    input.audit.distributionZip.zipTree.files <= 0
   ) {
-    throw new Error("manifest Portable payload tree 文件数无效")
+    throw new Error("manifest zip payload tree 文件数无效")
   }
   if (
-    !input.audit.portable.applicationPe.passed ||
-    input.audit.portable.applicationPe.signatureStatus !== "NotSigned"
+    !input.audit.distributionZip.applicationPe.passed ||
+    input.audit.distributionZip.applicationPe.signatureStatus !== "NotSigned"
   ) {
-    throw new Error("最终 Portable 内嵌品牌应用 EXE 必须通过 unsigned 审计")
+    throw new Error("最终 zip 内品牌应用 EXE 必须通过 unsigned 审计")
   }
   validateResourceEditAudit(
-    input.audit.portable.resourceEdit,
-    input.audit.portable.applicationPe,
+    input.audit.distributionZip.resourceEdit,
+    input.audit.distributionZip.applicationPe,
     input.identity.name,
     input.resourceEditorTool,
   )
   if (
-    input.audit.portable.nativeExecutableSignatures.length !== 1 ||
-    input.audit.portable.nativeExecutableSignatures[0]?.file !==
+    input.audit.distributionZip.nativeExecutableSignatures.length !== 1 ||
+    input.audit.distributionZip.nativeExecutableSignatures[0]?.file !==
       "resources/app.asar.unpacked/node_modules/@lydell/node-pty-win32-x64/prebuilds/win32-x64/conpty/OpenConsole.exe" ||
-    input.audit.portable.nativeExecutableSignatures[0]?.signatureStatus !== "Valid"
+    input.audit.distributionZip.nativeExecutableSignatures[0]?.signatureStatus !== "Valid"
   ) {
-    throw new Error("manifest 最终 Portable 原生 EXE 签名审计无效")
+    throw new Error("manifest 最终 zip 原生 EXE 签名审计无效")
   }
   if (input.identity.channel === "dev" && (input.release.targetTag || input.release.annotatedTagCommand)) {
     throw new Error("dev manifest 不得包含发行 tag")
@@ -385,41 +368,47 @@ function validateManifestInput(input: ReleaseManifestInput) {
 
 function validateRuntimeAcceptance(runtime: RuntimeAcceptanceEvidence, identity: BuildIdentity) {
   assertNoRuntimeSecrets(runtime, "runtime")
-  assertExactKeys(runtime, [
-    "adminConfig",
-    "checks",
-    "configDirectory",
-    "executableStarted",
-    "exitedCleanly",
-    "lingeringProcesses",
-    "logs",
-    "mode",
-    "preloadReady",
-    "publicNetworkCalls",
-    "rendererReady",
-    "serverHealthReady",
-    "adminModelLoaded",
-    "visibleVersion",
-  ], "runtime")
+  assertExactKeys(
+    runtime,
+    [
+      "adminConfig",
+      "checks",
+      "configDirectory",
+      "executableStarted",
+      "exitedCleanly",
+      "lingeringProcesses",
+      "logs",
+      "mode",
+      "preloadReady",
+      "publicNetworkCalls",
+      "rendererReady",
+      "serverHealthReady",
+      "adminModelLoaded",
+      "visibleVersion",
+    ],
+    "runtime",
+  )
   assertExactKeys(runtime.adminConfig, ["apiKeySha256", "modelId", "providerId"], "runtime.adminConfig")
-  assertExactKeys(runtime.checks, [
-    "deepLinkRefresh",
-    "defaultSessionCore",
-    "disabledEntrypoints",
-    "sessionCoreSwitchesTo",
-    "staleSession",
-  ], "runtime.checks")
+  assertExactKeys(
+    runtime.checks,
+    ["deepLinkRefresh", "defaultSessionCore", "disabledEntrypoints", "sessionCoreSwitchesTo", "staleSession"],
+    "runtime.checks",
+  )
   assertExactKeys(runtime.checks.deepLinkRefresh, ["moved", "refreshed"], "runtime.checks.deepLinkRefresh")
   assertExactKeys(runtime.checks.staleSession, ["appShellLoaded", "recoveryError"], "runtime.checks.staleSession")
-  assertExactKeys(runtime.checks.staleSession.recoveryError, ["code", "message"], "runtime.checks.staleSession.recoveryError")
+  assertExactKeys(
+    runtime.checks.staleSession.recoveryError,
+    ["code", "message"],
+    "runtime.checks.staleSession.recoveryError",
+  )
   assertExactKeys(runtime.logs, ["stderrSha256", "stdoutSha256"], "runtime.logs")
   if (
     !runtime ||
-    runtime.mode !== "portable" ||
+    runtime.mode !== "windows-zip" ||
     runtime.configDirectory !== ".config/bluedcode" ||
     runtime.visibleVersion !== identity.version
   ) {
-    throw new Error("manifest runtime Portable 身份证据无效")
+    throw new Error("manifest runtime zip 目录包身份证据无效")
   }
   if (
     runtime.executableStarted !== true ||
@@ -437,25 +426,26 @@ function validateRuntimeAcceptance(runtime: RuntimeAcceptanceEvidence, identity:
     runtime.checks.sessionCoreSwitchesTo !== "v2" ||
     runtime.checks.deepLinkRefresh?.moved !== true ||
     runtime.checks.deepLinkRefresh?.refreshed !== true ||
-    JSON.stringify(runtime.checks.disabledEntrypoints) !== JSON.stringify(["auth", "connect-provider", "share", "update"]) ||
+    JSON.stringify(runtime.checks.disabledEntrypoints) !==
+      JSON.stringify(["auth", "connect-provider", "share", "update"]) ||
     runtime.checks.staleSession?.appShellLoaded !== true ||
     runtime.checks.staleSession.recoveryError?.code !== "SESSION_NOT_FOUND" ||
     runtime.checks.staleSession.recoveryError.message !== "Session not found: stale-session"
   ) {
-    throw new Error("manifest runtime Portable 主进程、Profile 或企业策略证据无效")
+    throw new Error("manifest runtime zip 目录包主进程、Profile 或企业策略证据无效")
   }
   if (
     runtime.adminConfig?.providerId !== "openai-proxy" ||
     runtime.adminConfig.modelId !== "gpt-4.1" ||
     !/^[a-f0-9]{64}$/.test(runtime.adminConfig.apiKeySha256)
   ) {
-    throw new Error("manifest runtime Portable 管理员模型证据无效")
+    throw new Error("manifest runtime zip 目录包管理员模型证据无效")
   }
   if (JSON.stringify(runtime).includes("sk-runtime-acceptance-secret") || "apiKey" in runtime.adminConfig) {
     throw new Error("manifest runtime 不得包含明文 secret 密钥")
   }
   if (!/^[a-f0-9]{64}$/.test(runtime.logs?.stdoutSha256) || !/^[a-f0-9]{64}$/.test(runtime.logs.stderrSha256)) {
-    throw new Error("manifest runtime Portable 日志摘要无效")
+    throw new Error("manifest runtime zip 目录包日志摘要无效")
   }
 }
 
@@ -505,7 +495,9 @@ function validateResourceEditAudit(
     !resourceEdit ||
     !isTrue(Reflect.get(resourceEdit, "passed")) ||
     resourceEdit.target !== `win-unpacked/${productName}.exe` ||
-    !resourceEdit.tool || typeof resourceEdit.tool !== "object" || JSON.stringify(resourceEdit.tool) !== JSON.stringify(resourceEditorTool)
+    !resourceEdit.tool ||
+    typeof resourceEdit.tool !== "object" ||
+    JSON.stringify(resourceEdit.tool) !== JSON.stringify(resourceEditorTool)
   ) {
     throw new Error("manifest 品牌应用 PE 资源编辑工具或目标无效")
   }
@@ -563,6 +555,7 @@ function validateReleaseManifest(manifest: ReleaseManifest) {
     version: manifest.build.version,
     commit: manifest.build.commit,
     shortCommit: manifest.build.shortCommit,
+    artifactDirectoryName: manifest.artifact.file.replace(/-windows-x64\.zip$/, ""),
     artifactName: manifest.artifact.file,
     ...(manifest.release.targetTag ? { tag: manifest.release.targetTag } : {}),
   })
@@ -587,7 +580,7 @@ async function verifyPublishedRelease(directory: string, manifest: ReleaseManife
 function releasePaths(directory: string, artifactName: string) {
   return {
     directory,
-    executable: path.join(directory, artifactName),
+    artifact: path.join(directory, artifactName),
     manifest: path.join(directory, "release-manifest.json"),
   }
 }
@@ -620,8 +613,8 @@ async function digestTree(root: string, ignoredDirectories = new Set<string>()) 
 }
 
 function requireArtifactName(value: string) {
-  if (!/^BluedCode(?:-Dev)?-[A-Za-z0-9.-]+-windows-x64-portable\.exe$/.test(value) || path.basename(value) !== value) {
-    throw new Error("Portable artifactName 无效")
+  if (!/^BluedCode(?:-Dev)?-[A-Za-z0-9.-]+-windows-x64\.zip$/.test(value) || path.basename(value) !== value) {
+    throw new Error("zip artifactName 无效")
   }
 }
 

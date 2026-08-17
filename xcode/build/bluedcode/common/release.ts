@@ -63,10 +63,10 @@ export function createAnnotatedTagCommand(input: {
   }
   if (!/^[a-f0-9]{40}$/.test(input.commit)) throw new Error("annotated tag commit 无效")
   if (!/^[a-f0-9]{64}$/.test(input.artifactSha256)) throw new Error("annotated tag 产物摘要无效")
-  if (!/^BluedCode-[A-Za-z0-9.-]+-windows-x64-portable\.exe$/.test(input.artifactName)) {
+  if (!/^BluedCode-[A-Za-z0-9.-]+-windows-x64\.zip$/.test(input.artifactName)) {
     throw new Error("annotated tag 产物名无效")
   }
-  return `git tag -a ${input.tag} ${input.commit} -m "发布 BluedCode ${input.version} Windows x64 Portable；产物 ${input.artifactName}；SHA-256 ${input.artifactSha256}"`
+  return `git tag -a ${input.tag} ${input.commit} -m "发布 BluedCode ${input.version} Windows x64 zip 目录包；产物 ${input.artifactName}；SHA-256 ${input.artifactSha256}"`
 }
 
 async function requireGit(result: Promise<GitResult>, message: string) {

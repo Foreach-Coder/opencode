@@ -72,7 +72,9 @@ test("server 写入带产品 Profile 摘要的统一 ledger event", async () => 
       "utf8",
     )
     const ledger = JSON.parse(content) as { events: Array<{ stage: string; productProfileSha256: string }> }
-    expect(ledger.events).toEqual([expect.objectContaining({ stage: "server", productProfileSha256: expect.stringMatching(/^[a-f0-9]{64}$/) })])
+    expect(ledger.events).toEqual([
+      expect.objectContaining({ stage: "server", productProfileSha256: expect.stringMatching(/^[a-f0-9]{64}$/) }),
+    ])
   } finally {
     restoreEnv("MODELS_DEV_API_JSON", previousModels)
   }
@@ -411,6 +413,7 @@ function identity(channel: "dev" | "prod"): BuildIdentity {
       version: "1.18.18-dev-0123456789",
       commit,
       shortCommit: commit.slice(0, 10),
+      artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
       artifactName: "BluedCode-Dev.exe",
     }
   }
@@ -422,6 +425,7 @@ function identity(channel: "dev" | "prod"): BuildIdentity {
     version: "1.18.18-260815-01-0123456789",
     commit,
     shortCommit: commit.slice(0, 10),
+    artifactDirectoryName: "BluedCode-1.18.18-260815-01-0123456789",
     artifactName: "BluedCode.exe",
     tag: "bluedcode-v1.18.18-260815-01",
   }

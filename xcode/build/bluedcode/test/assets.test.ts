@@ -428,5 +428,6 @@ const identity: BuildIdentity = {
   version: "1.18.18-dev-0123456789",
   commit,
   shortCommit: commit.slice(0, 10),
+  artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
   artifactName: "BluedCode-Dev.exe",
 }

@@ -91,13 +91,13 @@ test("发行账本 Git 失败时在构建重活前 fail closed", async () => {
 test("annotated tag 命令只作为含中文摘要的候选输出", () => {
   expect(
     createAnnotatedTagCommand({
-      artifactName: "BluedCode-1.18.18-260815-01-0123456789-windows-x64-portable.exe",
+      artifactName: "BluedCode-1.18.18-260815-01-0123456789-windows-x64.zip",
       artifactSha256: "a".repeat(64),
       commit: "0123456789abcdef0123456789abcdef01234567",
       tag: "bluedcode-v1.18.18-260815-01",
       version: "1.18.18-260815-01-0123456789",
     }),
   ).toBe(
-    `git tag -a bluedcode-v1.18.18-260815-01 0123456789abcdef0123456789abcdef01234567 -m "发布 BluedCode 1.18.18-260815-01-0123456789 Windows x64 Portable；产物 BluedCode-1.18.18-260815-01-0123456789-windows-x64-portable.exe；SHA-256 ${"a".repeat(64)}"`,
+    `git tag -a bluedcode-v1.18.18-260815-01 0123456789abcdef0123456789abcdef01234567 -m "发布 BluedCode 1.18.18-260815-01-0123456789 Windows x64 zip 目录包；产物 BluedCode-1.18.18-260815-01-0123456789-windows-x64.zip；SHA-256 ${"a".repeat(64)}"`,
   )
 })

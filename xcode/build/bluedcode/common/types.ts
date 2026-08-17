@@ -13,6 +13,7 @@ export type BuildIdentity = {
   commit: string
   shortCommit: string
   artifactName: string
+  artifactDirectoryName: string
   tag?: string
 }
 

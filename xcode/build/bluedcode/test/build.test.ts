@@ -19,15 +19,15 @@ import {
   auditAsarContents,
   auditElectronOutput,
   createAsarPackageJson,
-  findPortableArtifact,
+  findPackagedApplicationDirectory,
   forceElectronBuilderDebugOff,
   isElectronBuilderModule,
-  packagePortable,
+  packageWindowsDirectory,
   type NativeRuntimeManifest,
   preflightBuild,
   preparePackagingInput,
   readPeMetadata,
-  validatePortablePe,
+  validateWindowsApplicationPe,
   validateWinUnpackedExecutables,
   verifyElectronViteEvidence,
 } from "../build"
@@ -210,7 +210,7 @@ test("Task 7 按 Task 6 默认路径顺序认证 output audit", async () => {
 })
 
 test("release-manifest exact schema 记录完整 commit、摘要、账本、审计与 SmartScreen 限制", () => {
-  const manifest = manifestFixture(Buffer.from("portable-exe"))
+  const manifest = manifestFixture(Buffer.from("zip-archive"))
 
   expect(manifest.enterprise.policy.providerMode).toBe("admin-static-only")
   expect(manifest.enterprise.audit.passed).toBe(true)
@@ -244,7 +244,6 @@ test("release-manifest exact schema 记录完整 commit、摘要、账本、审�
         appBuilderLib: "26.15.2",
         electronVite: "5.0.0",
         resedit: "1.7.2",
-        sevenZip: "26.02",
       },
       digests: {
         framework: "b".repeat(64),
@@ -254,16 +253,15 @@ test("release-manifest exact schema 记录完整 commit、摘要、账本、审�
       cache: {
         server: true,
         electronVite: false,
-        portable: false,
-        portableExtractorTool: true,
+        distributionZip: false,
       },
     },
     release: { targetTag: null, annotatedTagCommand: null },
     artifact: {
-      file: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe",
-      format: "portable",
-      size: 12,
-      sha256: "167d99332652b0dd0f4911ef1dd8b23ef42fb64badf16708403cc94bf390c8b1",
+      file: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip",
+      format: "windows-zip",
+      size: 11,
+      sha256: "7c05b040f89c4abb36b601f7fa24dea4f742329d5e6204f80720b6f51cfca500",
       unsigned: true,
       smartScreen: "Windows SmartScreen 可能显示“未知发布者”",
     },
@@ -325,9 +323,9 @@ test("release-manifest exact schema 记录完整 commit、摘要、账本、审�
         signatureStatus: "NotSigned",
         passed: true,
       },
-      portable: portableAuditFixture(),
+      distributionZip: distributionZipAuditFixture(),
       runtime: {
-        mode: "portable",
+        mode: "windows-zip",
         executableStarted: true,
         serverHealthReady: true,
         preloadReady: true,
@@ -359,7 +357,7 @@ test("release-manifest exact schema 记录完整 commit、摘要、账本、审�
         },
       },
       releaseDirectory: {
-        files: ["BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe", "release-manifest.json"],
+        files: ["BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip", "release-manifest.json"],
         passed: true,
       },
     },
@@ -373,28 +371,26 @@ test("release-manifest exact schema 记录完整 commit、摘要、账本、审�
   ).toThrow("企业策略必须由产品 Profile 派生")
 })
 
-test("manifest cache 语义区分 Portable 重打与提取工具缓存并锁定 exact schema", () => {
+test("manifest cache 语义区分 zip 目录包重打并锁定 exact schema", () => {
   const mutations: Array<(cache: ReleaseManifestInput["cache"]) => void> = [
-    (cache) => void Reflect.set(cache, "portable", true),
-    (cache) => void Reflect.set(cache, "portableExtractorTool", false),
+    (cache) => void Reflect.set(cache, "distributionZip", true),
     (cache) => void Reflect.set(cache, "unexpected", true),
   ]
   for (const mutate of mutations) {
     const invalid: ReleaseManifestInput["cache"] = {
       server: true,
       electronVite: false,
-      portable: false,
-      portableExtractorTool: true,
+      distributionZip: false,
     }
     mutate(invalid)
-    expect(() => manifestFixture(Buffer.from("portable-exe"), invalid)).toThrow(/cache/i)
+    expect(() => manifestFixture(Buffer.from("zip-archive"), invalid)).toThrow(/cache/i)
   }
 })
 
-test("manifest runtime portable 证据要求无主进程错误、V1/V2、受限入口和零公网调用", () => {
-  const manifest = manifestFixture(Buffer.from("portable-exe"))
+test("manifest runtime zip 目录包证据要求无主进程错误、V1/V2、受限入口和零公网调用", () => {
+  const manifest = manifestFixture(Buffer.from("zip-archive"))
   Reflect.set(manifest.audit, "runtime", {
-    mode: "portable",
+    mode: "windows-zip",
     visibleVersion: "1.18.18-dev-0123456789",
     executableStarted: true,
     serverHealthReady: true,
@@ -417,19 +413,19 @@ test("manifest runtime portable 证据要求无主进程错误、V1/V2、受限�
   expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|运行时|主进程/i)
 })
 
-test("manifest runtime portable 缺失或伪造 stale-session recovery 证据时 fail closed", () => {
-  const manifest = manifestFixture(Buffer.from("portable-exe"))
+test("manifest runtime zip 目录包缺失或伪造 stale-session recovery 证据时 fail closed", () => {
+  const manifest = manifestFixture(Buffer.from("zip-archive"))
   Reflect.set(manifest.audit.runtime.checks, "staleSession", { appShellLoaded: true })
 
   expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|stale|session|恢复/i)
 })
 
-test("manifest runtime portable 拒绝错误的 stale-session recovery code 或 message", () => {
+test("manifest runtime zip 目录包拒绝错误的 stale-session recovery code 或 message", () => {
   for (const recoveryError of [
     { code: "SESSION_OTHER", message: "Session not found: stale-session" },
     { code: "SESSION_NOT_FOUND", message: "Session not found: another-session" },
   ]) {
-    const manifest = manifestFixture(Buffer.from("portable-exe"))
+    const manifest = manifestFixture(Buffer.from("zip-archive"))
     Reflect.set(manifest.audit.runtime.checks, "staleSession", { appShellLoaded: true, recoveryError })
 
     expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|stale|session|恢复/i)
@@ -437,7 +433,7 @@ test("manifest runtime portable 拒绝错误的 stale-session recovery code 或 
 })
 
 test("manifest runtime 拒绝 source-only fixture 与明文管理员 API key", () => {
-  const fixtureManifest = manifestFixture(Buffer.from("portable-exe"))
+  const fixtureManifest = manifestFixture(Buffer.from("zip-archive"))
   Reflect.set(fixtureManifest.audit, "runtime", {
     fixtureConfigDirectory: ".config/bluedcode",
     mode: "fixture",
@@ -456,9 +452,9 @@ test("manifest runtime 拒绝 source-only fixture 与明文管理员 API key", (
       recoveryError: { code: "SESSION_NOT_FOUND", message: "Session not found: stale-session" },
     },
   })
-  expect(() => serializeReleaseManifest(fixtureManifest)).toThrow(/runtime|Portable|fixture/i)
+  expect(() => serializeReleaseManifest(fixtureManifest)).toThrow(/runtime|zip|fixture/i)
 
-  const secretManifest = manifestFixture(Buffer.from("portable-exe"))
+  const secretManifest = manifestFixture(Buffer.from("zip-archive"))
   Reflect.set(secretManifest.audit.runtime, "adminConfig", {
     apiKey: "sk-runtime-acceptance-secret",
     modelId: "gpt-4.1",
@@ -466,7 +462,7 @@ test("manifest runtime 拒绝 source-only fixture 与明文管理员 API key", (
   })
   expect(() => serializeReleaseManifest(secretManifest)).toThrow(/runtime|secret|密钥|明文/i)
 
-  const nestedSecretManifest = manifestFixture(Buffer.from("portable-exe"))
+  const nestedSecretManifest = manifestFixture(Buffer.from("zip-archive"))
   Reflect.set(nestedSecretManifest.audit.runtime, "extra", { api_key: "sk-real-secret-example" })
   Reflect.set(nestedSecretManifest.audit.runtime.checks, "token", "internal-token")
   expect(() => serializeReleaseManifest(nestedSecretManifest)).toThrow(/runtime|secret|密钥|明文|schema/i)
@@ -480,29 +476,29 @@ test("manifest 与已认证 resedit 完整图摘要和文件清单精确交叉�
   for (const mutate of mutations) {
     const tampered = structuredClone(resourceEditorLock)
     mutate(tampered)
-    expect(() => manifestFixture(Buffer.from("portable-exe"), undefined, tampered)).toThrow(/资源编辑工具|目标无效/)
+    expect(() => manifestFixture(Buffer.from("zip-archive"), undefined, tampered)).toThrow(/资源编辑工具|目标无效/)
   }
 })
 
-test("EXE 与 manifest 以内容寻址目录原子发布且目录中只有两个普通文件", async () => {
+test("zip 与 manifest 以内容寻址目录原子发布且目录中只有两个普通文件", async () => {
   const root = await temporaryRoot("bluedcode-release-")
   const outputRoot = path.join(root, ".xcode", "bluedcode")
   const artifactsRoot = path.join(outputRoot, "artifacts")
-  const executable = path.join(outputRoot, "candidate.exe")
-  const bytes = Buffer.from("portable-exe")
+  const artifactFile = path.join(outputRoot, "candidate.zip")
+  const bytes = Buffer.from("zip-archive")
   await mkdir(artifactsRoot, { recursive: true })
-  await writeFile(executable, bytes)
+  await writeFile(artifactFile, bytes)
 
   const result = await publishRelease({
     artifactsRoot,
-    executable,
+    artifactFile,
     manifest: manifestFixture(bytes),
     outputRoot,
     repositoryRoot: root,
   })
   const second = await publishRelease({
     artifactsRoot,
-    executable,
+    artifactFile,
     manifest: manifestFixture(bytes),
     outputRoot,
     repositoryRoot: root,
@@ -511,7 +507,7 @@ test("EXE 与 manifest 以内容寻址目录原子发布且目录中只有两个
   expect(second).toEqual(result)
   expect(path.basename(result.directory)).toMatch(/^[a-f0-9]{64}$/)
   expect((await readdir(result.directory)).sort()).toEqual([
-    "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe",
+    "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip",
     "release-manifest.json",
   ])
   for (const file of await readdir(result.directory)) {
@@ -527,17 +523,17 @@ test("预置 artifacts junction 时拒绝发布且外部 sentinel 不变", async
   const external = await temporaryRoot("bluedcode-release-external-")
   const outputRoot = path.join(root, ".xcode", "bluedcode")
   const artifactsRoot = path.join(outputRoot, "artifacts")
-  const executable = path.join(outputRoot, "candidate.exe")
+  const artifactFile = path.join(outputRoot, "candidate.zip")
   const sentinel = path.join(external, "sentinel.txt")
-  const bytes = Buffer.from("portable-exe")
+  const bytes = Buffer.from("zip-archive")
   await mkdir(outputRoot, { recursive: true })
-  await Promise.all([writeFile(executable, bytes), writeFile(sentinel, "do-not-touch")])
+  await Promise.all([writeFile(artifactFile, bytes), writeFile(sentinel, "do-not-touch")])
   await symlink(external, artifactsRoot, "junction")
 
   await expectFailure(
     publishRelease({
       artifactsRoot,
-      executable,
+      artifactFile,
       manifest: manifestFixture(bytes),
       outputRoot,
       repositoryRoot: root,
@@ -899,20 +895,16 @@ test("ASAR package.json 期望匹配 Electron Builder extraMetadata 输出", () 
   )
 })
 
-test("Builder 工作目录只接受精确 Portable EXE，不接受 zip、MSI 或第二个 EXE", async () => {
+test("Builder 工作目录只接受 win-unpacked 目录，拒绝单文件 EXE、MSI 或提前生成 zip", async () => {
   const root = await temporaryRoot("bluedcode-builder-artifact-")
-  const artifactName = "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe"
-  await Promise.all([
-    writeFixture(path.join(root, artifactName), new Uint8Array([77, 90])),
-    mkdir(path.join(root, "win-unpacked")),
-  ])
+  await mkdir(path.join(root, "win-unpacked"))
 
-  expect(await findPortableArtifact(root, artifactName)).toBe(path.join(root, artifactName))
+  expect(await findPackagedApplicationDirectory(root)).toBe(path.join(root, "win-unpacked"))
   await writeFile(path.join(root, "extra.zip"), "forbidden")
-  await expectFailure(findPortableArtifact(root, artifactName), /zip|额外/i)
+  await expectFailure(findPackagedApplicationDirectory(root), /zip|只允许目录/i)
   await rm(path.join(root, "extra.zip"))
   await writeFile(path.join(root, "second.exe"), "forbidden")
-  await expectFailure(findPortableArtifact(root, artifactName), /EXE|额外/i)
+  await expectFailure(findPackagedApplicationDirectory(root), /EXE|分发产物/i)
 })
 
 test("win-unpacked 只允许品牌应用与 node-pty OpenConsole，不允许 Builder elevate helper", () => {
@@ -949,7 +941,11 @@ test("electron-builder 模块导入前必须清空发布和签名凭据", async 
       'if (process.env.GH_TOKEN) await Bun.write(new URL("./saw-secret.txt", import.meta.url), process.env.GH_TOKEN)',
       'export const Arch = { x64: "x64" }',
       "export const Platform = { WINDOWS: { createTarget: () => ({}) } }",
-      'export async function build() { return ["BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe"] }',
+      "export async function build(options) {",
+      '  await Bun.write("out-marker.txt", "dir")',
+      '  await Bun.write(`${options.config.directories.output}/win-unpacked/.keep`, "dir")',
+      "  return []",
+      "}",
     ].join("\n"),
   )
   await writeFixture(
@@ -961,7 +957,7 @@ test("electron-builder 模块导入前必须清空发布和签名凭据", async 
   const previous = process.env.GH_TOKEN
   process.env.GH_TOKEN = "secret-token"
   try {
-    await packagePortable(paths, config, devIdentity(), moduleFile)
+    await packageWindowsDirectory(paths, config, devIdentity(), moduleFile)
     expect(await Bun.file(path.join(moduleRoot, "saw-secret.txt")).exists()).toBe(false)
     expect(process.env.GH_TOKEN).toBe("secret-token")
   } finally {
@@ -982,7 +978,8 @@ test("electron-builder cwd 副作用只能落入 owned workspace，不能改写�
       "export const Platform = { WINDOWS: { createTarget: () => ({}) } }",
       "export async function build() {",
       '  await Bun.write("package.json", JSON.stringify({ name: "builder-side-effect" }))',
-      '  return ["BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe"]',
+      '  await Bun.write(`${arguments[0].config.directories.output}/win-unpacked/.keep`, "dir")',
+      "  return []",
       "}",
     ].join("\n"),
   )
@@ -997,7 +994,7 @@ test("electron-builder cwd 副作用只能落入 owned workspace，不能改写�
   const originalCwd = process.cwd()
   try {
     process.chdir(root)
-    await packagePortable(paths, builderConfigFixture(paths, root), devIdentity(), moduleFile)
+    await packageWindowsDirectory(paths, builderConfigFixture(paths, root), devIdentity(), moduleFile)
   } finally {
     process.chdir(originalCwd)
   }
@@ -1048,7 +1045,7 @@ test("PowerShell PE 读取器报告真实 Electron 基础二进制未签名与�
   expect(metadata.numericProductVersion).toMatch(/^\d+\.\d+\.\d+\.\d+$/)
 })
 
-test("Portable PE 合同要求完整 ProductVersion、独立数字版本与 unsigned", () => {
+test("品牌应用 PE 合同要求完整 ProductVersion、独立数字版本与 unsigned", () => {
   const identity = devIdentity()
   const metadata = {
     productName: identity.name,
@@ -1059,14 +1056,18 @@ test("Portable PE 合同要求完整 ProductVersion、独立数字版本与 unsi
     signatureStatus: "NotSigned",
   }
 
-  expect(validatePortablePe(metadata, identity)).toEqual({
+  expect(validateWindowsApplicationPe(metadata, identity)).toEqual({
     ...metadata,
     signatureStatus: "NotSigned",
     passed: true,
   })
-  expect(() => validatePortablePe({ ...metadata, productVersion: "1.18.18" }, identity)).toThrow("ProductVersion")
-  expect(() => validatePortablePe({ ...metadata, numericFileVersion: "1.18.18.0" }, identity)).toThrow("数字版本")
-  expect(() => validatePortablePe({ ...metadata, signatureStatus: "Valid" }, identity)).toThrow("unsigned")
+  expect(() => validateWindowsApplicationPe({ ...metadata, productVersion: "1.18.18" }, identity)).toThrow(
+    "ProductVersion",
+  )
+  expect(() => validateWindowsApplicationPe({ ...metadata, numericFileVersion: "1.18.18.0" }, identity)).toThrow(
+    "数字版本",
+  )
+  expect(() => validateWindowsApplicationPe({ ...metadata, signatureStatus: "Valid" }, identity)).toThrow("unsigned")
 })
 
 function gitFixture(
@@ -1126,12 +1127,11 @@ function gitFailure(stderr: string) {
 }
 
 function manifestFixture(
-  executable: Buffer,
+  artifact: Buffer,
   cache = {
     server: true,
     electronVite: false,
-    portable: false,
-    portableExtractorTool: true,
+    distributionZip: false,
   } satisfies ReleaseManifestInput["cache"],
   resourceEditTool = resourceEditorLock,
 ) {
@@ -1144,7 +1144,8 @@ function manifestFixture(
       version: "1.18.18-dev-0123456789",
       commit: "0123456789abcdef0123456789abcdef01234567",
       shortCommit: "0123456789",
-      artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe",
+      artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
+      artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip",
     },
     baseline: {
       tag: "v1.18.18",
@@ -1161,7 +1162,6 @@ function manifestFixture(
       appBuilderLib: "26.15.2",
       electronVite: "5.0.0",
       resedit: "1.7.2",
-      sevenZip: "26.02",
     },
     digests: {
       framework: "b".repeat(64),
@@ -1170,8 +1170,8 @@ function manifestFixture(
     },
     cache,
     artifact: {
-      size: executable.byteLength,
-      sha256: createHash("sha256").update(executable).digest("hex"),
+      size: artifact.byteLength,
+      sha256: createHash("sha256").update(artifact).digest("hex"),
     },
     transformation: {
       ledger: {
@@ -1221,9 +1221,9 @@ function manifestFixture(
         signatureStatus: "NotSigned",
         passed: true,
       },
-      portable: portableAuditFixture(resourceEditTool),
+      distributionZip: distributionZipAuditFixture(resourceEditTool),
       runtime: {
-        mode: "portable",
+        mode: "windows-zip",
         executableStarted: true,
         serverHealthReady: true,
         preloadReady: true,
@@ -1268,57 +1268,12 @@ function sourceStateFixture() {
   }
 }
 
-function portableAuditFixture(resourceEditorTool = resourceEditorLock) {
+function distributionZipAuditFixture(resourceEditorTool = resourceEditorLock) {
   return {
-    extractor: {
-      version: "26.02" as const,
-      cacheHit: true,
-      cacheDirectory: "tool-cache/7zip-26.02",
-      toolPath: "tool-cache/7zip-26.02/7z.exe",
-      runner: {
-        file: "7zr.exe" as const,
-        url: "https://github.com/ip7z/7zip/releases/download/26.02/7zr.exe" as const,
-        size: 602112,
-        sha256: "56b8cc9f4971cef253644fafe54063ed7fdca551d4dee0f8c6baa81b855acd72" as const,
-      },
-      installer: {
-        file: "7z2602-x64.exe" as const,
-        url: "https://github.com/ip7z/7zip/releases/download/26.02/7z2602-x64.exe" as const,
-        size: 1657896,
-        sha256: "6745fa76dc2ea031596d8678f6f6b99c3c1b435b4164a63485adbbc7b8d82ef0" as const,
-      },
-      executable: {
-        file: "7z.exe" as const,
-        size: 576000,
-        sha256: "83967f1b02b43c4efeda302795722c809e0e81b8307de73558d10484d5676a7d" as const,
-      },
-      library: {
-        file: "7z.dll" as const,
-        size: 1906688,
-        sha256: "69fd4df057985c40e510e2fac182881c7f85e90aa13ec703f763a8fdb2ce61f8" as const,
-      },
-    },
-    archive: {
-      type: "Nsis" as const,
-      method: "Deflate" as const,
-      subtype: "NSIS-3 Unicode" as const,
-    },
-    controlPayload: [
-      {
-        file: "$PLUGINSDIR/StdUtils.dll",
-        size: 102400,
-        sha256: "b72e9013a6204e9f01076dc38dabbf30870d44dfc66962adbf73619d4331601e",
-      },
-      {
-        file: "$PLUGINSDIR/System.dll",
-        size: 12288,
-        sha256: "3eb38ae99653a7dbc724132ee240f6e5c4af4bfe7c01d31d23faf373f9f2eaca",
-      },
-    ],
-    siblingTree: { files: 91, sha256: "1".repeat(64) },
-    extractedTree: { files: 91, sha256: "1".repeat(64) },
-    payloadTreesEqual: true as const,
-    extractedApplicationAudited: true as const,
+    topLevelDirectory: "BluedCode-Dev-1.18.18-dev-0123456789",
+    entries: ["BluedCode-Dev-1.18.18-dev-0123456789/BluedCode Dev.exe"],
+    sourceTree: { files: 91, sha256: "1".repeat(64) },
+    zipTree: { files: 91, sha256: "1".repeat(64) },
     applicationPe: {
       productName: "BluedCode Dev",
       productVersion: "1.18.18-dev-0123456789",
@@ -1376,7 +1331,8 @@ function devIdentity(): BuildIdentity {
     version: "1.18.18-dev-0123456789",
     commit: "0123456789abcdef0123456789abcdef01234567",
     shortCommit: "0123456789",
-    artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe",
+    artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
+    artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip",
   }
 }
 

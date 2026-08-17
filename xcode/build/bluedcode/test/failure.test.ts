@@ -61,6 +61,7 @@ test("受控 main 转换失败会传播精确上下文并脱敏 MODELS_DEV_API_J
       version: "1.18.18-dev-0123456789",
       commit: "0123456789abcdef0123456789abcdef01234567",
       shortCommit: "0123456789",
+      artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
       artifactName: "BluedCode-Dev.exe",
     }
     const plugins = createBrandPlugins({
@@ -88,7 +89,8 @@ test("受控 main 转换失败会传播精确上下文并脱敏 MODELS_DEV_API_J
       target: "main",
     })
     const plugin = plugins.find((item) => item && typeof item === "object" && item.name === "bluedcode:transform")
-    if (!plugin || typeof plugin !== "object" || typeof plugin.transform !== "function") throw new Error("缺少 transform plugin")
+    if (!plugin || typeof plugin !== "object" || typeof plugin.transform !== "function")
+      throw new Error("缺少 transform plugin")
     let failure: unknown
     try {
       await plugin.transform.call({}, "export {}", path.join(repositoryRoot, "packages", "main.ts"))

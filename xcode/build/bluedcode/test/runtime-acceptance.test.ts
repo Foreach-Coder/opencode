@@ -2,7 +2,11 @@ import { afterAll, expect, test } from "bun:test"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { createRuntimeAcceptanceEvidence, formatVisibleVersion, runPortableSmokeFixture } from "../common/runtime-acceptance"
+import {
+  createRuntimeAcceptanceEvidence,
+  formatVisibleVersion,
+  runPortableSmokeFixture,
+} from "../common/runtime-acceptance"
 
 const temporaryRoots: string[] = []
 
@@ -29,26 +33,27 @@ test("fresh profile startup has no main-process JavaScript error", async () => {
   expect(result.deepLinkRefresh).toEqual({ moved: true, refreshed: true })
 })
 
-test("runtime acceptance requires the final Portable executable instead of source fixture evidence", async () => {
-  const home = await fixtureHome("missing-portable-exe")
+test("runtime acceptance requires the final zip-extracted executable instead of source fixture evidence", async () => {
+  const home = await fixtureHome("missing-zip-exe")
 
-  await expect(createRuntimeAcceptanceEvidence({ home, visibleVersion: "1.18.18-dev-0123456789" })).rejects.toThrow(
-    /缺少最终 Portable EXE/i,
-  )
+  await expect(
+    createRuntimeAcceptanceEvidence({ home, mode: "windows-zip", visibleVersion: "1.18.18-dev-0123456789" }),
+  ).rejects.toThrow(/缺少最终 zip 解压后的品牌 EXE/i)
 })
 
-test("portable smoke evidence records executable readiness, isolated admin model and clean shutdown without secrets", async () => {
-  const home = await fixtureHome("portable-smoke", false)
-  const executable = await fakePortableExecutable("portable-smoke")
+test("zip directory smoke evidence records executable readiness, isolated admin model and clean shutdown without secrets", async () => {
+  const home = await fixtureHome("zip-smoke", false)
+  const executable = await fakePortableExecutable("zip-smoke")
   const evidence = await createRuntimeAcceptanceEvidence({
     executable: process.execPath,
     executableArgs: [executable],
     home,
+    mode: "windows-zip",
     visibleVersion: "1.18.18-dev-0123456789",
   })
 
   expect(evidence).toMatchObject({
-    mode: "portable",
+    mode: "windows-zip",
     executableStarted: true,
     serverHealthReady: true,
     preloadReady: true,
@@ -77,15 +82,16 @@ test("portable smoke evidence records executable readiness, isolated admin model
   expect(JSON.stringify(evidence)).not.toContain("sk-runtime-acceptance-secret")
 }, 15_000)
 
-test("portable smoke fails closed and cleans up when the extracted app leaves runtime processes", async () => {
-  const home = await fixtureHome("portable-lingering", false)
-  const executable = await fakePortableExecutable("portable-lingering", { lingering: true })
+test("zip directory smoke fails closed and cleans up when the extracted app leaves runtime processes", async () => {
+  const home = await fixtureHome("zip-lingering", false)
+  const executable = await fakePortableExecutable("zip-lingering", { lingering: true })
 
   await expect(
     createRuntimeAcceptanceEvidence({
       executable: process.execPath,
       executableArgs: [executable],
       home,
+      mode: "windows-zip",
       visibleVersion: "1.18.18-dev-0123456789",
     }),
   ).rejects.toThrow("残留进程")
@@ -104,9 +110,10 @@ test("portable smoke fails closed and cleans up when the extracted app leaves ru
   }
 }, 15_000)
 
-test("真实 Portable readiness 不能由旧日志直接置为成功", async () => {
+test("真实 zip 目录包 readiness 不能由旧日志直接置为成功", async () => {
   const source = await readFile(path.resolve(import.meta.dir, "../common/runtime-acceptance.ts"), "utf8")
-  const logsObserver = source.match(/async function observeDesktopLogs[\s\S]*?\n}\n\nasync function readRecentLogs/)?.[0] ?? ""
+  const logsObserver =
+    source.match(/async function observeDesktopLogs[\s\S]*?\n}\n\nasync function readRecentLogs/)?.[0] ?? ""
 
   expect(logsObserver).not.toContain("state.preloadReady = true")
   expect(logsObserver).not.toContain("state.rendererReady = true")
@@ -141,6 +148,7 @@ test("runtime evidence retains stale-session recovery separately from fresh star
     executable: process.execPath,
     executableArgs: [executable],
     home,
+    mode: "windows-zip",
     visibleVersion: "1.18.18-dev-0123456789",
   })
 
@@ -171,10 +179,7 @@ async function fixtureHome(
   const directory = path.join(root, ".config", "bluedcode")
   await mkdir(directory, { recursive: true })
   if (config === false) return root
-  await writeFile(
-    path.join(directory, "opencode.json"),
-    `${JSON.stringify(config, null, 2)}\n`,
-  )
+  await writeFile(path.join(directory, "opencode.json"), `${JSON.stringify(config, null, 2)}\n`)
   return root
 }
 

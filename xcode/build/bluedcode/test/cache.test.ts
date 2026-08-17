@@ -15,6 +15,7 @@ const devIdentity: BuildIdentity = {
   version: "1.18.18-dev-0123456789",
   commit,
   shortCommit: commit.slice(0, 10),
+  artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
   artifactName: "BluedCode-Dev.exe",
 }
 
@@ -26,6 +27,7 @@ const prodIdentity: BuildIdentity = {
   version: "1.18.18-260815-01-0123456789",
   commit,
   shortCommit: commit.slice(0, 10),
+  artifactDirectoryName: "BluedCode-1.18.18-260815-01-0123456789",
   artifactName: "BluedCode.exe",
   tag: "bluedcode-v1.18.18-260815-01",
 }
@@ -55,6 +57,7 @@ test("server 跨 channel 共享，身份相关阶段按完整身份隔离", () =
 test("相同身份不因对象属性插入顺序产生不同缓存键", () => {
   const reordered: BuildIdentity = {
     artifactName: devIdentity.artifactName,
+    artifactDirectoryName: devIdentity.artifactDirectoryName,
     shortCommit: devIdentity.shortCommit,
     commit: devIdentity.commit,
     version: devIdentity.version,

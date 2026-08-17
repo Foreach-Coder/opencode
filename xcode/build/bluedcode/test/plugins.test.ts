@@ -17,7 +17,8 @@ const identity: BuildIdentity = {
   version: "1.18.18-dev-0123456789",
   commit: "0123456789abcdef0123456789abcdef01234567",
   shortCommit: "0123456789",
-  artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe",
+  artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
+  artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip",
 }
 
 afterEach(async () => {
@@ -109,7 +110,12 @@ describe("createBrandPlugins", () => {
     await expectFailure(buildEndFailure("renderer", [file], [file, file], source), "恰好转换一次")
     const preload = "packages/desktop/src/preload/index.ts"
     await expectFailure(
-      buildEndFailure("preload", [], [preload], await readFile(path.join(repositoryRoot, ...preload.split("/")), "utf8")),
+      buildEndFailure(
+        "preload",
+        [],
+        [preload],
+        await readFile(path.join(repositoryRoot, ...preload.split("/")), "utf8"),
+      ),
       "未声明",
     )
   })
@@ -384,7 +390,9 @@ function requireLedger(value: unknown) {
   return value
 }
 
-function isLedger(value: unknown): value is { events: Array<{ stage: BrandBuildTarget; file: string; rules: unknown[] }> } {
+function isLedger(
+  value: unknown,
+): value is { events: Array<{ stage: BrandBuildTarget; file: string; rules: unknown[] }> } {
   return (
     !!value &&
     typeof value === "object" &&

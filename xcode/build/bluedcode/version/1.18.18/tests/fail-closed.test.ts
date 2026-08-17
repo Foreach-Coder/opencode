@@ -16,9 +16,12 @@ test("adapter fails closed for changed static resource inputs without rewriting 
       version: "1.18.18-260816-01-31406ccc51",
       commit: "31406ccc51b4bd2a4e1e086b2bcaa5f7f804f26d",
       shortCommit: "31406ccc51",
-      artifactName: "BluedCode-1.18.18-260816-01-31406ccc51-windows-x64-portable.exe",
+      artifactDirectoryName: "BluedCode-1.18.18-260816-01-31406ccc51",
+      artifactName: "BluedCode-1.18.18-260816-01-31406ccc51-windows-x64.zip",
       tag: "bluedcode-v1.18.18-260816-01",
     }),
   ).toThrow("指纹")
-  expect(adapter11818.modules.find((module) => module.file === "packages/desktop/src/renderer/index.tsx")?.rules).toEqual([])
+  expect(
+    adapter11818.modules.find((module) => module.file === "packages/desktop/src/renderer/index.tsx")?.rules,
+  ).toEqual([])
 })

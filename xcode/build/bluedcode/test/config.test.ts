@@ -60,14 +60,12 @@ describe("parseBuildArgs", () => {
 
   test("audit-only 是无需 release 的兼容审计参数", () => {
     expect(parseBuildArgs(["--channel", "dev", "--audit-only"])).toEqual({ channel: "dev", auditOnly: true })
-    expect(() => parseBuildArgs(["--channel", "prod", "--release", "260815-01", "--audit-only"])).toThrow(
-      "audit-only",
-    )
+    expect(() => parseBuildArgs(["--channel", "prod", "--release", "260815-01", "--audit-only"])).toThrow("audit-only")
   })
 })
 
 describe("resolveBuildIdentity", () => {
-  test("派生 dev 身份、版本和 Portable 文件名", async () => {
+  test("派生 dev 身份、版本和 zip 文件名", async () => {
     await expect(resolveBuildIdentity({ channel: "dev" }, gitFixture(), baseline)).resolves.toEqual({
       channel: "dev",
       name: "BluedCode Dev",
@@ -76,11 +74,12 @@ describe("resolveBuildIdentity", () => {
       version: "1.18.18-dev-0123456789",
       commit,
       shortCommit: "0123456789",
-      artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe",
+      artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
+      artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip",
     })
   })
 
-  test("派生 prod 身份、发行 tag 和 Portable 文件名", async () => {
+  test("派生 prod 身份、发行 tag 和 zip 文件名", async () => {
     await expect(
       resolveBuildIdentity({ channel: "prod", release: "260815-01" }, gitFixture(), baseline),
     ).resolves.toEqual({
@@ -91,7 +90,8 @@ describe("resolveBuildIdentity", () => {
       version: "1.18.18-260815-01-0123456789",
       commit,
       shortCommit: "0123456789",
-      artifactName: "BluedCode-1.18.18-260815-01-0123456789-windows-x64-portable.exe",
+      artifactDirectoryName: "BluedCode-1.18.18-260815-01-0123456789",
+      artifactName: "BluedCode-1.18.18-260815-01-0123456789-windows-x64.zip",
       tag: "bluedcode-v1.18.18-260815-01",
     })
   })

@@ -8,7 +8,6 @@ import type { BuildIdentity } from "../common/types"
 import {
   createBuilderConfig,
   createBrandedExecutableVersionHook,
-  createPortableVersionHook,
   createReseditVersionOperations,
   deriveWindowsVersion,
   nativeRuntimeFiles,
@@ -19,11 +18,11 @@ const repositoryRoot = path.resolve(import.meta.dir, "../../../..")
 const commit = "0123456789abcdef0123456789abcdef01234567"
 
 describe("createBuilderConfig", () => {
-  test("只声明 unsigned Windows x64 portable 且 publish 为空", () => {
+  test("只声明 unsigned Windows x64 dir 且 publish 为空，由后续 zip 发布层压缩目录", () => {
     const context = builderContext(prodIdentity())
     const config = createBuilderConfig(context)
 
-    expect(config.win?.target).toEqual([{ target: "portable", arch: ["x64"] }])
+    expect(config.win?.target).toEqual([{ target: "dir", arch: ["x64"] }])
     expect(config.publish).toBeNull()
     expect(config.win).toMatchObject({
       forceCodeSigning: false,
@@ -32,17 +31,17 @@ describe("createBuilderConfig", () => {
       verifyUpdateCodeSignature: false,
     })
     expect(config.forceCodeSigning).toBe(false)
-    expect(config.portable).toEqual({ useZip: true })
+    expect(config.portable).toBeUndefined()
     expect(config.afterPack).toBeUndefined()
     expect(config.afterSign).toBe(context.afterSign)
-    expect(JSON.stringify(config.win?.target)).not.toMatch(/zip|nsis|msi/i)
-    expect(JSON.stringify(config)).not.toMatch(/nsis|msi|AppImage|dmg|signWindows|signtool|azureSign|sentry/i)
+    expect(JSON.stringify(config.win?.target)).not.toMatch(/portable|zip|nsis|msi/i)
+    expect(JSON.stringify(config)).not.toMatch(/portable|nsis|msi|AppImage|dmg|signWindows|signtool|azureSign|sentry/i)
     expect(config).not.toHaveProperty("mac")
     expect(config).not.toHaveProperty("linux")
     expect(config).not.toHaveProperty("appx")
   })
 
-  test("锁定 Builder 26.15.2 的 Portable 直接载荷分支", async () => {
+  test("锁定 Builder 26.15.2 的 dir 目录载荷分支", async () => {
     const desktop = path.join(repositoryRoot, "packages", "desktop")
     const electronBuilderFile = Bun.resolveSync("electron-builder", desktop)
     const appBuilderFile = Bun.resolveSync("app-builder-lib", electronBuilderFile)
@@ -65,10 +64,10 @@ describe("createBuilderConfig", () => {
       size: resourceEditorLock.size,
       sha256: resourceEditorLock.sha256,
     })
-    expect(createBuilderConfig(builderContext(devIdentity())).portable).toEqual({ useZip: true })
+    expect(createBuilderConfig(builderContext(devIdentity())).portable).toBeUndefined()
   })
 
-  test("锁定 Builder 26.15.2 在资源编辑后、Portable 封装前触发 afterSign", async () => {
+  test("锁定 Builder 26.15.2 在资源编辑后、dir 目录输出完成前触发 afterSign", async () => {
     const desktop = path.join(repositoryRoot, "packages", "desktop")
     const electronBuilderFile = Bun.resolveSync("electron-builder", desktop)
     const appBuilderFile = Bun.resolveSync("app-builder-lib", electronBuilderFile)
@@ -141,7 +140,7 @@ describe("createBuilderConfig", () => {
       type: "module",
       version: "1.18.18-260815-01-0123456789",
     })
-    expect(config.artifactName).toBe("BluedCode-1.18.18-260815-01-0123456789-windows-x64-portable.exe")
+    expect(config.artifactName).toBe("BluedCode-1.18.18-260815-01-0123456789-windows-x64.zip")
     expect(config.protocols).toEqual({ name: "BluedCode", schemes: ["bluedcode"] })
   })
 
@@ -157,48 +156,6 @@ describe("createBuilderConfig", () => {
     expect(() => createBuilderConfig({ ...context, assets: { ...context.assets, iconIco: "../icon.ico" } })).toThrow(
       "Task 5",
     )
-  })
-})
-
-describe("Portable PE 版本钩子", () => {
-  test("prod 数字版本由发行日与全局序号派生，字符串 ProductVersion 保留完整版本", async () => {
-    const identity = prodIdentity()
-    const hook = createPortableVersionHook(identity)
-    const options = [
-      { VERSION: identity.version },
-      {
-        VIProductVersion: "1.18.18.0",
-        VIAddVersionKey: [
-          '/LANG=1033 ProductName "BluedCode"',
-          `/LANG=1033 ProductVersion "${identity.version}"`,
-          `/LANG=1033 FileVersion "${identity.version}"`,
-        ],
-      },
-    ]
-
-    expect(deriveWindowsVersion(identity)).toBe("26.8.15.1")
-    expect(await hook(options)).toBe(false)
-    expect(options[1]?.VIProductVersion).toBe("26.8.15.1")
-    expect(options[1]?.VIAddVersionKey).toContain('/LANG=1033 ProductVersion "1.18.18-260815-01-0123456789"')
-  })
-
-  test("dev 数字版本固定为零且错误 hook 形状 fail closed", async () => {
-    const hook = createPortableVersionHook(devIdentity())
-    const options = [
-      {},
-      {
-        VIProductVersion: "1.18.18.0",
-        VIAddVersionKey: [
-          '/LANG=1033 ProductVersion "1.18.18-dev-0123456789"',
-          '/LANG=1033 FileVersion "1.18.18-dev-0123456789"',
-        ],
-      },
-    ]
-
-    expect(deriveWindowsVersion(devIdentity())).toBe("0.0.0.0")
-    expect(await hook(options)).toBe(false)
-    expect(options[1]?.VIProductVersion).toBe("0.0.0.0")
-    await expectFailure(hook({}), /electron-builder/)
   })
 })
 
@@ -245,7 +202,7 @@ describe("afterSign 品牌应用 PE 版本资源兼容处理", () => {
       for (const override of [
         { electronPlatformName: "linux" },
         { arch: 3 },
-        { targets: [{ name: "zip" }] },
+        { targets: [{ name: "portable" }] },
         { outDir: path.join(fixture.root, "escaped-out") },
         { appOutDir: path.join(fixture.root, "escaped-app") },
       ]) {
@@ -256,7 +213,7 @@ describe("afterSign 品牌应用 PE 版本资源兼容处理", () => {
         })
         await expectFailure(
           controller.afterSign({ ...afterSignContext(fixture), ...override }),
-          /afterSign|Windows|x64|portable|路径|output/i,
+          /afterSign|Windows|x64|dir|路径|output/i,
         )
       }
     } finally {
@@ -538,7 +495,7 @@ function afterSignContext(fixture: Awaited<ReturnType<typeof afterSignFixture>>)
     appOutDir: fixture.appOutDir,
     arch: 1,
     electronPlatformName: "win32",
-    targets: [{ name: "portable" }],
+    targets: [{ name: "dir" }],
     packager: {
       platform: { name: "windows", nodeName: "win32", buildConfigurationKey: "win" },
       appInfo: { productName: fixture.identity.name, version: fixture.identity.version },
@@ -595,7 +552,8 @@ function devIdentity(): BuildIdentity {
     version: "1.18.18-dev-0123456789",
     commit,
     shortCommit: "0123456789",
-    artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64-portable.exe",
+    artifactName: "BluedCode-Dev-1.18.18-dev-0123456789-windows-x64.zip",
+    artifactDirectoryName: "BluedCode-Dev-1.18.18-dev-0123456789",
   }
 }
 
@@ -608,7 +566,8 @@ function prodIdentity(): BuildIdentity {
     version: "1.18.18-260815-01-0123456789",
     commit,
     shortCommit: "0123456789",
-    artifactName: "BluedCode-1.18.18-260815-01-0123456789-windows-x64-portable.exe",
+    artifactName: "BluedCode-1.18.18-260815-01-0123456789-windows-x64.zip",
+    artifactDirectoryName: "BluedCode-1.18.18-260815-01-0123456789",
     tag: "bluedcode-v1.18.18-260815-01",
   }
 }

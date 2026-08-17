@@ -525,7 +525,8 @@ async function identityFixture(): Promise<BuildIdentity> {
     version,
     commit,
     shortCommit,
-    artifactName: `BluedCode-Dev-${version}-windows-x64-portable.exe`,
+    artifactDirectoryName: `BluedCode-Dev-${version}`,
+    artifactName: `BluedCode-Dev-${version}-windows-x64.zip`,
   }
 }
 
@@ -615,12 +616,14 @@ async function trackedTreeDigest(root: string) {
   if (result.exitCode !== 0) throw new Error(result.stderr.toString())
   const files = result.stdout.toString().split(/\r?\n/).filter(Boolean).sort()
   const digest = createHash("sha256")
-  for (const file of files)
+  for (const file of files) {
+    if (!(await exists(path.join(root, file)))) continue
     digest
       .update(file)
       .update("\0")
       .update(await readFile(path.join(root, file)))
       .update("\0")
+  }
   return digest.digest("hex")
 }
 

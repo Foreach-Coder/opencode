@@ -15,6 +15,7 @@ import {
 } from "./common/config"
 import { createGit, type Git } from "./common/git"
 import { collectConfiguredSecrets, readFailureContext, writeFailureReport, type FailureStage } from "./common/failure"
+import { createDistributionZip, extractDistributionZip } from "./common/distribution-zip"
 import { validateLedger, type UnifiedLedger } from "./common/ledger"
 import {
   assertConcreteDirectory,
@@ -25,7 +26,6 @@ import {
   verifyConcreteFile,
 } from "./common/isolation"
 import { createBuildPaths } from "./common/paths"
-import { auditFinalPortablePayload, portableExtractorLock } from "./common/portable"
 import { createReleaseManifest, digestBuildInputs, publishRelease, type PeAudit } from "./common/manifest"
 import { createAnnotatedTagCommand, refreshReleaseLedger } from "./common/release"
 import { createRuntimeAcceptanceEvidence, writeRuntimePortableConfig } from "./common/runtime-acceptance"
@@ -39,7 +39,6 @@ import "./version/1.18.18"
 import {
   createBrandedExecutableVersionHook,
   createBuilderConfig,
-  createPortableVersionHook,
   createReseditVersionOperations,
   deriveWindowsVersion,
   nativeRuntimeFiles,
@@ -87,18 +86,23 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
       throw new Error("BluedCode Desktop 构建仅支持 Windows x64")
     }
     const builderToolchain = resolveBuilderToolchain(context.paths.repositoryRoot)
-    const tools = {
-      ...(await readToolVersions(context.paths.repositoryRoot, builderToolchain)),
-      sevenZip: portableExtractorLock.version,
-    }
+    const tools = await readToolVersions(context.paths.repositoryRoot, builderToolchain)
 
     failureStage = "server"
-    const server = await buildServer(context.paths, context.identity, { desktopVersion: context.adapter.desktopVersion }, context.adapter)
+    const server = await buildServer(
+      context.paths,
+      context.identity,
+      { desktopVersion: context.adapter.desktopVersion },
+      context.adapter,
+    )
     const assetDigest = await validateBrandAssets(context.paths.frameworkRoot)
     const assets = await deriveDesktopAssets(context.paths)
     const electronVite = await loadElectronViteApi(context.paths)
     failureStage = "main"
-    await compileElectronVite({ adapter: context.adapter, assets, identity: context.identity, paths: context.paths, server }, electronVite)
+    await compileElectronVite(
+      { adapter: context.adapter, assets, identity: context.identity, paths: context.paths, server },
+      electronVite,
+    )
     await verifyElectronViteEvidence(context.paths)
     const outputRoot = path.join(context.paths.stageDir, "desktop", "out")
     const adapter = context.adapter
@@ -138,45 +142,51 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
       platform: "win32" as const,
     }
     failureStage = "package"
-    await packagePortable(
+    await packageWindowsDirectory(
       context.paths,
       createBuilderConfig(builderContext),
       context.identity,
       builderToolchain.electronBuilderFile,
     )
     const resourceEditAudit = brandedExecutable.requireAudit()
-    const executable = await findPortableArtifact(context.paths.outDir, context.identity.artifactName)
-    const siblingRoot = path.join(context.paths.outDir, "win-unpacked")
-    const siblingAudit = await auditPackagedApplication(
+    const packageRoot = await findPackagedApplicationDirectory(context.paths.outDir)
+    const packageAuditResult = await auditPackagedApplication(
       context.paths,
       context.identity,
       assets,
       packaging.nativeManifest,
-      siblingRoot,
+      packageRoot,
     )
-    const extracted = await auditFinalPortablePayload({
-      executable,
-      paths: context.paths,
-      siblingRoot,
-      auditApplication: (root) =>
-        auditPackagedApplication(context.paths, context.identity, assets, packaging.nativeManifest, root),
+    const artifactFile = path.join(context.paths.outDir, context.identity.artifactName)
+    const distributionZip = await createDistributionZip({
+      sourceRoot: packageRoot,
+      topLevelDirectory: context.identity.artifactDirectoryName,
+      zipFile: artifactFile,
     })
-    if (JSON.stringify(extracted.application) !== JSON.stringify(siblingAudit)) {
-      throw new Error("最终 Portable 提取应用审计与 win-unpacked 审计不一致")
+    const runtimePackageRoot = await extractDistributionZip({
+      zipFile: artifactFile,
+      targetRoot: path.join(context.paths.workspaceRoot, "runtime-extract"),
+      topLevelDirectory: context.identity.artifactDirectoryName,
+    })
+    const extractedAudit = await auditPackagedApplication(
+      context.paths,
+      context.identity,
+      assets,
+      packaging.nativeManifest,
+      runtimePackageRoot,
+    )
+    if (JSON.stringify(extractedAudit) !== JSON.stringify(packageAuditResult)) {
+      throw new Error("最终 zip 解压应用审计与 win-unpacked 审计不一致")
     }
-    const packageAudit = extracted.application.package
-    const portableAudit = {
-      ...extracted.portable,
-      applicationPe: extracted.application.pe,
-      nativeExecutableSignatures: extracted.application.nativeExecutableSignatures,
+    const packageAudit = packageAuditResult.package
+    const peAudit = packageAuditResult.pe
+    const distributionAudit = {
+      ...distributionZip.audit,
+      applicationPe: packageAuditResult.pe,
+      nativeExecutableSignatures: packageAuditResult.nativeExecutableSignatures,
       resourceEdit: resourceEditAudit,
     }
-    const peAudit = await auditPortablePe(executable, context.identity)
-    const artifactBytes = await readFile(executable)
-    const artifact = {
-      size: artifactBytes.byteLength,
-      sha256: sha256(artifactBytes),
-    }
+    const artifact = distributionZip.artifact
     const transformLedger = await verifyUnifiedLedgerEvidence(context.paths, adapter.modules, server.ledgerFile)
     const digests = await digestBuildInputs(context.paths)
     const release = context.identity.tag
@@ -193,7 +203,8 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
       : { targetTag: null, annotatedTagCommand: null }
     const runtimeHome = await writeRuntimePortableConfig(path.join(context.paths.workspaceRoot, "runtime-home"))
     const runtime = await createRuntimeAcceptanceEvidence({
-      executable,
+      executable: path.join(runtimePackageRoot, `${context.identity.name}.exe`),
+      mode: "windows-zip",
       home: runtimeHome,
       visibleVersion: context.identity.version,
     })
@@ -213,8 +224,7 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
         cache: {
           server: server.cacheHit,
           electronVite: false,
-          portable: false,
-          portableExtractorTool: extracted.portable.extractor.cacheHit,
+          distributionZip: false,
         },
         release,
         artifact,
@@ -224,13 +234,13 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
           output: outputAudit,
           package: packageAudit,
           pe: peAudit,
-          portable: portableAudit,
+          distributionZip: distributionAudit,
           runtime,
         },
       })
       const published = await publishRelease({
         artifactsRoot: context.paths.artifactsDir,
-        executable,
+        artifactFile,
         manifest,
         outputRoot: context.paths.outputRoot,
         repositoryRoot: context.paths.repositoryRoot,
@@ -239,7 +249,7 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
     })
     const manifest = finalized.manifest
     const published = finalized.published
-    console.log(`产物：${published.executable}`)
+    console.log(`产物：${published.artifact}`)
     console.log(`发行清单：${published.manifest}`)
     if (release.targetTag && release.annotatedTagCommand) {
       console.log(`Tag 候选：${release.targetTag}`)
@@ -551,23 +561,23 @@ function requireNativeRuntimeManifest(manifest: NativeRuntimeManifest) {
   return manifest.files
 }
 
-export async function findPortableArtifact(root: string, artifactName: string) {
-  if (path.basename(artifactName) !== artifactName || !artifactName.endsWith("-windows-x64-portable.exe")) {
-    throw new Error("Portable artifactName 无效")
-  }
+export async function findPackagedApplicationDirectory(root: string) {
   await requireConcreteRoot(root, "electron-builder output")
   const entries = await readdir(root, { withFileTypes: true })
   const files = entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
   const directories = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
   if (entries.some((entry) => entry.isSymbolicLink())) throw new Error("electron-builder output 拒绝链接")
-  if (files.length !== 1 || files[0] !== artifactName) {
-    throw new Error(`electron-builder output 含额外 EXE、zip、MSI 或其他分发产物: ${files.join(", ")}`)
+  if (files.some((file) => /\.(?:appimage|bat|cmd|com|exe|msi|ps1|sh)$/i.test(file))) {
+    throw new Error(`electron-builder output 不得包含 Portable EXE、MSI 或其他可执行分发产物: ${files.join(", ")}`)
+  }
+  if (files.length) {
+    throw new Error(`electron-builder output 只允许目录，zip 由发布层生成: ${files.join(", ")}`)
   }
   if (directories.length !== 1 || directories[0] !== "win-unpacked") {
     throw new Error(`electron-builder output 目录集合无效: ${directories.join(", ")}`)
   }
   await assertConcreteDirectory(root, path.join(root, "win-unpacked"))
-  return path.join(root, artifactName)
+  return path.join(root, "win-unpacked")
 }
 
 export async function readPeMetadata(executable: string) {
@@ -605,30 +615,26 @@ export async function readPeMetadata(executable: string) {
   return requirePeMetadata(JSON.parse(stdout))
 }
 
-export function validatePortablePe(
+export function validateWindowsApplicationPe(
   metadata: Awaited<ReturnType<typeof readPeMetadata>>,
   identity: BuildIdentity,
 ): PeAudit {
   const numericVersion = deriveWindowsVersion(identity)
-  if (metadata.productName !== identity.name) throw new Error(`Portable PE ProductName 不匹配: ${metadata.productName}`)
+  if (metadata.productName !== identity.name) throw new Error(`品牌应用 PE ProductName 不匹配: ${metadata.productName}`)
   if (metadata.productVersion !== identity.version) {
-    throw new Error(`Portable PE ProductVersion 不匹配: ${metadata.productVersion}`)
+    throw new Error(`品牌应用 PE ProductVersion 不匹配: ${metadata.productVersion}`)
   }
   if (metadata.fileVersion !== identity.version)
-    throw new Error(`Portable PE FileVersion 不匹配: ${metadata.fileVersion}`)
+    throw new Error(`品牌应用 PE FileVersion 不匹配: ${metadata.fileVersion}`)
   if (metadata.numericFileVersion !== numericVersion || metadata.numericProductVersion !== numericVersion) {
     throw new Error(
-      `Portable PE 数字版本不匹配: file=${metadata.numericFileVersion} product=${metadata.numericProductVersion} expected=${numericVersion}`,
+      `品牌应用 PE 数字版本不匹配: file=${metadata.numericFileVersion} product=${metadata.numericProductVersion} expected=${numericVersion}`,
     )
   }
   if (metadata.signatureStatus !== "NotSigned") {
-    throw new Error(`Portable EXE 必须 unsigned，实际签名状态: ${metadata.signatureStatus}`)
+    throw new Error(`品牌应用 EXE 必须 unsigned，实际签名状态: ${metadata.signatureStatus}`)
   }
   return { ...metadata, signatureStatus: "NotSigned", passed: true }
-}
-
-export async function auditPortablePe(executable: string, identity: BuildIdentity) {
-  return validatePortablePe(await readPeMetadata(executable), identity)
 }
 
 export function validateWinUnpackedExecutables(executableFiles: readonly string[], identity: BuildIdentity) {
@@ -928,7 +934,7 @@ async function verifyUnifiedLedgerEvidence(
   return { ledger, sha256: sha256(`${JSON.stringify(ledger, null, 2)}\n`) }
 }
 
-export async function packagePortable(
+export async function packageWindowsDirectory(
   paths: ReturnType<typeof createBuildPaths>,
   config: ReturnType<typeof createBuilderConfig>,
   identity: BuildIdentity,
@@ -945,19 +951,21 @@ export async function packagePortable(
   try {
     const loaded: unknown = await import(pathToFileURL(moduleFile).href)
     if (!isElectronBuilderModule(loaded)) throw new Error("electron-builder programmatic API 无效")
-    const targets = loaded.Platform.WINDOWS.createTarget(["portable"], loaded.Arch.x64)
+    const targets = loaded.Platform.WINDOWS.createTarget(["dir"], loaded.Arch.x64)
     restoreDebugCallbacks.push(await forceElectronBuilderDebugOff(moduleFile))
     process.chdir(paths.workspaceRoot)
     const artifacts = await loaded.build({
       config,
-      effectiveOptionComputed: createPortableVersionHook(identity),
       projectDir: desktop,
       publish: "never",
       targets,
     })
-    if (!artifacts.some((artifact) => path.basename(artifact) === identity.artifactName)) {
-      throw new Error(`electron-builder 未报告目标 Portable EXE: ${artifacts.join(", ")}`)
+    if (
+      artifacts.some((artifact) => path.basename(artifact).endsWith(".exe") || path.basename(artifact).endsWith(".zip"))
+    ) {
+      throw new Error(`electron-builder 不得直接报告单文件分发产物: ${artifacts.join(", ")}`)
     }
+    await findPackagedApplicationDirectory(paths.outDir)
   } finally {
     try {
       try {
@@ -1013,7 +1021,7 @@ async function auditPackagedApplication(
   const executableFiles = (await listConcreteFiles(unpackedRoot)).filter((file) => file.toLowerCase().endsWith(".exe"))
   const appExecutable = `${identity.name}.exe`
   validateWinUnpackedExecutables(executableFiles, identity)
-  const pe = validatePortablePe(await readPeMetadata(path.join(unpackedRoot, appExecutable)), identity)
+  const pe = validateWindowsApplicationPe(await readPeMetadata(path.join(unpackedRoot, appExecutable)), identity)
   const nativeExecutable =
     "resources/app.asar.unpacked/node_modules/@lydell/node-pty-win32-x64/prebuilds/win32-x64/conpty/OpenConsole.exe"
   const nativeMetadata = await readPeMetadata(path.join(unpackedRoot, ...nativeExecutable.split("/")))
@@ -1149,7 +1157,6 @@ type ElectronBuilderModule = {
   }
   build(options: {
     config: ReturnType<typeof createBuilderConfig>
-    effectiveOptionComputed: ReturnType<typeof createPortableVersionHook>
     projectDir: string
     publish: "never"
     targets: unknown

@@ -20,7 +20,7 @@ export type PortableSmokeFixtureResult = {
 }
 
 export type RuntimeAcceptanceEvidence = {
-  mode: "portable"
+  mode: "windows-zip"
   executableStarted: true
   serverHealthReady: true
   preloadReady: true
@@ -110,10 +110,11 @@ export async function createRuntimeAcceptanceEvidence(input: {
   executable?: string
   executableArgs?: readonly string[]
   home: string
+  mode: "windows-zip"
   visibleVersion: string
 }) {
-  if (!input.executable) throw new Error("缺少最终 Portable EXE")
-  await verifyPortableExecutable(input.executable)
+  if (!input.executable) throw new Error("缺少最终 zip 解压后的品牌 EXE")
+  await verifyWindowsZipExecutable(input.executable)
   if (!/^\d+\.\d+\.\d+(?:-(?:dev-[a-f0-9]{10}|\d{6}-\d{2}-[a-f0-9]{10}))$/.test(input.visibleVersion)) {
     throw new Error("运行时显示版本无效")
   }
@@ -131,16 +132,17 @@ export async function createRuntimeAcceptanceEvidence(input: {
     home: input.home,
     visibleVersion: input.visibleVersion,
   })
-  if (!run.executableStarted) throw new Error("Portable EXE 未启动")
-  if (run.mainProcessError) throw new Error(`Portable EXE 主进程失败: ${run.mainProcessError}`)
-  if (!run.serverHealthReady) throw new Error("Portable EXE server health 未就绪")
-  if (!run.preloadReady) throw new Error("Portable EXE preload 未就绪")
-  if (!run.rendererReady) throw new Error("Portable EXE renderer 未就绪")
-  if (!run.adminModelLoaded) throw new Error("Portable EXE 未读取管理员模型配置")
-  if (run.lingeringProcesses.length) throw new Error(`Portable EXE 残留进程: ${run.lingeringProcesses.join(", ")}`)
-  if (!run.exitedCleanly) throw new Error("Portable EXE 未干净退出")
+  if (!run.executableStarted) throw new Error("zip 解压后的品牌 EXE 未启动")
+  if (run.mainProcessError) throw new Error(`zip 解压后的品牌 EXE 主进程失败: ${run.mainProcessError}`)
+  if (!run.serverHealthReady) throw new Error("zip 解压后的品牌 EXE server health 未就绪")
+  if (!run.preloadReady) throw new Error("zip 解压后的品牌 EXE preload 未就绪")
+  if (!run.rendererReady) throw new Error("zip 解压后的品牌 EXE renderer 未就绪")
+  if (!run.adminModelLoaded) throw new Error("zip 解压后的品牌 EXE 未读取管理员模型配置")
+  if (run.lingeringProcesses.length)
+    throw new Error(`zip 解压后的品牌 EXE 残留进程: ${run.lingeringProcesses.join(", ")}`)
+  if (!run.exitedCleanly) throw new Error("zip 解压后的品牌 EXE 未干净退出")
   return {
-    mode: "portable" as const,
+    mode: input.mode,
     executableStarted: true as const,
     serverHealthReady: true as const,
     preloadReady: true as const,
@@ -164,7 +166,10 @@ export async function createRuntimeAcceptanceEvidence(input: {
   }
 }
 
-function requireSuccessfulSmoke(smoke: PortableSmokeFixtureResult, recoveryError: { code: "SESSION_NOT_FOUND"; message: string }) {
+function requireSuccessfulSmoke(
+  smoke: PortableSmokeFixtureResult,
+  recoveryError: { code: "SESSION_NOT_FOUND"; message: string },
+) {
   const deepLinkRefresh = smoke.deepLinkRefresh
   const disabledEntrypoints = smoke.disabledEntrypoints
   if (
@@ -271,7 +276,11 @@ async function runPortableExecutableSmoke(input: {
       exitedCleanly: exitCode === 0 && lingeringBeforeCleanup.length === 0,
       lingeringProcesses: lingeringBeforeCleanup,
       ...(stderrText.match(/(?:ReferenceError|TypeError|SyntaxError|preload error|fatal renderer error).*/i)?.[0]
-        ? { mainProcessError: stderrText.match(/(?:ReferenceError|TypeError|SyntaxError|preload error|fatal renderer error).*/i)?.[0] }
+        ? {
+            mainProcessError: stderrText.match(
+              /(?:ReferenceError|TypeError|SyntaxError|preload error|fatal renderer error).*/i,
+            )?.[0],
+          }
         : {}),
       stdout: stdoutText,
       stderr: stderrText,
@@ -291,7 +300,11 @@ async function runPortableExecutableSmoke(input: {
       return 143
     }),
   ])
-  const closedRuntime = await waitForNoRuntimeProcesses({ debugPort, home: input.home, timeoutMs: ready ? 8_000 : 1_000 })
+  const closedRuntime = await waitForNoRuntimeProcesses({
+    debugPort,
+    home: input.home,
+    timeoutMs: ready ? 8_000 : 1_000,
+  })
   const lingeringBeforeCleanup = closedRuntime ? [] : await findLingeringProcesses(input.home, debugPort)
   if (lingeringBeforeCleanup.length) {
     await terminateRuntimeProcesses(input.home, debugPort)
@@ -303,7 +316,11 @@ async function runPortableExecutableSmoke(input: {
     ...state,
     lingeringProcesses: lingeringBeforeCleanup,
     ...(stderrText.match(/(?:ReferenceError|TypeError|SyntaxError|preload error|fatal renderer error).*/i)?.[0]
-      ? { mainProcessError: stderrText.match(/(?:ReferenceError|TypeError|SyntaxError|preload error|fatal renderer error).*/i)?.[0] }
+      ? {
+          mainProcessError: stderrText.match(
+            /(?:ReferenceError|TypeError|SyntaxError|preload error|fatal renderer error).*/i,
+          )?.[0],
+        }
       : {}),
     stdout: stdoutText,
     stderr: stderrText,
@@ -358,7 +375,11 @@ function parseRuntimeEvent(line: string) {
   }
 }
 
-async function observeDesktopLogs(home: string, startedAt: number, state: Omit<PortableRunResult, "stdout" | "stderr">) {
+async function observeDesktopLogs(
+  home: string,
+  startedAt: number,
+  state: Omit<PortableRunResult, "stdout" | "stderr">,
+) {
   const roots = [
     path.join(home, "AppData", "Roaming", "ai.bluedcode.desktop.dev", "logs"),
     path.join(home, "AppData", "Roaming", "ai.bluedcode.desktop", "logs"),
@@ -367,7 +388,9 @@ async function observeDesktopLogs(home: string, startedAt: number, state: Omit<P
   if (!contents) return
   if (/app starting/i.test(contents)) state.executableStarted = true
   if (/loading task finished|server ready/i.test(contents)) state.serverHealthReady = true
-  const error = contents.match(/(?:preload error|fatal renderer error|app render process gone|ReferenceError|TypeError).*/i)?.[0]
+  const error = contents.match(
+    /(?:preload error|fatal renderer error|app render process gone|ReferenceError|TypeError).*/i,
+  )?.[0]
   if (error) state.mainProcessError = error
 }
 
@@ -560,11 +583,11 @@ async function readAdminConfig(home: string) {
   return JSON.parse(await readFile(file, "utf8")) as unknown
 }
 
-async function verifyPortableExecutable(executable: string) {
+async function verifyWindowsZipExecutable(executable: string) {
   const stats = await lstat(executable).catch(() => undefined)
-  if (!stats?.isFile()) throw new Error("缺少最终 Portable EXE")
+  if (!stats?.isFile()) throw new Error("缺少最终 zip 解压后的品牌 EXE")
   if (process.platform === "win32" && path.extname(executable).toLowerCase() !== ".exe") {
-    throw new Error("最终 Portable EXE 路径无效")
+    throw new Error("最终 zip 解压后的品牌 EXE 路径无效")
   }
 }
 

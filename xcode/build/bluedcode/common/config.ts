@@ -71,6 +71,7 @@ export async function resolveBuildIdentity(
   const product = deriveChannelIdentity(Product.profile, request.channel)
   if (request.channel === "dev") {
     const buildVersion = `${version}-dev-${shortCommit}`
+    const artifactDirectoryName = `${product.displayName.replaceAll(" ", "-")}-${buildVersion}`
     return {
       channel: product.channel,
       name: product.displayName as BuildIdentity["name"],
@@ -79,11 +80,13 @@ export async function resolveBuildIdentity(
       version: buildVersion,
       commit,
       shortCommit,
-      artifactName: `${product.displayName.replaceAll(" ", "-")}-${buildVersion}-windows-x64-portable.exe`,
+      artifactDirectoryName,
+      artifactName: `${artifactDirectoryName}-windows-x64.zip`,
     }
   }
 
   const buildVersion = `${version}-${request.release}-${shortCommit}`
+  const artifactDirectoryName = `${product.displayName.replaceAll(" ", "-")}-${buildVersion}`
   return {
     channel: product.channel,
     name: product.displayName as BuildIdentity["name"],
@@ -92,7 +95,8 @@ export async function resolveBuildIdentity(
     version: buildVersion,
     commit,
     shortCommit,
-    artifactName: `${product.displayName.replaceAll(" ", "-")}-${buildVersion}-windows-x64-portable.exe`,
+    artifactDirectoryName,
+    artifactName: `${artifactDirectoryName}-windows-x64.zip`,
     tag: `${product.directoryName}-v${version}-${request.release}`,
   }
 }

@@ -131,7 +131,6 @@ export function createBuilderConfig(context: BuilderContext): Configuration {
     npmRebuild: false,
     nodeGypRebuild: false,
     protocols: { name: context.identity.name, schemes: [context.identity.protocol] },
-    portable: { useZip: true },
     publish: null,
     removePackageKeywords: true,
     removePackageScripts: true,
@@ -140,7 +139,7 @@ export function createBuilderConfig(context: BuilderContext): Configuration {
       icon: context.assets.iconIco,
       signExecutable: false,
       signExts: null,
-      target: [{ target: "portable", arch: ["x64"] }],
+      target: [{ target: "dir", arch: ["x64"] }],
       verifyUpdateCodeSignature: false,
     },
   }
@@ -228,8 +227,8 @@ async function validateAfterPackContext(context: AfterPackContext, identity: Bui
   if (!context || typeof context !== "object") throw new Error("electron-builder afterSign context 无效")
   if (context.electronPlatformName !== "win32") throw new Error("electron-builder afterSign 仅允许 Windows")
   if (context.arch !== 1) throw new Error("electron-builder afterSign 仅允许 x64")
-  if (context.targets.length !== 1 || context.targets[0]?.name !== "portable") {
-    throw new Error("electron-builder afterSign target 必须唯一且为 portable")
+  if (context.targets.length !== 1 || context.targets[0]?.name !== "dir") {
+    throw new Error("electron-builder afterSign target 必须唯一且为 dir")
   }
   requirePackagerIdentity(context.packager, identity)
   const expectedOutDir = path.resolve(paths.outDir)
@@ -833,32 +832,10 @@ export function deriveWindowsVersion(identity: BuildIdentity) {
   return parts.join(".")
 }
 
-export function createPortableVersionHook(identity: BuildIdentity) {
-  const numericVersion = deriveWindowsVersion(identity)
-  return async (options: unknown) => {
-    const commands = requireNsisCommands(options)
-    const versionKeys = commands.versionKeys.map((entry) => {
-      if (/\sProductVersion\s/.test(entry)) {
-        return replaceVersionValue(entry, "ProductVersion", identity.version)
-      }
-      if (/\sFileVersion\s/.test(entry)) return replaceVersionValue(entry, "FileVersion", identity.version)
-      return entry
-    })
-    if (!versionKeys.some((entry) => entry.includes(`ProductVersion "${identity.version}"`))) {
-      throw new Error("electron-builder Portable 缺少完整 ProductVersion")
-    }
-    if (!versionKeys.some((entry) => entry.includes(`FileVersion "${identity.version}"`))) {
-      throw new Error("electron-builder Portable 缺少完整 FileVersion")
-    }
-    commands.update(numericVersion, versionKeys)
-    return false
-  }
-}
-
 function requireBuilderContext(context: BuilderContext) {
-  if (context.platform !== "win32") throw new Error("BluedCode Portable 仅支持 Windows")
-  if (context.arch !== "x64") throw new Error("BluedCode Portable 仅支持 Windows x64")
-  if (typeof context.afterSign !== "function") throw new Error("BluedCode Portable afterSign 钩子无效")
+  if (context.platform !== "win32") throw new Error("BluedCode 目录包仅支持 Windows")
+  if (context.arch !== "x64") throw new Error("BluedCode 目录包仅支持 Windows x64")
+  if (typeof context.afterSign !== "function") throw new Error("BluedCode 目录包 afterSign 钩子无效")
   requireIdentity(context.identity)
   if (!/^\d+\.\d+\.\d+$/.test(context.electronVersion)) throw new Error("Electron 版本无效")
   const assetRoot = path.dirname(context.assets.iconIco)
@@ -892,39 +869,6 @@ function requireIdentity(identity: BuildIdentity) {
   if (identity.protocol !== "bluedcode" || identity.tag !== `bluedcode-v${identity.version.slice(0, 17)}`) {
     throw new Error("prod 协议或 tag 无效")
   }
-}
-
-function requireNsisCommands(input: unknown) {
-  if (!Array.isArray(input) || input.length !== 2) throw new Error("electron-builder Portable 选项结构无效")
-  const commands = input[1]
-  if (!commands || typeof commands !== "object" || Array.isArray(commands)) {
-    throw new Error("electron-builder Portable commands 无效")
-  }
-  if (!("VIAddVersionKey" in commands) || !Array.isArray(commands.VIAddVersionKey)) {
-    throw new Error("electron-builder Portable version keys 无效")
-  }
-  if (!("VIProductVersion" in commands) || typeof commands.VIProductVersion !== "string") {
-    throw new Error("electron-builder Portable 数字版本字段无效")
-  }
-  if (!commands.VIAddVersionKey.every((entry) => typeof entry === "string")) {
-    throw new Error("electron-builder Portable version key 必须是字符串")
-  }
-  const versionKeys = commands.VIAddVersionKey.filter((entry): entry is string => typeof entry === "string")
-  return {
-    versionKeys,
-    update(numericVersion: string, nextKeys: string[]) {
-      commands.VIProductVersion = numericVersion
-      commands.VIAddVersionKey = nextKeys
-    },
-  }
-}
-
-function replaceVersionValue(entry: string, key: "FileVersion" | "ProductVersion", value: string) {
-  const replaced = entry.replace(new RegExp(`(\\s${key}\\s+)"[^"]*"`), `$1"${value}"`)
-  if (replaced === entry && !entry.includes(`${key} "${value}"`)) {
-    throw new Error(`electron-builder Portable ${key} 结构无效`)
-  }
-  return replaced
 }
 
 function isStrictDescendant(root: string, target: string) {

@@ -17,7 +17,8 @@ const identity: BuildIdentity = {
   version: "1.18.18-260815-01-31406ccc51",
   commit: adapter11818.commit,
   shortCommit: adapter11818.commit.slice(0, 10),
-  artifactName: "BluedCode-1.18.18-260815-01-31406ccc51-windows-x64-portable.exe",
+  artifactDirectoryName: "BluedCode-1.18.18-260815-01-31406ccc51",
+  artifactName: "BluedCode-1.18.18-260815-01-31406ccc51-windows-x64.zip",
   tag: "bluedcode-v1.18.18-260815-01",
 }
 
@@ -116,12 +117,32 @@ describe("BluedCode 1.18.18 服务端策略适配", () => {
   test("源码能力门禁的上游链接残留由输出审计逐项说明", () => {
     expect(adapter11818.auditPolicy.allow).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "renderer-enterprise-share-translation-keys", classification: "evidence", expected: "any" }),
-        expect.objectContaining({ id: "renderer-enterprise-share-publish-translation-keys", classification: "evidence", expected: "any" }),
-        expect.objectContaining({ id: "renderer-enterprise-share-unpublish-translation-keys", classification: "evidence", expected: "any" }),
+        expect.objectContaining({
+          id: "renderer-enterprise-share-translation-keys",
+          classification: "evidence",
+          expected: "any",
+        }),
+        expect.objectContaining({
+          id: "renderer-enterprise-share-publish-translation-keys",
+          classification: "evidence",
+          expected: "any",
+        }),
+        expect.objectContaining({
+          id: "renderer-enterprise-share-unpublish-translation-keys",
+          classification: "evidence",
+          expected: "any",
+        }),
         expect.objectContaining({ id: "main-enterprise-github-residue", classification: "evidence", expected: "any" }),
-        expect.objectContaining({ id: "renderer-enterprise-changelog-residue", classification: "evidence", expected: "any" }),
-        expect.objectContaining({ id: "server-enterprise-installation-upgrade-symbol", classification: "evidence", expected: "any" }),
+        expect.objectContaining({
+          id: "renderer-enterprise-changelog-residue",
+          classification: "evidence",
+          expected: "any",
+        }),
+        expect.objectContaining({
+          id: "server-enterprise-installation-upgrade-symbol",
+          classification: "evidence",
+          expected: "any",
+        }),
       ]),
     )
   })
