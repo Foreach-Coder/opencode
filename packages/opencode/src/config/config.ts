@@ -35,6 +35,7 @@ import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
+import { ProductPolicy } from "@/product/policy"
 
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
@@ -114,8 +115,24 @@ type Info = ConfigV1.Info & {
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
+export type AdminProviderConfig = Pick<
+  Info,
+  "provider" | "model" | "small_model" | "enabled_providers" | "disabled_providers"
+>
+
+function adminProviderConfig(info: Info): AdminProviderConfig {
+  return {
+    ...(info.provider === undefined ? {} : { provider: info.provider }),
+    ...(info.model === undefined ? {} : { model: info.model }),
+    ...(info.small_model === undefined ? {} : { small_model: info.small_model }),
+    ...(info.enabled_providers === undefined ? {} : { enabled_providers: info.enabled_providers }),
+    ...(info.disabled_providers === undefined ? {} : { disabled_providers: info.disabled_providers }),
+  }
+}
+
 type State = {
   config: Info
+  adminProviderConfig: AdminProviderConfig
   directories: string[]
   deps: Fiber.Fiber<void>[]
   consoleState: ConsoleState
@@ -123,6 +140,7 @@ type State = {
 
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
+  readonly getAdminProviderConfig: () => Effect.Effect<AdminProviderConfig>
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
@@ -243,6 +261,20 @@ const layer = Layer.effect(
       return yield* loadConfig(text, { path: filepath }, env)
     })
 
+    const loadStaticFile = Effect.fnUntraced(function* (filepath: string) {
+      const text = yield* readConfigFile(filepath)
+      if (!text) return {} as Info
+      return ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(text, filepath), filepath)
+    })
+
+    const loadAdminGlobal = Effect.fnUntraced(function* () {
+      let result: Info = {}
+      result = mergeConfig(result, yield* loadStaticFile(path.join(Global.Path.config, "config.json")))
+      result = mergeConfig(result, yield* loadStaticFile(path.join(Global.Path.config, "opencode.json")))
+      result = mergeConfig(result, yield* loadStaticFile(path.join(Global.Path.config, "opencode.jsonc")))
+      return adminProviderConfig(result)
+    })
+
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
@@ -316,6 +348,7 @@ const layer = Layer.effect(
         const auth = yield* authSvc.all().pipe(Effect.orDie)
 
         let result: Info = {}
+        const adminConfig = yield* loadAdminGlobal()
         const authEnv: Record<string, string> = {}
         const consoleManagedProviders = new Set<string>()
         let activeOrgName: string | undefined
@@ -517,20 +550,19 @@ const layer = Layer.effect(
         if (existsSync(managedDir)) {
           for (const file of ["opencode.json", "opencode.jsonc"]) {
             const source = path.join(managedDir, file)
-            yield* merge(source, yield* loadFile(source), "global")
+            const next = yield* loadFile(source)
+            yield* merge(source, next, "global")
           }
         }
 
         // macOS managed preferences (.mobileconfig deployed via MDM) override everything
         const managed = yield* Effect.promise(() => ConfigManaged.readManagedPreferences())
         if (managed) {
-          result = mergeConfigConcatArrays(
-            result,
-            yield* loadConfig(managed.text, {
-              dir: path.dirname(managed.source),
-              source: managed.source,
-            }),
-          )
+          const next = yield* loadConfig(managed.text, {
+            dir: path.dirname(managed.source),
+            source: managed.source,
+          })
+          result = mergeConfigConcatArrays(result, next)
         }
 
         for (const [name, mode] of Object.entries(result.mode ?? {})) {
@@ -585,6 +617,7 @@ const layer = Layer.effect(
 
         return {
           config: result,
+          adminProviderConfig: adminConfig,
           directories,
           deps,
           consoleState: {
@@ -607,6 +640,10 @@ const layer = Layer.effect(
       return yield* InstanceState.use(state, (s) => s.config)
     })
 
+    const getAdminProviderConfig = Effect.fn("Config.getAdminProviderConfig")(function* () {
+      return yield* InstanceState.use(state, (s) => s.adminProviderConfig)
+    })
+
     const directories = Effect.fn("Config.directories")(function* () {
       return yield* InstanceState.use(state, (s) => s.directories)
     })
@@ -622,6 +659,7 @@ const layer = Layer.effect(
     })
 
     const update = Effect.fn("Config.update")(function* (config: Info) {
+      ProductPolicy.rejectConfigWrite(config)
       const dir = yield* InstanceState.directory
       const file = path.join(dir, "config.json")
       const existing = yield* loadFile(file)
@@ -635,6 +673,7 @@ const layer = Layer.effect(
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+      ProductPolicy.rejectConfigWrite(config)
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
       const patch = writableGlobal(config)
@@ -661,6 +700,7 @@ const layer = Layer.effect(
 
     return Service.of({
       get,
+      getAdminProviderConfig,
       getGlobal,
       getConsoleState,
       update,

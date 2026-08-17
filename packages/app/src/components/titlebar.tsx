@@ -39,6 +39,7 @@ import type { PromptSession } from "@/context/prompt"
 import "./titlebar.css"
 import { newTabTooltipKeybind } from "./command-tooltip-keybind"
 import { normalizeSessionInfo } from "@/utils/session"
+import { ProductCapabilities } from "@/product/capabilities"
 
 const legacyTitlebarHeight = 40
 const v2TitlebarHeight = 36
@@ -122,10 +123,11 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
   const nav = createMemo(() => (useV2Titlebar() ? settings.general.showNavigation() : true))
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
+    const updater = ProductCapabilities.visibleDesktopEntries().updater
     const installing = props.update?.installing() ?? false
     const version = props.update?.version()
     return {
-      visible: version !== undefined || installing,
+      visible: updater && (version !== undefined || installing),
       installing,
       label: language.t("titlebar.update"),
       ariaLabel: language.t("toast.update.action.installRestart"),

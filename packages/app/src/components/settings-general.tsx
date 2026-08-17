@@ -31,6 +31,7 @@ import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { ExternalLink } from "./external-link"
 import { SettingsList } from "./settings-list"
+import { ProductCapabilities } from "@/product/capabilities"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -253,32 +254,36 @@ export const SettingsGeneral: Component = () => {
   })
 
   const InterfaceSection = () => (
-    <div class="flex flex-col gap-1">
-      <SettingsList>
-        <SettingsRow
-          title={
-            <span class="flex items-center gap-2">
-              {language.t("settings.general.row.newInterface.title")}
-              <Tag variant="accent">{language.t("settings.general.row.newInterface.badge")}</Tag>
-            </span>
-          }
-          description={language.t("settings.general.row.newInterface.description")}
-        >
-          <div data-action="settings-new-layout-designs">
-            <Switch
-              checked={settings.general.newLayoutDesigns()}
-              onChange={(checked) => {
-                settings.general.setNewLayoutDesigns(checked)
-                if (!checked) return
-                void import("@/components/settings-v2").then((module) => {
-                  void dialog.show(() => <module.DialogSettings />)
-                })
-              }}
-            />
-          </div>
-        </SettingsRow>
-      </SettingsList>
-    </div>
+    <Show
+      when={ProductCapabilities.visibleSettingsToggles({ newLayout: settings.general.newLayoutDesigns() }).newLayout}
+    >
+      <div class="flex flex-col gap-1">
+        <SettingsList>
+          <SettingsRow
+            title={
+              <span class="flex items-center gap-2">
+                {language.t("settings.general.row.newInterface.title")}
+                <Tag variant="accent">{language.t("settings.general.row.newInterface.badge")}</Tag>
+              </span>
+            }
+            description={language.t("settings.general.row.newInterface.description")}
+          >
+            <div data-action="settings-new-layout-designs">
+              <Switch
+                checked={settings.general.newLayoutDesigns()}
+                onChange={(checked) => {
+                  settings.general.setNewLayoutDesigns(checked)
+                  if (!checked) return
+                  void import("@/components/settings-v2").then((module) => {
+                    void dialog.show(() => <module.DialogSettings />)
+                  })
+                }}
+              />
+            </div>
+          </SettingsRow>
+        </SettingsList>
+      </div>
+    </Show>
   )
 
   const InterfaceNoticeSection = () => (
@@ -748,9 +753,7 @@ export const SettingsGeneral: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 w-full">
-        <Show when={settings.general.layoutTransitionAvailable()}>
-          <InterfaceSection />
-        </Show>
+        <InterfaceSection />
 
         <Show when={settings.general.newInterfaceNoticeVisible()}>
           <InterfaceNoticeSection />
@@ -764,7 +767,9 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <UpdatesSection />
+        <Show when={ProductCapabilities.visibleDesktopEntries().updater}>
+          <UpdatesSection />
+        </Show>
 
         <DisplaySection />
 

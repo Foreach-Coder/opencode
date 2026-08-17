@@ -16,6 +16,7 @@ import { showToast } from "@/utils/toast"
 import { DialogAddWslServer } from "./dialog-add-server"
 import { useWslServers } from "./context"
 import { wslOpencodeAction, wslRuntimeRetryable } from "./settings-model"
+import { ProductCapabilities } from "@/product/capabilities"
 
 type Controller = ReturnType<typeof useServerManagementController>
 
@@ -32,7 +33,7 @@ export function AddServerMenu(props: { onAddServer: () => void }) {
   }
   return (
     <Show
-      when={platform.wslServers}
+      when={platform.wslServers && ProductCapabilities.visibleDesktopEntries().wsl}
       fallback={
         <ButtonV2 variant="ghost-muted" icon="plus" onClick={props.onAddServer}>
           {language.t("dialog.server.add.button")}
@@ -90,7 +91,7 @@ export function WslServerSettings(props: {
   }
 
   return (
-    <Show when={api}>
+    <Show when={api && ProductCapabilities.visibleDesktopEntries().wsl}>
       <For each={props.servers()}>
         {(item) => {
           const key = ServerConnection.Key.make(item.config.id)

@@ -38,6 +38,8 @@ import {
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
+import { ProductPolicy } from "@/product/network-policy"
+import { ProductHttpPolicy } from "@/product/http-policy"
 
 const tryParseJson = (text: string) =>
   Effect.try({
@@ -251,24 +253,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return true
     })
 
-    // share/unshare errors aren't all client-induced — storage and network
-    // failures from SessionShare are real possibilities. Map to a typed 500
-    // (matches the legacy route behavior which routed any failure through
-    // ErrorMiddleware → NamedError.Unknown 500) instead of blanket-mapping
-    // every failure to a 400 BadRequest.
-    const share = Effect.fn("SessionHttpApi.share")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* requireSession(ctx.params.sessionID)
-      yield* shareSvc.share(ctx.params.sessionID).pipe(Effect.mapError(() => new HttpApiError.InternalServerError({})))
-      return yield* requireSession(ctx.params.sessionID)
-    })
+    const share = Effect.fn("SessionHttpApi.share")(() =>
+      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectPublicShare)),
+    )
 
-    const unshare = Effect.fn("SessionHttpApi.unshare")(function* (ctx: { params: { sessionID: SessionID } }) {
-      yield* requireSession(ctx.params.sessionID)
-      yield* shareSvc
-        .unshare(ctx.params.sessionID)
-        .pipe(Effect.mapError(() => new HttpApiError.InternalServerError({})))
-      return yield* requireSession(ctx.params.sessionID)
-    })
+    const unshare = Effect.fn("SessionHttpApi.unshare")(() =>
+      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectPublicShare)),
+    )
 
     const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
       params: { sessionID: SessionID }
@@ -425,8 +416,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
       .handle("init", init)
-      .handle("share", share)
-      .handle("unshare", unshare)
+      .handleRaw("share", share)
+      .handleRaw("unshare", unshare)
       .handle("summarize", summarize)
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)

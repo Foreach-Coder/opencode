@@ -21,6 +21,7 @@ import { decode64 } from "@/utils/base64"
 import { SettingsListV2 } from "./settings-v2/parts/list"
 import { SettingsRowV2 } from "./settings-v2/parts/row"
 import "./settings-v2/settings-v2.css"
+import { ProductCapabilities } from "@/product/capabilities"
 
 type ModelItem = ReturnType<ReturnType<typeof useLocal>["model"]["list"]>[number]
 
@@ -31,6 +32,7 @@ export const DialogManageModels: Component = () => {
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
+    if (!ProductCapabilities.visibleProviderActions({}).connect) return
     void dialog.show(() => <DialogConnectProvider directory={directory} />)
   }
   const providerRank = (id: string) => popularProviders.indexOf(id)
@@ -48,9 +50,11 @@ export const DialogManageModels: Component = () => {
       title={language.t("dialog.model.manage")}
       description={language.t("dialog.model.manage.description")}
       action={
-        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={handleConnectProvider}>
-          {language.t("command.provider.connect")}
-        </Button>
+        <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+          <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={handleConnectProvider}>
+            {language.t("command.provider.connect")}
+          </Button>
+        </Show>
       }
     >
       <List
@@ -123,6 +127,7 @@ export const DialogManageModelsV2: Component = () => {
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
+    if (!ProductCapabilities.visibleProviderActions({}).connect) return
     void dialog.show(() => <DialogConnectProvider directory={directory} />)
   }
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
@@ -160,9 +165,11 @@ export const DialogManageModelsV2: Component = () => {
           title={language.t("dialog.model.manage")}
           description={language.t("dialog.model.manage.description")}
         />
-        <ButtonV2 variant="neutral" icon="plus" onClick={handleConnectProvider}>
-          {language.t("command.provider.connect")}
-        </ButtonV2>
+        <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+          <ButtonV2 variant="neutral" icon="plus" onClick={handleConnectProvider}>
+            {language.t("command.provider.connect")}
+          </ButtonV2>
+        </Show>
       </DialogHeader>
       <DialogBody class="flex min-h-0 flex-1 flex-col">
         <div class="px-4 pt-px pb-3">

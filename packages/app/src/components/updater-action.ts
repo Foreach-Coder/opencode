@@ -3,6 +3,7 @@ import type { UpdaterState } from "@/updater"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@/utils/toast"
+import { Product } from "@foreachcode/product"
 
 export function updaterAction(state: UpdaterState | undefined) {
   if (!state) return { label: "settings.updates.action.checkNow" as const }
@@ -30,6 +31,7 @@ export function useUpdaterAction() {
   return {
     action,
     async run() {
+      Product.assertCapability(Product.profile, "updater")
       const run = action().run
       if (run === "install") return platform.updater?.install()
       if (run !== "check") return

@@ -8,6 +8,7 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { errorDescriptionKey } from "./error-description"
+import { ProductCapabilities } from "@/product/capabilities"
 
 export type InitError = {
   name: string
@@ -245,11 +246,13 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   })
 
   async function checkForUpdates() {
+    if (!ProductCapabilities.visibleDesktopEntries().updater) return
     const state = await platform.updater?.check()
     setStore("actionError", state?.status === "error" ? state.message : undefined)
   }
 
   async function installUpdate() {
+    if (!ProductCapabilities.visibleDesktopEntries().updater) return
     await platform.updater
       ?.install()
       .then(() => setStore("actionError", undefined))
@@ -258,9 +261,10 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       })
   }
 
-  const updateVersion = () => {
+  const updateVersion = (): string | undefined => {
+    if (!ProductCapabilities.visibleDesktopEntries().updater) return undefined
     const state = platform.updater?.state()
-    if (state?.status !== "ready") return
+    if (state?.status !== "ready") return undefined
     return state.version
   }
 
@@ -321,7 +325,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               )
             }}
           </Show>
-          <Show when={platform.updater}>
+          <Show when={ProductCapabilities.visibleDesktopEntries().updater && platform.updater}>
             <Show
               when={updateVersion()}
               fallback={

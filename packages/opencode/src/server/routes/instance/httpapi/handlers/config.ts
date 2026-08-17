@@ -1,10 +1,10 @@
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
-import * as InstanceState from "@/effect/instance-state"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { markInstanceForDisposal } from "../lifecycle"
+import { ProductPolicy } from "@/product/policy"
+import { ProductHttpPolicy } from "@/product/http-policy"
 
 export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (handlers) =>
   Effect.gen(function* () {
@@ -15,11 +15,9 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       return yield* configSvc.get()
     })
 
-    const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
-      yield* configSvc.update(ctx.payload)
-      yield* markInstanceForDisposal(yield* InstanceState.context)
-      return ctx.payload
-    })
+    const update = Effect.fn("ConfigHttpApi.update")(() =>
+      Effect.succeed(ProductHttpPolicy.reject(() => ProductPolicy.rejectConfigWrite(undefined))),
+    )
 
     const providers = Effect.fn("ConfigHttpApi.providers")(function* () {
       const providers = yield* providerSvc.list()
@@ -29,6 +27,6 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       }
     })
 
-    return handlers.handle("get", get).handle("update", update).handle("providers", providers)
+    return handlers.handle("get", get).handleRaw("update", update).handle("providers", providers)
   }),
 )

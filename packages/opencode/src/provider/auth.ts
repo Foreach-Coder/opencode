@@ -1,12 +1,10 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import type { AuthOAuthResult, Hooks } from "@opencode-ai/plugin"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { Auth } from "@/auth"
-import { InstanceState } from "@/effect/instance-state"
+import type { Auth } from "@/auth"
 import { optional } from "@opencode-ai/core/schema"
-import { Plugin } from "../plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { Array as Arr, Effect, Layer, Record, Result, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema } from "effect"
+import { ProductPolicy } from "@/product/policy"
 
 const When = Schema.Struct({
   key: Schema.String,
@@ -85,8 +83,6 @@ export class ValidationFailed extends Schema.TaggedErrorClass<ValidationFailed>(
 
 export type Error = Auth.AuthError | OauthMissing | OauthCodeMissing | OauthCallbackFailed | ValidationFailed
 
-type Hook = NonNullable<Hooks["auth"]>
-
 export interface Interface {
   readonly methods: () => Effect.Effect<Methods>
   readonly authorize: (
@@ -97,133 +93,30 @@ export interface Interface {
   readonly callback: (input: { providerID: ProviderV2.ID } & CallbackInput) => Effect.Effect<void, Error>
 }
 
-interface State {
-  hooks: Record<ProviderV2.ID, Hook>
-  pending: Map<ProviderV2.ID, AuthOAuthResult>
-}
-
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProviderAuth") {}
 
 export const use = serviceUse(Service)
 
-const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.effect(
+const decode = Schema.decodeUnknownSync(Methods)
+const layer = Layer.succeed(
   Service,
-  Effect.gen(function* () {
-    const auth = yield* Auth.Service
-    const plugin = yield* Plugin.Service
-    const state = yield* InstanceState.make<State>(
-      Effect.fn("ProviderAuth.state")(function* () {
-        const plugins = yield* plugin.list()
-        return {
-          hooks: Record.fromEntries(
-            Arr.filterMap(plugins, (x) =>
-              x.auth?.provider !== undefined
-                ? Result.succeed([ProviderV2.ID.make(x.auth.provider), x.auth] as const)
-                : Result.failVoid,
-            ),
-          ),
-          pending: new Map<ProviderV2.ID, AuthOAuthResult>(),
-        }
-      }),
-    )
-
-    const decode = Schema.decodeUnknownSync(Methods)
-    const methods = Effect.fn("ProviderAuth.methods")(function* () {
-      const hooks = (yield* InstanceState.get(state)).hooks
-      return decode(
-        Record.map(hooks, (item) =>
-          item.methods.map((method) => ({
-            type: method.type,
-            label: method.label,
-            ...(method.prompts && {
-              prompts: method.prompts.map((prompt) => {
-                if (prompt.type === "select") {
-                  return {
-                    type: "select" as const,
-                    key: prompt.key,
-                    message: prompt.message,
-                    options: prompt.options,
-                    ...(prompt.when && { when: prompt.when }),
-                  }
-                }
-                return {
-                  type: "text" as const,
-                  key: prompt.key,
-                  message: prompt.message,
-                  ...(prompt.placeholder && { placeholder: prompt.placeholder }),
-                  ...(prompt.when && { when: prompt.when }),
-                }
-              }),
-            }),
-          })),
-        ),
-      )
-    })
-
-    const authorize = Effect.fn("ProviderAuth.authorize")(function* (
-      input: { providerID: ProviderV2.ID } & AuthorizeInput,
+  Service.of({
+    methods: Effect.fn("ProviderAuth.methods")(function* () {
+      return decode({})
+    }),
+    authorize: Effect.fn("ProviderAuth.authorize")(function* (
+      _input: { providerID: ProviderV2.ID } & AuthorizeInput,
     ) {
-      const { hooks, pending } = yield* InstanceState.get(state)
-      const method = hooks[input.providerID].methods[input.method]
-      if (method.type !== "oauth") return
-
-      if (method.prompts && input.inputs) {
-        for (const prompt of method.prompts) {
-          if (prompt.type === "text" && prompt.validate && input.inputs[prompt.key] !== undefined) {
-            const error = prompt.validate(input.inputs[prompt.key])
-            if (error) return yield* new ValidationFailed({ field: prompt.key, message: error })
-          }
-        }
-      }
-
-      const result = yield* Effect.promise(() => method.authorize(input.inputs))
-      pending.set(input.providerID, result)
-      return {
-        url: result.url,
-        method: result.method,
-        instructions: result.instructions,
-      }
-    })
-
-    const callback = Effect.fn("ProviderAuth.callback")(function* (
-      input: { providerID: ProviderV2.ID } & CallbackInput,
+      ProductPolicy.rejectProviderWrite()
+    }),
+    callback: Effect.fn("ProviderAuth.callback")(function* (
+      _input: { providerID: ProviderV2.ID } & CallbackInput,
     ) {
-      const pending = (yield* InstanceState.get(state)).pending
-      const match = pending.get(input.providerID)
-      if (!match) return yield* new OauthMissing({ providerID: input.providerID })
-      if (match.method === "code" && !input.code) {
-        return yield* new OauthCodeMissing({ providerID: input.providerID })
-      }
-
-      const result = yield* Effect.promise(() =>
-        match.method === "code" ? match.callback(input.code!) : match.callback(),
-      )
-      if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
-
-      if ("key" in result) {
-        yield* auth.set(input.providerID, {
-          type: "api",
-          key: result.key,
-          ...(result.metadata ? { metadata: result.metadata } : {}),
-        })
-      }
-
-      if ("refresh" in result) {
-        const { type: _, provider: __, refresh, access, expires, ...extra } = result
-        yield* auth.set(input.providerID, {
-          type: "oauth",
-          access,
-          refresh,
-          expires,
-          ...extra,
-        })
-      }
-    })
-
-    return Service.of({ methods, authorize, callback })
+      ProductPolicy.rejectAuthWrite()
+    }),
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [Auth.node, Plugin.node] })
+export const node = LayerNode.make({ service: Service, layer, deps: [] })
 
 export * as ProviderAuth from "./auth"

@@ -1,4 +1,5 @@
 import type { DesktopNativeKey } from "./i18n/desktop-native"
+import { ProductCapabilities } from "./product/capabilities"
 
 export type DesktopMenuPlatform = "macos" | "windows"
 
@@ -78,12 +79,16 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     platforms: ["macos"],
     items: [
       { type: "item", role: "about" },
-      {
-        type: "item",
-        labelKey: "desktop.menu.checkForUpdates",
-        action: "app.checkForUpdates",
-        enabled: "updater",
-      },
+      ...(ProductCapabilities.visibleDesktopEntries().updater
+        ? [
+            {
+              type: "item" as const,
+              labelKey: "desktop.menu.checkForUpdates" as const,
+              action: "app.checkForUpdates" as const,
+              enabled: "updater" as const,
+            },
+          ]
+        : []),
       { type: "item", labelKey: "desktop.menu.settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
       { type: "item", labelKey: "desktop.menu.reloadWebview", action: "view.reload" },
       { type: "item", labelKey: "desktop.menu.restart", action: "app.relaunch" },

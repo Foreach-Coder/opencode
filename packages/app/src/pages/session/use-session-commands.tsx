@@ -12,6 +12,7 @@ import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
+import { ProductCapabilities } from "@/product/capabilities"
 import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
@@ -422,24 +423,30 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const shareCmds = () => {
     if (sync().data.config.share === "disabled") return []
     return [
-      sessionCommand({
-        id: "session.share",
-        title: info()?.share?.url ? language.t("session.share.copy.copyLink") : language.t("command.session.share"),
-        description: info()?.share?.url
-          ? language.t("toast.session.share.success.description")
-          : language.t("command.session.share.description"),
-        slash: "share",
-        disabled: !params.id,
-        onSelect: share,
-      }),
-      sessionCommand({
-        id: "session.unshare",
-        title: language.t("command.session.unshare"),
-        description: language.t("command.session.unshare.description"),
-        slash: "unshare",
-        disabled: !params.id || !info()?.share?.url,
-        onSelect: unshare,
-      }),
+      ...(ProductCapabilities.visibleDesktopEntries().share
+        ? [
+            sessionCommand({
+              id: "session.share",
+              title: info()?.share?.url
+                ? language.t("session.share.copy.copyLink")
+                : language.t("command.session.share"),
+              description: info()?.share?.url
+                ? language.t("toast.session.share.success.description")
+                : language.t("command.session.share.description"),
+              slash: "share",
+              disabled: !params.id,
+              onSelect: share,
+            }),
+            sessionCommand({
+              id: "session.unshare",
+              title: language.t("command.session.unshare"),
+              description: language.t("command.session.unshare.description"),
+              slash: "unshare",
+              disabled: !params.id || !info()?.share?.url,
+              onSelect: unshare,
+            }),
+          ]
+        : []),
     ]
   }
 

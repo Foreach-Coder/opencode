@@ -26,6 +26,7 @@ import {
   type SoundSettingsController,
 } from "./general-controllers"
 import "./settings-v2.css"
+import { ProductCapabilities } from "@/product/capabilities"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
 const fontSettings = {
@@ -542,9 +543,7 @@ export const SettingsGeneralV2: Component<{
       </div>
 
       <div class="settings-v2-tab-body">
-        <Show when={settings.general.layoutTransitionAvailable()}>
-          <InterfaceSection />
-        </Show>
+        <InterfaceSection />
 
         <Show when={settings.general.newInterfaceNoticeVisible()}>
           <InterfaceNoticeSection />
@@ -558,7 +557,7 @@ export const SettingsGeneralV2: Component<{
 
         <SoundsSection controller={sounds} />
 
-        <Show when={desktop()}>
+        <Show when={desktop() && ProductCapabilities.visibleDesktopEntries().updater}>
           <UpdatesSection />
         </Show>
 

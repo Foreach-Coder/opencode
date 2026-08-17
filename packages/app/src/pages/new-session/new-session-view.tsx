@@ -20,6 +20,7 @@ import { useSDK } from "@/context/sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
+import { ProductCapabilities } from "@/product/capabilities"
 import { Persist, persisted } from "@/utils/persist"
 import type { NewSessionDraftController } from "./new-session-draft-controller"
 import type { NewSessionWorkspaceController } from "./new-session-workspace-controller"
@@ -105,6 +106,7 @@ function ProviderTip() {
   const visible = createMemo(
     () =>
       serverSync().child(sdk().directory)[0].provider_ready &&
+      ProductCapabilities.visibleProviderActions({}).connect &&
       persistedReady() &&
       providers.paid().length === 0 &&
       Date.now() - persistedState.dismissedAt >= providerTipDismissalDuration,
@@ -115,6 +117,7 @@ function ProviderTip() {
     element: () => ref() ?? null,
   })
   const openProviders = () => {
+    if (!ProductCapabilities.visibleProviderActions({}).connect) return
     void import("@/components/dialog-connect-provider").then(({ DialogConnectProvider }) => {
       void dialog.show(() => <DialogConnectProvider directory={() => sdk().directory} />)
     })

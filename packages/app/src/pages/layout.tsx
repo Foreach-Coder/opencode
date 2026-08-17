@@ -73,6 +73,7 @@ import {
   deepLinkEvent,
   drainPendingDeepLinks,
 } from "./layout/deep-links"
+import { ProductCapabilities } from "@/product/capabilities"
 import { createInlineEditorController } from "./layout/inline-editor"
 import {
   LocalWorkspace,
@@ -158,15 +159,20 @@ export default function LegacyLayout(props: ParentProps) {
     debugTools: true,
   })
 
-  const updateVersion = () => {
+  const updateVersion = (): string | undefined => {
+    if (!ProductCapabilities.visibleDesktopEntries().updater) return undefined
     const state = platform.updater?.state()
-    if (state?.status !== "ready") return
+    if (state?.status !== "ready") return undefined
     return state.version
   }
-  const installUpdate = () => void platform.updater?.install()
+  const installUpdate = () => {
+    if (!ProductCapabilities.visibleDesktopEntries().updater) return
+    void platform.updater?.install()
+  }
   const titlebarUpdate: TitlebarUpdate = {
     version: updateVersion,
-    installing: () => platform.updater?.state().status === "installing",
+    installing: () =>
+      ProductCapabilities.visibleDesktopEntries().updater && platform.updater?.state().status === "installing",
     install: installUpdate,
   }
 
@@ -925,12 +931,16 @@ export default function LegacyLayout(props: ParentProps) {
         keybind: "mod+alt+arrowdown",
         onSelect: () => navigateProjectByOffset(1),
       },
-      {
-        id: "provider.connect",
-        title: language.t("command.provider.connect"),
-        category: language.t("command.category.provider"),
-        onSelect: () => connectProvider(),
-      },
+      ...(ProductCapabilities.visibleProviderActions({}).connect
+        ? [
+            {
+              id: "provider.connect",
+              title: language.t("command.provider.connect"),
+              category: language.t("command.category.provider"),
+              onSelect: () => connectProvider(),
+            },
+          ]
+        : []),
       {
         id: "server.switch",
         title: language.t("command.server.switch"),
@@ -1095,6 +1105,7 @@ export default function LegacyLayout(props: ParentProps) {
   })
 
   function connectProvider() {
+    if (!ProductCapabilities.visibleProviderActions({}).connect) return
     const run = ++dialogRun
     void import("@/components/dialog-connect-provider").then((x) => {
       if (dialogDead || dialogRun !== run) return
@@ -2198,7 +2209,10 @@ export default function LegacyLayout(props: ParentProps) {
         <div
           class="shrink-0 px-3 py-3"
           classList={{
-            hidden: store.gettingStartedDismissed || !(providers.all().size > 0 && providers.paid().length === 0),
+            hidden:
+              store.gettingStartedDismissed ||
+              !ProductCapabilities.visibleProviderActions({}).connect ||
+              !(providers.all().size > 0 && providers.paid().length === 0),
           }}
         >
           <div class="rounded-xl bg-background-base shadow-xs-border-base" data-component="getting-started">
@@ -2267,7 +2281,7 @@ export default function LegacyLayout(props: ParentProps) {
             : undefined
         }
       />
-      <Show when={updateVersion() !== undefined}>
+      <Show when={ProductCapabilities.visibleDesktopEntries().updater && updateVersion() !== undefined}>
         <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
       </Show>
       <div class="flex-1 min-h-0 min-w-0 flex">

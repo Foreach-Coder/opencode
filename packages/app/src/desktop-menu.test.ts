@@ -20,4 +20,10 @@ describe("desktop menu", () => {
     expect(windowMenu?.labelKey).toBe("desktop.menu.window")
     expect(roleItems.length).toBeGreaterThan(0)
   })
+
+  test("hides product-disabled update actions", () => {
+    const items = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).filter((item) => item.type === "item")
+
+    expect(items.some((item) => item.type === "item" && item.action === "app.checkForUpdates")).toBe(false)
+  })
 })
