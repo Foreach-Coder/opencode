@@ -531,7 +531,7 @@ const Image = (component, src, props) => {
   if (props.class) element.className = props.class
   return element
 }
-export const WordmarkV2 = (props) => Image("logo-wordmark-v2", "./wordmark.svg", props)
+export const WordmarkV2 = (props) => Image("logo-wordmark-v2", "./wordmark.png", props)
 `
       }
       if (id !== brandLogo) return null
@@ -545,7 +545,7 @@ const Image = (component, src, props) => {
 }
 export const Mark = (props) => Image("logo-mark", "./favicon.svg", props)
 export const Splash = (props) => Image("logo-splash", "./favicon.svg", props)
-export const Logo = (props) => Image("logo-wordmark", "./wordmark.svg", props)
+export const Logo = (props) => Image("logo-wordmark", "./wordmark.png", props)
 `
     },
   }

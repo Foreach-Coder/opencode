@@ -122,7 +122,7 @@ describe("createElectronViteConfig", () => {
     expect(pluginNames(config.renderer?.plugins).join("\n")).not.toMatch(/sentry/i)
   })
 
-  test("新建会话页 v2 字标也必须使用 BluedCode wordmark 资源", async () => {
+  test("新建会话页 v2 字标必须直接使用 BluedCode wordmark PNG", async () => {
     const config = await createElectronViteConfig(await contextFixture())
     const plugin = requireStaticBrandPlugin(config.renderer?.plugins)
 
@@ -130,9 +130,22 @@ describe("createElectronViteConfig", () => {
     expect(typeof id).toBe("string")
     const loaded = await plugin.load.call({}, id)
     expect(String(loaded)).toContain("export const WordmarkV2")
-    expect(String(loaded)).toContain("./wordmark.svg")
+    expect(String(loaded)).toContain("./wordmark.png")
+    expect(String(loaded)).not.toContain("./wordmark.svg")
     expect(String(loaded)).toContain("logo-wordmark-v2")
     expect(String(loaded)).not.toContain('viewBox="0 0 720 129"')
+  })
+
+  test("V1 首页和错误页字标必须直接使用 BluedCode wordmark PNG", async () => {
+    const config = await createElectronViteConfig(await contextFixture())
+    const plugin = requireStaticBrandPlugin(config.renderer?.plugins)
+
+    const id = await plugin.resolveId.call({}, "@opencode-ai/ui/logo")
+    expect(typeof id).toBe("string")
+    const loaded = String(await plugin.load.call({}, id))
+    expect(loaded).toContain("export const Logo")
+    expect(loaded).toContain('Image("logo-wordmark", "./wordmark.png", props)')
+    expect(loaded).not.toContain('Image("logo-wordmark", "./wordmark.svg", props)')
   })
 
   test("构建前封闭整个 Electron out 根并移除旧的二进制与 legacy sibling", async () => {
@@ -457,7 +470,7 @@ test("真实 compile smoke 生成三类输出、精确 ledger 且 tracked tree d
   expect(outputText).not.toMatch(/@sentry|sentry\.io|SENTRY_|electron-updater|startBackgroundCli/)
   const rendererText = await textOutput(path.join(outputRoot, "renderer"))
   expect(rendererText).not.toContain("0 0 234 42")
-  expect(rendererText).toContain("wordmark.svg")
+  expect(rendererText).toContain("wordmark.png")
   expect(rendererText).toContain("api.getDesktopInitialization?.()")
   expect(outputText).toContain("version: deps.visibleVersion")
   expect(rendererText).toContain("./favicon.png")
