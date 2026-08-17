@@ -8,7 +8,10 @@ type Provider = {
 export const ProductUiRegistry = {
   surface(profile: Product.ProductProfile) {
     const localPreferences = Object.fromEntries(
-      profile.localPreferences.map((preference) => [preference, profile.operations["config.write.preference"] === "allow"]),
+      profile.localPreferences.map((preference) => [
+        preference,
+        profile.operations["config.write.preference"] === "allow",
+      ]),
     ) as Record<(typeof profile.localPreferences)[number], boolean>
     const providerActions = this.providerActions(profile, {})
 
@@ -54,6 +57,7 @@ export const ProductUiRegistry = {
       cli: false,
       wsl: false,
       share: surface.publicActions.share,
+      help: false,
     }
   },
 }

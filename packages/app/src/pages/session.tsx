@@ -70,7 +70,13 @@ import {
   createSessionComposerRegionController,
   SessionComposerRegion,
 } from "@/pages/session/composer"
-import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
+import {
+  createFileTreePreferenceSync,
+  createOpenReviewFile,
+  createSessionTabs,
+  createSizing,
+  shouldShowFileTree,
+} from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
@@ -454,6 +460,12 @@ export default function Page() {
   const desktopInlineTerminalOnlyOpen = createMemo(
     () => newSessionDesign() && desktopTerminalOpen() && !desktopV2ReviewOpen(),
   )
+  createFileTreePreferenceSync({
+    ready: settings.ready,
+    visible: settings.visibility.fileTree,
+    open: layout.fileTree.open,
+    close: layout.fileTree.close,
+  })
   const desktopFileTreeOpen = createMemo(
     () =>
       isDesktop() &&

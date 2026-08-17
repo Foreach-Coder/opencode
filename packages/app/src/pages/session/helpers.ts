@@ -1,4 +1,4 @@
-import { batch, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createComputed, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { same } from "@/utils/same"
@@ -26,6 +26,31 @@ export const getSessionKey = (dir: string | undefined, id: string | undefined) =
 
 export function shouldShowFileTree(input: { visible: boolean; opened: boolean }) {
   return input.opened && input.visible
+}
+
+export function fileTreePreferenceAction(input: { ready: boolean; visible: boolean; previous: boolean | undefined }) {
+  if (!input.ready) return { previous: input.previous, action: undefined as "open" | "close" | undefined }
+  if (input.previous === undefined) {
+    return { previous: input.visible, action: input.visible ? ("open" as const) : undefined }
+  }
+  if (input.previous === input.visible)
+    return { previous: input.previous, action: undefined as "open" | "close" | undefined }
+  return { previous: input.visible, action: input.visible ? ("open" as const) : ("close" as const) }
+}
+
+export function createFileTreePreferenceSync(input: {
+  ready: Accessor<boolean>
+  visible: Accessor<boolean>
+  open: () => void
+  close: () => void
+}) {
+  let previous: boolean | undefined
+  createComputed(() => {
+    const next = fileTreePreferenceAction({ ready: input.ready(), visible: input.visible(), previous })
+    previous = next.previous
+    if (next.action === "open") input.open()
+    if (next.action === "close") input.close()
+  })
 }
 
 export const createSessionTabs = (input: TabsInput) => {

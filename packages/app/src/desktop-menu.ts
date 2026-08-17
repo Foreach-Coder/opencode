@@ -280,26 +280,38 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       { type: "item", labelKey: "desktop.menu.closeWindow", action: "window.close" },
     ],
   },
-  {
-    id: "help",
-    labelKey: "desktop.menu.help",
-    items: [
-      { type: "item", labelKey: "desktop.menu.documentation", href: "https://opencode.ai/docs" },
-      { type: "item", labelKey: "desktop.menu.supportForum", href: "https://discord.com/invite/opencode" },
-      { type: "item", labelKey: "desktop.menu.exportLogs", command: "logs.export" },
-      { type: "separator" },
-      {
-        type: "item",
-        labelKey: "desktop.menu.shareFeedback",
-        href: "https://github.com/anomalyco/opencode/issues/new?template=feature_request.yml",
-      },
-      {
-        type: "item",
-        labelKey: "desktop.menu.reportBug",
-        href: "https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml",
-      },
-    ],
-  },
+  ...(ProductCapabilities.visibleDesktopEntries().help
+    ? [
+        {
+          id: "help",
+          labelKey: "desktop.menu.help",
+          items: [
+            {
+              type: "item" as const,
+              labelKey: "desktop.menu.documentation" as const,
+              href: "https://opencode.ai/docs",
+            },
+            {
+              type: "item" as const,
+              labelKey: "desktop.menu.supportForum" as const,
+              href: "https://discord.com/invite/opencode",
+            },
+            { type: "item" as const, labelKey: "desktop.menu.exportLogs" as const, command: "logs.export" },
+            { type: "separator" as const },
+            {
+              type: "item" as const,
+              labelKey: "desktop.menu.shareFeedback" as const,
+              href: "https://github.com/anomalyco/opencode/issues/new?template=feature_request.yml",
+            },
+            {
+              type: "item" as const,
+              labelKey: "desktop.menu.reportBug" as const,
+              href: "https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml",
+            },
+          ],
+        },
+      ]
+    : []),
 ]
 
 export function desktopMenuVisible(item: { platforms?: DesktopMenuPlatform[] }, platform: DesktopMenuPlatform) {

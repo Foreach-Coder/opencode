@@ -33,6 +33,7 @@ describe("ProductCapabilities", () => {
       cli: false,
       wsl: false,
       share: false,
+      help: false,
     })
   })
 })

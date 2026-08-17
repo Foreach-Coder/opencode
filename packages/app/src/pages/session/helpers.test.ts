@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { createMemo, createRoot } from "solid-js"
+import { createMemo, createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   SESSION_OPEN_FILE_TAB,
+  createFileTreePreferenceSync,
   createOpenReviewFile,
   createOpenSessionFileTab,
   createSessionTabs,
+  fileTreePreferenceAction,
   focusTerminalById,
   getTabReorderIndex,
   shouldShowFileTree,
@@ -15,6 +17,84 @@ describe("shouldShowFileTree", () => {
   test("does not reserve space for a disabled file tree", () => {
     expect(shouldShowFileTree({ visible: false, opened: true })).toBe(false)
     expect(shouldShowFileTree({ visible: true, opened: true })).toBe(true)
+  })
+})
+
+describe("fileTreePreferenceAction", () => {
+  test("does nothing before settings are ready", () => {
+    expect(fileTreePreferenceAction({ ready: false, visible: true, previous: undefined })).toEqual({
+      previous: undefined,
+      action: undefined,
+    })
+    expect(fileTreePreferenceAction({ ready: false, visible: false, previous: true })).toEqual({
+      previous: true,
+      action: undefined,
+    })
+  })
+
+  test("opens once when first restored value is visible", () => {
+    const first = fileTreePreferenceAction({ ready: true, visible: true, previous: undefined })
+    expect(first).toEqual({ previous: true, action: "open" })
+
+    expect(fileTreePreferenceAction({ ready: true, visible: true, previous: first.previous })).toEqual({
+      previous: true,
+      action: undefined,
+    })
+  })
+
+  test("keeps initial layout when first restored value is hidden", () => {
+    expect(fileTreePreferenceAction({ ready: true, visible: false, previous: undefined })).toEqual({
+      previous: false,
+      action: undefined,
+    })
+  })
+
+  test("syncs runtime changes after settings are ready", () => {
+    const initial = fileTreePreferenceAction({ ready: true, visible: false, previous: undefined })
+    const opened = fileTreePreferenceAction({ ready: true, visible: true, previous: initial.previous })
+    const repeatedOpen = fileTreePreferenceAction({ ready: true, visible: true, previous: opened.previous })
+    const closed = fileTreePreferenceAction({ ready: true, visible: false, previous: repeatedOpen.previous })
+    const repeatedClose = fileTreePreferenceAction({ ready: true, visible: false, previous: closed.previous })
+
+    expect([initial.action, opened.action, repeatedOpen.action, closed.action, repeatedClose.action]).toEqual([
+      undefined,
+      "open",
+      undefined,
+      "close",
+      undefined,
+    ])
+  })
+})
+
+describe("createFileTreePreferenceSync", () => {
+  test("remount opens only when ready preference is visible", () => {
+    createRoot((dispose) => {
+      const calls: string[] = []
+      const [ready] = createSignal(true)
+      const [visible] = createSignal(true)
+      createFileTreePreferenceSync({
+        ready,
+        visible,
+        open: () => calls.push("open"),
+        close: () => calls.push("close"),
+      })
+      expect(calls).toEqual(["open"])
+      dispose()
+    })
+
+    createRoot((dispose) => {
+      const calls: string[] = []
+      const [ready] = createSignal(true)
+      const [visible] = createSignal(false)
+      createFileTreePreferenceSync({
+        ready,
+        visible,
+        open: () => calls.push("open"),
+        close: () => calls.push("close"),
+      })
+      expect(calls).toEqual([])
+      dispose()
+    })
   })
 })
 
