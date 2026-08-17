@@ -1,5 +1,16 @@
 import { Product, deriveChannelIdentity } from "@foreachcode/product"
 
+export function deriveDesktopIdentity(channel: "dev" | "prod", visibleVersion: string) {
+  const identity = deriveChannelIdentity(Product.profile, channel)
+  return {
+    ...identity,
+    visibleVersion,
+    // Electron data paths are configured before the main process is ready.
+    // Keep this key channel-specific so dev never shares prod state.
+    userDataKey: identity.appId,
+  }
+}
+
 export function resolveDesktopProductIdentity(channel: "dev" | "prod") {
   return deriveChannelIdentity(Product.profile, channel)
 }

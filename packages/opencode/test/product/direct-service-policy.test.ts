@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { Cause, Effect, Exit, Layer, Ref, Stream } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode-ai/core/effect/app-node"
 import { httpClient, LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
@@ -73,23 +73,23 @@ describe("direct write service boundaries", () => {
     }),
   )
 
-  const shareCalls: string[] = []
+  let shareCalls = 0
   const shareLayer = LayerNode.compile(SessionShare.node, [
     [Config.node, TestConfig.layer({ get: () => Effect.succeed({ share: "manual" }) })],
     [
       Session.node,
       Layer.mock(Session.Service)({
-        setShare: () => Effect.sync(() => shareCalls.push("session.setShare")),
+        setShare: () => Effect.sync(() => shareCalls++),
       }),
     ],
     [
       ShareNext.node,
       Layer.mock(ShareNext.Service)({
         create: () =>
-          Effect.sync(() => shareCalls.push("share.create")).pipe(
+          Effect.sync(() => shareCalls++).pipe(
             Effect.as({ id: "never", url: "never", secret: "never" }),
           ),
-        remove: () => Effect.sync(() => shareCalls.push("share.remove")),
+        remove: () => Effect.sync(() => shareCalls++),
       }),
     ],
     [RuntimeFlags.node, RuntimeFlags.layer()],
@@ -97,7 +97,7 @@ describe("direct write service boundaries", () => {
 
   testEffect(shareLayer).live("SessionShare.share/unshare reject before share persistence or network", () =>
     Effect.gen(function* () {
-      shareCalls.length = 0
+      shareCalls = 0
       const svc = yield* SessionShare.Service
       const sessionID = SessionID.make("ses_00000000000000000000000000")
       const share = yield* Effect.exit(svc.share(sessionID))
@@ -105,22 +105,22 @@ describe("direct write service boundaries", () => {
 
       expectPolicy(share, "PUBLIC_SHARE_DISABLED")
       expectPolicy(unshare, "PUBLIC_SHARE_DISABLED")
-      expect(shareCalls).toEqual([])
+      expect(shareCalls).toBe(0)
     }),
   )
 })
 
 describe("direct public network service boundaries", () => {
-  const updateCalls: string[] = []
+  let updateCalls = 0
   const client = HttpClient.make((request) =>
     Effect.sync(() => {
-      updateCalls.push(`http:${request.url}`)
+      updateCalls++
       return HttpClientResponse.fromWeb(request, new Response("{}", { status: 200 }))
     }),
   )
-  const spawner = ChildProcessSpawner.make((command) =>
+  const spawner = ChildProcessSpawner.make(() =>
     Effect.sync(() => {
-      updateCalls.push(`spawn:${ChildProcess.isStandardCommand(command) ? command.command : "shell"}`)
+      updateCalls++
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(0),
         exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
@@ -148,21 +148,21 @@ describe("direct public network service boundaries", () => {
 
   testEffect(installationLayer).live("Installation.latest/upgrade reject before HTTP or process execution", () =>
     Effect.gen(function* () {
-      updateCalls.length = 0
+      updateCalls = 0
       const svc = yield* Installation.Service
       const latest = yield* Effect.exit(svc.latest("npm"))
       const upgrade = yield* Effect.exit(svc.upgrade("npm", "9.9.9"))
 
       expectPolicy(latest, "PUBLIC_UPDATE_DISABLED")
       expectPolicy(upgrade, "PUBLIC_UPDATE_DISABLED")
-      expect(updateCalls).toEqual([])
+      expect(updateCalls).toBe(0)
     }),
   )
 
   test("ModelsDev.refresh rejects the policy error without touching HttpClient", async () => {
-    const calls = await Effect.runPromise(Ref.make<string[]>([]))
+    const calls = await Effect.runPromise(Ref.make(0))
     const modelClient = HttpClient.make((request) =>
-      Ref.update(calls, (items) => [...items, request.url]).pipe(
+      Ref.update(calls, (count) => count + 1).pipe(
         Effect.as(HttpClientResponse.fromWeb(request, new Response("{}", { status: 200 }))),
       ),
     )
@@ -176,7 +176,7 @@ describe("direct public network service boundaries", () => {
     )
 
     expectPolicy(exit, "PRODUCT_CAPABILITY_DISABLED")
-    expect(await Effect.runPromise(Ref.get(calls))).toEqual([])
+    expect(await Effect.runPromise(Ref.get(calls))).toBe(0)
   })
 
   test("OTLP logger and tracing exits reject before exporter construction", async () => {

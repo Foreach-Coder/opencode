@@ -44,7 +44,7 @@ import {
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { setNativeTranslations } from "./native-translations"
-import { setDesktopRuntimeChannel } from "./product-identity"
+import { deriveDesktopIdentity, setDesktopRuntimeChannel } from "./product-identity"
 
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
@@ -107,7 +107,9 @@ const main = Effect.gen(function* () {
 
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const desktopIdentity = setDesktopRuntimeChannel(app.isPackaged && CHANNEL === "prod" ? "prod" : "dev")
+  const desktopChannel = app.isPackaged && CHANNEL === "prod" ? "prod" : "dev"
+  setDesktopRuntimeChannel(desktopChannel)
+  const desktopIdentity = deriveDesktopIdentity(desktopChannel, app.getVersion())
   const onboardingTestRoot = ((): string | undefined => {
     if (!TEST_ONBOARDING) return
 
@@ -127,7 +129,7 @@ const main = Effect.gen(function* () {
   app.setAppUserModelId(desktopIdentity.appId)
   app.setPath(
     "userData",
-    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), desktopIdentity.appId),
+    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), desktopIdentity.userDataKey),
   )
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
   initializeOldLayoutEligibility(app.getPath("userData"))
@@ -152,7 +154,7 @@ const main = Effect.gen(function* () {
   }
 
   logger.log("app starting", {
-    version: app.getVersion(),
+    version: desktopIdentity.visibleVersion,
     packaged: app.isPackaged,
     onboardingTest: Boolean(onboardingTestRoot),
   })
@@ -247,6 +249,7 @@ const main = Effect.gen(function* () {
     relaunch,
   }
   registerIpcHandlers({
+    visibleVersion: desktopIdentity.visibleVersion,
     killSidecar: () => killSidecar(),
     relaunch,
     awaitInitialization: Effect.fnUntraced(

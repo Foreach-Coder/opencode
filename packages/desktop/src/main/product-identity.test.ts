@@ -1,7 +1,32 @@
 import { describe, expect, test } from "bun:test"
-import { resolveDesktopProductIdentity, resolveDesktopRuntimeIdentity, resolveSidecarServiceName, setDesktopRuntimeChannel } from "./product-identity"
+import {
+  deriveDesktopIdentity,
+  resolveDesktopProductIdentity,
+  resolveDesktopRuntimeIdentity,
+  resolveSidecarServiceName,
+  setDesktopRuntimeChannel,
+} from "./product-identity"
 
 describe("Desktop product identity", () => {
+  test("derives isolated runtime identity payloads from the product profile", () => {
+    expect(deriveDesktopIdentity("prod", "1.18.18-260816-01-a39a781eb3")).toMatchObject({
+      displayName: "BluedCode",
+      directoryName: "bluedcode",
+      appId: "ai.bluedcode.desktop",
+      protocol: "bluedcode",
+      visibleVersion: "1.18.18-260816-01-a39a781eb3",
+      userDataKey: "ai.bluedcode.desktop",
+    })
+    expect(deriveDesktopIdentity("dev", "1.18.18-dev")).toMatchObject({
+      displayName: "BluedCode Dev",
+      directoryName: "bluedcode-dev",
+      appId: "ai.bluedcode.desktop.dev",
+      protocol: "bluedcode-dev",
+      visibleVersion: "1.18.18-dev",
+      userDataKey: "ai.bluedcode.desktop.dev",
+    })
+  })
+
   test("prod and dev app identity are isolated", () => {
     expect(resolveDesktopProductIdentity("prod")).toMatchObject({
       displayName: "BluedCode",

@@ -14,6 +14,7 @@ import {
   displayName,
   effectiveWorkspaceOrder,
   errorMessage,
+  getProjectAvatarSource,
   hasProjectPermissions,
   homeProjectNavigation,
   homeProjectDirectories,
@@ -40,24 +41,24 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
-    expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseDeepLink("bluedcode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
   })
 
   test("ignores non-project deep links", () => {
-    expect(parseDeepLink("opencode://other?directory=/tmp/demo")).toBeUndefined()
+    expect(parseDeepLink("bluedcode://other?directory=/tmp/demo")).toBeUndefined()
     expect(parseDeepLink("https://example.com")).toBeUndefined()
   })
 
   test("ignores malformed deep links safely", () => {
-    expect(() => parseDeepLink("opencode://open-project/%E0%A4%A%")).not.toThrow()
-    expect(parseDeepLink("opencode://open-project/%E0%A4%A%")).toBeUndefined()
+    expect(() => parseDeepLink("bluedcode://open-project/%E0%A4%A%")).not.toThrow()
+    expect(parseDeepLink("bluedcode://open-project/%E0%A4%A%")).toBeUndefined()
   })
 
   test("parses links when URL.canParse is unavailable", () => {
     const original = Object.getOwnPropertyDescriptor(URL, "canParse")
     Object.defineProperty(URL, "canParse", { configurable: true, value: undefined })
     try {
-      expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+      expect(parseDeepLink("bluedcode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
     } finally {
       if (original) Object.defineProperty(URL, "canParse", original)
       if (!original) Reflect.deleteProperty(URL, "canParse")
@@ -65,37 +66,37 @@ describe("layout deep links", () => {
   })
 
   test("ignores open-project deep links without directory", () => {
-    expect(parseDeepLink("opencode://open-project")).toBeUndefined()
-    expect(parseDeepLink("opencode://open-project?directory=")).toBeUndefined()
+    expect(parseDeepLink("bluedcode://open-project")).toBeUndefined()
+    expect(parseDeepLink("bluedcode://open-project?directory=")).toBeUndefined()
   })
 
   test("collects only valid open-project directories", () => {
     const result = collectOpenProjectDeepLinks([
-      "opencode://open-project?directory=/a",
-      "opencode://other?directory=/b",
-      "opencode://open-project?directory=/c",
+      "bluedcode://open-project?directory=/a",
+      "bluedcode://other?directory=/b",
+      "bluedcode://open-project?directory=/c",
     ])
     expect(result).toEqual(["/a", "/c"])
   })
 
   test("parses new-session deep links with optional prompt", () => {
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
+    expect(parseNewSessionDeepLink("bluedcode://new-session?directory=/tmp/demo")).toEqual({ directory: "/tmp/demo" })
+    expect(parseNewSessionDeepLink("bluedcode://new-session?directory=/tmp/demo&prompt=hello%20world")).toEqual({
       directory: "/tmp/demo",
       prompt: "hello world",
     })
   })
 
   test("ignores new-session deep links without directory", () => {
-    expect(parseNewSessionDeepLink("opencode://new-session")).toBeUndefined()
-    expect(parseNewSessionDeepLink("opencode://new-session?directory=")).toBeUndefined()
+    expect(parseNewSessionDeepLink("bluedcode://new-session")).toBeUndefined()
+    expect(parseNewSessionDeepLink("bluedcode://new-session?directory=")).toBeUndefined()
   })
 
   test("collects only valid new-session deep links", () => {
     const result = collectNewSessionDeepLinks([
-      "opencode://new-session?directory=/a",
-      "opencode://open-project?directory=/b",
-      "opencode://new-session?directory=/c&prompt=ship%20it",
+      "bluedcode://new-session?directory=/a",
+      "bluedcode://open-project?directory=/b",
+      "bluedcode://new-session?directory=/c&prompt=ship%20it",
     ])
     expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
   })
@@ -250,6 +251,10 @@ describe("layout workspace helpers", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
     expect(displayName({ worktree: "/" })).toBe("/")
+  })
+
+  test("uses local product favicon for the built-in project avatar", () => {
+    expect(getProjectAvatarSource("4b0ea68d7af9a6031a7ffda7ad66e0cb83315750")).toBe("./favicon.png")
   })
 
   test("scopes home project selection by server", () => {

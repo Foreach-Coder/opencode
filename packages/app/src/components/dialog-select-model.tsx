@@ -22,7 +22,8 @@ import { handleDocumentSearchKeydown } from "@/utils/search-keydown"
 import { createMenuDismissController } from "@/utils/menu-dismiss-controller"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./dialog-select-model-search"
-import { ProductCapabilities } from "@/product/capabilities"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -147,7 +148,7 @@ export function ModelSelectorPopover(props: {
   }
 
   const handleConnectProvider = () => {
-    if (!ProductCapabilities.visibleProviderActions({}).connect) return
+    if (!ProductUiRegistry.surface(Product.profile).providerActions.connect) return
     close("provider")
     void import("./dialog-connect-provider").then((x) => {
       void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
@@ -195,7 +196,7 @@ export function ModelSelectorPopover(props: {
             class="p-1"
             action={
               <div class="flex items-center gap-1">
-                <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+                <Show when={ProductUiRegistry.surface(Product.profile).providerActions.connect}>
                   <Tooltip placement="top" value={language.t("command.provider.connect")}>
                     <IconButton
                       icon="plus-small"
@@ -532,7 +533,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   const directory = () => decode64(local.slug())
 
   const provider = () => {
-    if (!ProductCapabilities.visibleProviderActions({}).connect) return
+    if (!ProductUiRegistry.surface(Product.profile).providerActions.connect) return
     void import("./dialog-connect-provider").then((x) => {
       void dialog.show(() => <x.DialogConnectProvider directory={directory} />)
     })
@@ -548,7 +549,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
     <Dialog
       title={language.t("dialog.model.select.title")}
       action={
-        <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+        <Show when={ProductUiRegistry.surface(Product.profile).providerActions.connect}>
           <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={provider}>
             {language.t("command.provider.connect")}
           </Button>

@@ -142,7 +142,62 @@ test("跳过包含 NUL 的二进制文件", async () => {
   const root = await fixture({ "asset.bin": new Uint8Array([79, 112, 101, 110, 0, 67, 111, 100, 101]) })
   try {
     const report = await scanOutput(root, { tokens: ["OpenCode"], allow: [] })
-    expect(report).toEqual({ scannedFiles: [], allowed: [], unclassified: [], passed: true })
+    expect(report).toEqual({
+      scannedFiles: [],
+      allowed: [],
+      unclassified: [],
+      forbidden: [],
+      preserved: [],
+      evidence: [],
+      passed: true,
+    })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("审计分别报告 forbidden、preserved 与不计脆弱全局次数的 evidence", async () => {
+  const root = await fixture({
+    "bundle.js": "OpenCode Zen session.share session.share",
+  })
+  try {
+    const policy: AuditPolicy = {
+      tokens: ["install-cli", "OpenCode Zen", "session.share"],
+      allow: [
+        allowance({ id: "service-identity", token: "OpenCode Zen", classification: "preserved" }),
+        allowance({ id: "share-key", token: "session.share", classification: "evidence", expected: "any" }),
+      ],
+    }
+    const report = await scanOutput(root, policy)
+    expect(report.passed).toBe(true)
+    expect(report.forbidden).toEqual([])
+    expect(report.preserved).toEqual([{ path: "bundle.js", token: "OpenCode Zen", count: 1, allowanceId: "service-identity" }])
+    expect(report.evidence).toEqual([{ path: "bundle.js", token: "session.share", count: 2, allowanceId: "share-key" }])
+
+    await writeFile(path.join(root, "bundle.js"), "OpenCode Zen install-cli")
+    expect((await auditFailure(root, policy)).forbidden).toEqual([
+      { path: "bundle.js", token: "install-cli", count: 1 },
+    ])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("显式 forbidden allowance 仅接受零命中", async () => {
+  const root = await fixture({ "bundle.js": "const safe = true" })
+  try {
+    const policy: AuditPolicy = {
+      tokens: ["install-cli"],
+      allow: [
+        allowance({ id: "cli-entrypoint", token: "install-cli", classification: "forbidden", expected: 0 }),
+      ],
+    }
+    expect(await scanOutput(root, policy)).toMatchObject({ passed: true, forbidden: [] })
+
+    await writeFile(path.join(root, "bundle.js"), 'const channel = "install-cli"')
+    expect((await auditFailure(root, policy)).forbidden).toEqual([
+      { path: "bundle.js", token: "install-cli", count: 1, allowanceId: "cli-entrypoint" },
+    ])
   } finally {
     await rm(root, { recursive: true, force: true })
   }

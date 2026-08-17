@@ -1,4 +1,5 @@
 import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "./ui-registry"
 
 type Provider = {
   managedBy?: unknown
@@ -7,23 +8,14 @@ type Provider = {
 
 export const ProductCapabilities = {
   visibleProviderActions(provider: Provider) {
-    const managedByAdmin = provider.managedBy === "admin" || provider.configurableByUser === false
-    if (managedByAdmin || Product.profile.capabilities.providerManagement === "admin-static-only") {
-      return { connect: false, configure: false, disconnect: false }
-    }
-    return { connect: true, configure: true, disconnect: true }
+    return ProductUiRegistry.providerActions(Product.profile, provider)
   },
 
-  visibleSettingsToggles(_state: { newLayout?: boolean }) {
-    return { newLayout: true, defaultNewLayout: false }
+  visibleSettingsToggles() {
+    return ProductUiRegistry.localPreferences(Product.profile)
   },
 
   visibleDesktopEntries() {
-    return {
-      updater: Product.profile.capabilities.updater,
-      cli: Product.profile.capabilities.cli,
-      wsl: false,
-      share: Product.profile.capabilities.publicShare,
-    }
+    return ProductUiRegistry.desktopEntries(Product.profile)
   },
 }

@@ -6,6 +6,7 @@ export function make(overrides: Partial<Config.Interface> = {}) {
   return Config.Service.of({
     get: () => Effect.succeed({}),
     getAdminProviderConfig: () => Effect.succeed({}),
+    getAdminIntegrations: () => Effect.succeed({ providers: [] }),
     getGlobal: () => Effect.succeed({}),
     getConsoleState: () => Effect.succeed(emptyConsoleState),
     update: () => Effect.void,

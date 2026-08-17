@@ -6,7 +6,7 @@ export type AuditAllowance = {
   path: string
   token: string
   expected: number | "any"
-  classification: "preserved" | "product" | "entrypoint"
+  classification: "forbidden" | "preserved" | "evidence"
   reason: string
 }
 
@@ -26,6 +26,9 @@ export type AuditReport = {
   scannedFiles: string[]
   allowed: AuditOccurrence[]
   unclassified: AuditOccurrence[]
+  forbidden: AuditOccurrence[]
+  preserved: AuditOccurrence[]
+  evidence: AuditOccurrence[]
   passed: boolean
 }
 
@@ -82,6 +85,7 @@ export async function scanOutput(root: string, policy: AuditPolicy): Promise<Aud
         const count = singular
           .filter((occurrence) => occurrence.matches[0].id === allowance.id)
           .reduce((total, occurrence) => total + occurrence.count, 0)
+        if (allowance.classification === "forbidden") return count > 0
         return allowance.expected === "any" ? count < 1 : count !== allowance.expected
       })
       .map((allowance) => allowance.id),
@@ -97,6 +101,7 @@ export async function scanOutput(root: string, policy: AuditPolicy): Promise<Aud
   policy.allow
     .filter(
       (allowance) =>
+        allowance.classification !== "forbidden" &&
         invalidAllowances.has(allowance.id) &&
         !occurrences.some((occurrence) => occurrence.matches.some((match) => match.id === allowance.id)),
     )
@@ -104,9 +109,24 @@ export async function scanOutput(root: string, policy: AuditPolicy): Promise<Aud
       unclassified.push({ path: allowance.path, token: allowance.token, count: 0, allowanceId: allowance.id }),
     )
 
-  const report = { scannedFiles, allowed, unclassified, passed: unclassified.length === 0 }
+  const report = {
+    scannedFiles,
+    allowed,
+    unclassified,
+    forbidden: unclassified.filter((occurrence) => {
+      const allowance = policy.allow.find((candidate) => candidate.id === occurrence.allowanceId)
+      return !allowance || allowance.classification === "forbidden"
+    }),
+    preserved: allowed.filter((occurrence) => allowanceFor(policy, occurrence)?.classification === "preserved"),
+    evidence: allowed.filter((occurrence) => allowanceFor(policy, occurrence)?.classification === "evidence"),
+    passed: unclassified.length === 0,
+  }
   if (!report.passed) throw new AuditError(report)
   return report
+}
+
+function allowanceFor(policy: AuditPolicy, occurrence: AuditOccurrence) {
+  return policy.allow.find((allowance) => allowance.id === occurrence.allowanceId)
 }
 
 async function listFiles(root: string) {

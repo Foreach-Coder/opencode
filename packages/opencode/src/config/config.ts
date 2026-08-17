@@ -35,7 +35,8 @@ import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { withTransientReadRetry } from "@/util/effect-http-client"
-import { ProductPolicy } from "@/product/policy"
+import { AdminConfig } from "./admin-config"
+import { ProductConfigPolicy } from "./product-policy"
 
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
@@ -115,24 +116,11 @@ type Info = ConfigV1.Info & {
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
-export type AdminProviderConfig = Pick<
-  Info,
-  "provider" | "model" | "small_model" | "enabled_providers" | "disabled_providers"
->
-
-function adminProviderConfig(info: Info): AdminProviderConfig {
-  return {
-    ...(info.provider === undefined ? {} : { provider: info.provider }),
-    ...(info.model === undefined ? {} : { model: info.model }),
-    ...(info.small_model === undefined ? {} : { small_model: info.small_model }),
-    ...(info.enabled_providers === undefined ? {} : { enabled_providers: info.enabled_providers }),
-    ...(info.disabled_providers === undefined ? {} : { disabled_providers: info.disabled_providers }),
-  }
-}
+export type AdminProviderConfig = AdminConfig.ProviderConfig
 
 type State = {
   config: Info
-  adminProviderConfig: AdminProviderConfig
+  adminIntegrations: AdminConfig.Snapshot
   directories: string[]
   deps: Fiber.Fiber<void>[]
   consoleState: ConsoleState
@@ -141,6 +129,7 @@ type State = {
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
   readonly getAdminProviderConfig: () => Effect.Effect<AdminProviderConfig>
+  readonly getAdminIntegrations: () => Effect.Effect<AdminConfig.Snapshot>
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
@@ -272,7 +261,7 @@ const layer = Layer.effect(
       result = mergeConfig(result, yield* loadStaticFile(path.join(Global.Path.config, "config.json")))
       result = mergeConfig(result, yield* loadStaticFile(path.join(Global.Path.config, "opencode.json")))
       result = mergeConfig(result, yield* loadStaticFile(path.join(Global.Path.config, "opencode.jsonc")))
-      return adminProviderConfig(result)
+      return AdminConfig.load(result)
     })
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
@@ -617,7 +606,7 @@ const layer = Layer.effect(
 
         return {
           config: result,
-          adminProviderConfig: adminConfig,
+          adminIntegrations: adminConfig,
           directories,
           deps,
           consoleState: {
@@ -641,7 +630,11 @@ const layer = Layer.effect(
     })
 
     const getAdminProviderConfig = Effect.fn("Config.getAdminProviderConfig")(function* () {
-      return yield* InstanceState.use(state, (s) => s.adminProviderConfig)
+      return yield* InstanceState.use(state, (s) => AdminConfig.providerConfig(s.adminIntegrations))
+    })
+
+    const getAdminIntegrations = Effect.fn("Config.getAdminIntegrations")(function* () {
+      return yield* InstanceState.use(state, (s) => s.adminIntegrations)
     })
 
     const directories = Effect.fn("Config.directories")(function* () {
@@ -659,7 +652,7 @@ const layer = Layer.effect(
     })
 
     const update = Effect.fn("Config.update")(function* (config: Info) {
-      ProductPolicy.rejectConfigWrite(config)
+      ProductConfigPolicy.requireWrite(config)
       const dir = yield* InstanceState.directory
       const file = path.join(dir, "config.json")
       const existing = yield* loadFile(file)
@@ -673,7 +666,7 @@ const layer = Layer.effect(
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
-      ProductPolicy.rejectConfigWrite(config)
+      ProductConfigPolicy.requireWrite(config)
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
       const patch = writableGlobal(config)
@@ -701,6 +694,7 @@ const layer = Layer.effect(
     return Service.of({
       get,
       getAdminProviderConfig,
+      getAdminIntegrations,
       getGlobal,
       getConsoleState,
       update,

@@ -1054,6 +1054,8 @@ export const Info = Schema.Struct({
   id: ProviderV2.ID,
   name: Schema.String,
   source: Schema.Literals(["env", "config", "custom", "api"]),
+  managedBy: optional(Schema.Literal("admin")),
+  configurableByUser: optional(Schema.Literal(false)),
   env: Schema.Array(Schema.String),
   key: optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Any),
@@ -1081,6 +1083,8 @@ export function toPublicInfo(provider: Info): Info {
     JSON.stringify(
       {
         ...provider,
+        managedBy: "admin",
+        configurableByUser: false,
         models: Object.fromEntries(Object.entries(provider.models).filter(([, model]) => Schema.is(Model)(model))),
       },
       (_, value) => {
@@ -1175,6 +1179,16 @@ interface State {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
 
 export const use = serviceUse(Service)
+
+export function adminConfiguredProviderIDs(config: Pick<Config.Interface, "getAdminProviderConfig">) {
+  return Effect.map(config.getAdminProviderConfig(), (admin) => Object.keys(admin.provider ?? {}))
+}
+
+export function runtimeProviderEntries(config: Pick<Config.Interface, "getAdminProviderConfig">) {
+  return Effect.map(config.getAdminProviderConfig(), (admin) => Object.entries(admin.provider ?? {}))
+}
+
+export const initializeProviderRegistry = runtimeProviderEntries
 
 function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   const result: Model["cost"] = {
@@ -1282,6 +1296,8 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   return {
     id: ProviderV2.ID.make(provider.id),
     source: "custom",
+    managedBy: "admin",
+    configurableByUser: false,
     name: provider.name,
     env: [...(provider.env ?? [])],
     options: {},
@@ -1367,8 +1383,9 @@ const layer = Layer.effect(
           providers[providerID] = mergeDeep(match, provider)
         }
 
-        const adminProviderIDs = new Set(ProviderPolicy.listAdminProviders(cfg).map((provider) => provider.id))
-        const configProviders = Object.entries(cfg.provider ?? {}).filter(([providerID]) =>
+        const runtimeEntries = yield* initializeProviderRegistry(config)
+        const adminProviderIDs = new Set(runtimeEntries.map(([providerID]) => providerID))
+        const configProviders = runtimeEntries.filter(([providerID]) =>
           adminProviderIDs.has(providerID),
         )
         const disabled = new Set(cfg.disabled_providers ?? [])
@@ -1389,6 +1406,8 @@ const layer = Layer.effect(
             env: provider.env ?? existing?.env ?? [],
             options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
             source: "config",
+            managedBy: "admin",
+            configurableByUser: false,
             models: existing?.models ?? {},
           }
 

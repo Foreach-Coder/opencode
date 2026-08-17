@@ -1,10 +1,10 @@
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ProductPolicy } from "@/product/policy"
 import { ProductHttpPolicy } from "@/product/http-policy"
 
 export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider", (handlers) =>
@@ -25,13 +25,37 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       return yield* svc.methods()
     })
 
-    const authorize = Effect.fn("ProviderHttpApi.authorize")(() =>
-      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectProviderWrite)),
-    )
+    const authorize = Effect.fn("ProviderHttpApi.authorize")(function* (ctx) {
+      return yield* ProductHttpPolicy.translate(
+        Effect.gen(function* () {
+          yield* svc.authorizePreflight()
+          const body = yield* Effect.orDie(ctx.request.text)
+          const payload = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ProviderAuth.AuthorizeInput))(body).pipe(
+            Effect.orDie,
+          )
+          const result = yield* svc
+            .authorize({ providerID: ctx.params.providerID, method: payload.method, inputs: payload.inputs })
+            .pipe(Effect.orDie)
+          return HttpServerResponse.jsonUnsafe(result ?? null)
+        }),
+      )
+    })
 
-    const callback = Effect.fn("ProviderHttpApi.callback")(() =>
-      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectAuthWrite)),
-    )
+    const callback = Effect.fn("ProviderHttpApi.callback")(function* (ctx) {
+      return yield* ProductHttpPolicy.translate(
+        Effect.gen(function* () {
+          yield* svc.callbackPreflight()
+          const body = yield* Effect.orDie(ctx.request.text)
+          const payload = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ProviderAuth.CallbackInput))(body).pipe(
+            Effect.orDie,
+          )
+          yield* svc
+            .callback({ providerID: ctx.params.providerID, method: payload.method, code: payload.code })
+            .pipe(Effect.orDie)
+          return true
+        }),
+      )
+    })
 
     return handlers
       .handle("list", list)

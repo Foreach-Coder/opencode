@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { assertEnterprisePolicy, enterprisePolicySchema } from "../common/enterprise"
-import { enterprisePolicy11818 } from "../version/1.18.18/rules/enterprise-policy"
+import { Product } from "../../../../packages/product/src"
+import { enterprisePolicyFromProfile } from "../common/manifest"
+import { adapter11818 } from "../version/1.18.18"
 
 describe("Enterprise policy", () => {
-  test("BluedCode 1.18.18 policy is always enabled and admin-static-only", () => {
-    expect(assertEnterprisePolicy(enterprisePolicy11818)).toEqual({
+  test("manifest 企业策略只能由产品 Profile operations 投影", () => {
+    expect(enterprisePolicyFromProfile(Product.profile.operations)).toEqual({
       enabled: true,
       providerMode: "admin-static-only",
       blockedAuthWrites: true,
@@ -16,10 +17,7 @@ describe("Enterprise policy", () => {
     })
   })
 
-  test("policy cannot be disabled or widened by user input", () => {
-    expect(() => enterprisePolicySchema.parse({ ...enterprisePolicy11818, enabled: false })).toThrow("enabled")
-    expect(() => enterprisePolicySchema.parse({ ...enterprisePolicy11818, providerMode: "user-configurable" })).toThrow(
-      "providerMode",
-    )
+  test("版本适配器不保留可独立编辑的企业策略 literal", () => {
+    expect("enterprisePolicy" in adapter11818).toBe(false)
   })
 })

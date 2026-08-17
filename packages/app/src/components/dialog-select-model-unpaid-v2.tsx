@@ -11,7 +11,8 @@ import { useProviders } from "@/hooks/use-providers"
 import { decode64 } from "@/utils/base64"
 import { useLanguage } from "@/context/language"
 import { ModelTooltip } from "./model-tooltip"
-import { ProductCapabilities } from "@/product/capabilities"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 const featuredProviders = ["opencode", "opencode-go", "openai", "anthropic", "google", "github-copilot"]
@@ -35,7 +36,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
   const freeModels = createMemo(() => model.list().filter(isFree))
 
   const openProviders = (provider?: string) => {
-    if (!ProductCapabilities.visibleProviderActions({}).connect) return
+    if (!ProductUiRegistry.surface(Product.profile).providerActions.connect) return
     void import("./dialog-connect-provider").then((x) => {
       const controller = x.useProviderConnectController()
       controller.select(provider)
@@ -120,7 +121,7 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
             </For>
           </div>
 
-          <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+          <Show when={ProductUiRegistry.surface(Product.profile).providerActions.connect}>
             <div class="flex w-full flex-col">
               <div class="flex w-full flex-col items-start rounded-lg border-[0.5px] border-v2-border-border-muted bg-v2-background-bg-layer-02 p-2.5 pt-2">
                 <div class="flex h-8 w-full select-none items-center px-0.5 pb-2">

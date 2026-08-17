@@ -43,6 +43,8 @@ import { createCommandShim } from "@opencode-ai/tui/plugin/command-shim"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Effect } from "effect"
 import { createPluginRuntime, type PluginRuntime, type TuiPluginHost } from "@opencode-ai/tui/plugin/runtime"
+import { Config } from "@/config/config"
+import { PluginAdmin } from "../admin"
 
 ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
 
@@ -1085,10 +1087,12 @@ async function load(input: {
         return yield* RuntimeFlags.Service
       }).pipe(Effect.provide(AppNodeBuilder.build(RuntimeFlags.node))),
     )
-    const pluginOrigins = config.plugin_origins ?? (await TuiConfig.pluginOrigins())
+    const pluginOrigins = await Effect.runPromise(
+      Effect.gen(function* () {
+        return yield* PluginAdmin.initializePluginRegistry(yield* Config.Service)
+      }).pipe(Effect.provide(AppNodeBuilder.build(Config.node))),
+    )
     const records = Flag.OPENCODE_PURE ? [] : pluginOrigins
-    if (Flag.OPENCODE_PURE && pluginOrigins.length) {
-    }
 
     for (const item of internalTuiPlugins(flags)) {
       const entry = loadInternalPlugin(item)
@@ -1120,6 +1124,9 @@ async function load(input: {
     fail("failed to load tui plugins", { directory: cwd, error })
   }
 }
+
+export const adminPluginOrigins = PluginAdmin.adminPluginOrigins
+export const runtimePluginOrigins = PluginAdmin.runtimePluginOrigins
 
 export function createLegacyTuiPluginHost(): TuiPluginHost {
   return {

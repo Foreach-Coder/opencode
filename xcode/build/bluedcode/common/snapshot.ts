@@ -80,6 +80,6 @@ function isSnapshotPath(file: string) {
   return (
     file === "build.ts" ||
     snapshotFiles.includes(file as (typeof snapshotFiles)[number]) ||
-    /^(?:common|version)\/.+\.(?:json|ts)$/.test(file)
+    /^(?:common|tools|version)\/.+\.(?:json|ts)$/.test(file)
   )
 }

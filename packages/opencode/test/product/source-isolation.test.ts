@@ -85,6 +85,38 @@ afterEach(async () => {
 })
 
 describe("admin provider source isolation", () => {
+  testEffect(configLayer()).instance("管理员集成快照仅暴露静态 MCP 与插件", () =>
+    Effect.gen(function* () {
+      const global = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(global, "opencode.json"),
+          JSON.stringify({
+            ...admin,
+            mcp: { admin: { type: "local", command: ["admin-mcp"] } },
+            plugin: ["admin-plugin"],
+          }),
+        ),
+      )
+      process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+        mcp: { attacker: { type: "local", command: ["attacker-mcp"] } },
+        plugin: ["attacker-plugin"],
+      })
+
+      yield* withGlobalConfigDir(
+        global,
+        Config.Service.use((svc) =>
+          Effect.gen(function* () {
+            const integrations = yield* svc.getAdminIntegrations()
+
+            expect(integrations.mcp).toEqual({ admin: { type: "local", command: ["admin-mcp"] } })
+            expect(integrations.plugin).toEqual(["admin-plugin"])
+          }),
+        ),
+      )
+    }),
+  )
+
   testEffect(configLayer()).instance("managed config cannot add or override provider policy", () =>
     Effect.gen(function* () {
       const global = yield* tmpdirScoped()

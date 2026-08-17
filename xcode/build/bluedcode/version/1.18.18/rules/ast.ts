@@ -71,7 +71,7 @@ export function removeArrayElement(source: ts.SourceFile, node: ts.Expression, l
   return removeListItem(source, node, node.parent.elements, label)
 }
 
-export function applyVersionEdits(file: string, code: string, edits: readonly VersionEdit[], id: string) {
+export function applyVersionEdits(file: string, code: string, edits: readonly VersionEdit[], id: string, hits = edits.length) {
   const ordered = [...edits].sort((left, right) => right.start - left.start)
   ordered.forEach((edit, index) => {
     const next = ordered[index + 1]
@@ -90,7 +90,8 @@ export function applyVersionEdits(file: string, code: string, edits: readonly Ve
   const record: TransformRecord = {
     id,
     file,
-    hits: edits.length,
+    kind: "semantic-block",
+    hits,
     before: sha256(code),
     after: sha256(output),
   }

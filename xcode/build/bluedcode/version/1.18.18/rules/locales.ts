@@ -90,6 +90,14 @@ function transformProductValues(file: string, code: string, name: string, requir
     (node): node is ts.PropertyAssignment & { initializer: ts.StringLiteralLike } =>
       ts.isStringLiteralLike(node.initializer) && node.initializer.text.includes("OpenCode"),
   )
+  const productHits =
+    targets.reduce((total, node) => total + countLiteral(node.initializer.text, "OpenCode"), 0) +
+    (positionalLocaleFiles.has(file)
+      ? positionalProductValues.reduce((total, [index]) => {
+          const value = findDesktopArrays(source)[0]?.elements[index]
+          return total + (value && ts.isStringLiteralLike(value) ? countLiteral(value.text, "OpenCode") : 0)
+        }, 0)
+      : 0)
   const excluded = allProperties.filter((node) => isExcludedLocaleKey(propertyName(node.name)))
   if (!excluded.length) throw new Error(`1.18.18 结构 locale ${requiredKey} 未找到不可达 WSL 文本`)
   const edits = targets.map((node) =>
@@ -126,7 +134,7 @@ function transformProductValues(file: string, code: string, name: string, requir
       edits.push(removeArrayElement(source, value, `locale positional WSL ${index}`))
     })
   }
-  const result = applyVersionEdits(file, code, edits, "locale-product-identity")
+  const result = applyVersionEdits(file, code, edits, "locale:brand-name", productHits)
   const transformed = parse(file, result.code)
   const leaked = collect(transformed, ts.isPropertyAssignment).filter(
     (node) =>
@@ -173,4 +181,16 @@ function findDesktopArrays(source: ts.SourceFile) {
     }
     return [node.initializer]
   })
+}
+
+function countLiteral(value: string, token: string) {
+  let count = 0
+  let cursor = 0
+  while (cursor <= value.length - token.length) {
+    const found = value.indexOf(token, cursor)
+    if (found === -1) return count
+    count += 1
+    cursor = found + token.length
+  }
+  return count
 }

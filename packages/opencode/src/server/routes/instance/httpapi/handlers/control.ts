@@ -1,19 +1,37 @@
+import { Auth } from "@/auth"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpServerRequest } from "effect/unstable/http"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { RootHttpApi } from "../api"
 import { LogInput } from "../groups/control"
-import { ProductPolicy } from "@/product/policy"
 import { ProductHttpPolicy } from "@/product/http-policy"
 
 export const controlHandlers = HttpApiBuilder.group(RootHttpApi, "control", (handlers) =>
   Effect.gen(function* () {
-    const authSet = Effect.fn("ControlHttpApi.authSet")(() =>
-      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectAuthWrite)),
-    )
+    const auth = yield* Auth.Service
 
-    const authRemove = Effect.fn("ControlHttpApi.authRemove")(() =>
-      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectAuthWrite)),
-    )
+    const authSet = Effect.fn("ControlHttpApi.authSet")(function* (ctx) {
+      return yield* ProductHttpPolicy.translate(
+        Effect.gen(function* () {
+          yield* auth.writePreflight()
+          const payload = yield* HttpServerRequest.schemaBodyJson(Auth.Info).pipe(
+            Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))),
+          )
+          yield* auth.set(ctx.params.providerID, payload).pipe(Effect.orDie)
+          return true
+        }),
+      )
+    })
+
+    const authRemove = Effect.fn("ControlHttpApi.authRemove")(function* (ctx) {
+      return yield* ProductHttpPolicy.translate(
+        Effect.gen(function* () {
+          yield* auth.writePreflight()
+          yield* auth.remove(ctx.params.providerID).pipe(Effect.orDie)
+          return true
+        }),
+      )
+    })
 
     const log = Effect.fn("ControlHttpApi.log")(function* (ctx: { payload: typeof LogInput.Type }) {
       const write =

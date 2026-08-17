@@ -31,7 +31,8 @@ import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { ExternalLink } from "./external-link"
 import { SettingsList } from "./settings-list"
-import { ProductCapabilities } from "@/product/capabilities"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -255,7 +256,7 @@ export const SettingsGeneral: Component = () => {
 
   const InterfaceSection = () => (
     <Show
-      when={ProductCapabilities.visibleSettingsToggles({ newLayout: settings.general.newLayoutDesigns() }).newLayout}
+      when={ProductUiRegistry.localPreferences(Product.profile).newLayoutDesigns}
     >
       <div class="flex flex-col gap-1">
         <SettingsList>
@@ -767,7 +768,7 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <Show when={ProductCapabilities.visibleDesktopEntries().updater}>
+        <Show when={ProductUiRegistry.surface(Product.profile).publicActions.update}>
           <UpdatesSection />
         </Show>
 

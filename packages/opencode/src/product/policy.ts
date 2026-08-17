@@ -1,4 +1,5 @@
 import { Product } from "@foreachcode/product"
+import { ProductConfigPolicy } from "@/config/product-policy"
 
 export function requireProviderRead() {
   if (Product.profile.capabilities.providerManagement === "admin-static-only") return
@@ -13,8 +14,9 @@ export function rejectAuthWrite(): never {
   throw new Product.ProductError("PROVIDER_MANAGED_BY_ADMIN", "PROVIDER_MANAGED_BY_ADMIN: Provider 认证由管理员管理")
 }
 
-export function rejectConfigWrite(_payload: unknown): never {
-  throw new Product.ProductError("CONFIG_WRITE_DISABLED", "CONFIG_WRITE_DISABLED: 配置写入已由产品策略禁用")
+export function rejectConfigWrite(payload: unknown): never {
+  ProductConfigPolicy.requireWrite(payload)
+  throw new Product.ProductError("CONFIG_WRITE_DISABLED", "CONFIG_WRITE_DISABLED: 配置写入仅允许本地偏好")
 }
 
 export * as ProductPolicy from "./policy"

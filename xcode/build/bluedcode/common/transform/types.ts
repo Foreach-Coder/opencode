@@ -18,6 +18,7 @@ export type TransformInput = {
 export type TransformRecord = {
   id: string
   file: string
+  kind: "semantic-block" | "static-resource" | "evidence"
   hits: number
   before: string
   after: string

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises"
 import { Product } from "../../../../../../packages/product/src"
 import type { BuildIdentity } from "../../../common/types"
 import { adapter11818 } from "../index"
+import { transformLocale } from "../rules/locales"
 
 const commit = "31406ccc51b4bd2a4e1e086b2bcaa5f7f804f26d"
 const identity: BuildIdentity = {
@@ -32,6 +33,18 @@ test("adapter transforms the declared static HTML resources", () => {
   expect(result.code).toContain("<title>BluedCode</title>")
   expect(result.code).toContain('href="./favicon.svg"')
   expect(result.records.length).toBeGreaterThan(0)
+})
+
+test("同一 locale AST 字符串中的多个产品关键词以一个语义块记录", () => {
+  const result = transformLocale(
+    "packages/app/src/i18n/en.ts",
+    'export default { "app.name.desktop": "OpenCode OpenCode OpenCode", "settings.desktop.section.wsl": "WSL" }',
+    identity,
+  )
+
+  expect(result.records).toEqual([
+    expect.objectContaining({ id: "locale:brand-name", hits: 3, kind: "semantic-block" }),
+  ])
 })
 
 test("renderer identity is source-owned and never invokes an upstream service", async () => {

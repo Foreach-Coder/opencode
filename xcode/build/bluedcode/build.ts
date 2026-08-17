@@ -5,7 +5,6 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import ts from "typescript"
 import { scanOutput, type AuditAllowance, type AuditPolicy } from "./common/audit"
-import { assertEnterprisePolicy, type EnterprisePolicy } from "./common/enterprise"
 import { deriveDesktopAssets, validateBrandAssets, type DerivedAssets } from "./common/assets"
 import {
   assertTrackedBaseline,
@@ -27,19 +26,16 @@ import {
 } from "./common/isolation"
 import { createBuildPaths } from "./common/paths"
 import { auditFinalPortablePayload, portableExtractorLock } from "./common/portable"
-import {
-  createReleaseManifest,
-  digestBuildInputs,
-  publishRelease,
-  type PeAudit,
-} from "./common/manifest"
+import { createReleaseManifest, digestBuildInputs, publishRelease, type PeAudit } from "./common/manifest"
 import { createAnnotatedTagCommand, refreshReleaseLedger } from "./common/release"
-import { createRuntimeAcceptanceEvidence, writeRuntimeFixtureConfig } from "./common/runtime-acceptance"
+import { createRuntimeAcceptanceEvidence, writeRuntimePortableConfig } from "./common/runtime-acceptance"
 import { buildServer, type ServerBundle } from "./common/server"
 import { verifySnapshot as verifyFrameworkSnapshot } from "./common/snapshot"
+import { selectVersionAdapter } from "./common/adapter-registry"
+import type { VersionAdapter } from "./common/adapter"
 import type { BuildIdentity, SnapshotManifest } from "./common/types"
-import baselineData from "./version/1.18.18/baseline.json"
 import { baseline } from "./version/1.18.18/baseline"
+import "./version/1.18.18"
 import {
   createBrandedExecutableVersionHook,
   createBuilderConfig,
@@ -69,183 +65,193 @@ export async function preflightBuild(argv: string[], options: PreflightOptions =
   const repositoryRoot = path.resolve(options.repositoryRoot ?? path.resolve(import.meta.dir, "../../.."))
   const git = options.git ?? createGit(repositoryRoot)
   const releaseTags = request.channel === "prod" ? await refreshReleaseLedger(git, requireRelease(request.release)) : []
-  const identity = await resolveBuildIdentity(request, git, baseline)
+  const identity = await resolveBuildIdentity(request, git)
   if (request.channel === "prod") await assertTrackedBaseline(git)
+  const desktopVersion = /^\d+\.\d+\.\d+/.exec(identity.version)?.[0]
+  if (!desktopVersion) throw new Error("构建身份缺少 Desktop version")
+  const adapter = selectVersionAdapter({ tag: baseline.tag, commit: baseline.commit, desktopVersion })
+  await assertBaselineTagCommit(git, adapter)
   const sourceBefore = request.auditOnly ? undefined : await captureGitSourceState(git)
-  if (sourceBefore && sourceBefore.head !== identity.commit) throw new Error("Git source certification HEAD 与构建身份不一致")
+  if (sourceBefore && sourceBefore.head !== identity.commit)
+    throw new Error("Git source certification HEAD 与构建身份不一致")
   const paths = createBuildPaths(identity, repositoryRoot)
   const snapshot = await (options.verifySnapshot ?? verifyFrameworkSnapshot)(paths.frameworkRoot)
-  return { request, identity, paths, releaseTags, snapshot, sourceBefore, git }
+  return { request, identity, paths, releaseTags, snapshot, sourceBefore, git, adapter }
 }
 
 export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptions = {}) {
   const context = await preflightBuild(argv, options)
   let failureStage: FailureStage = "preflight"
   try {
-  if (process.platform !== "win32" || process.arch !== "x64") {
-    throw new Error("BluedCode Desktop 构建仅支持 Windows x64")
-  }
-  const builderToolchain = resolveBuilderToolchain(context.paths.repositoryRoot)
-  const tools = {
-    ...(await readToolVersions(context.paths.repositoryRoot, builderToolchain)),
-    sevenZip: portableExtractorLock.version,
-  }
+    if (process.platform !== "win32" || process.arch !== "x64") {
+      throw new Error("BluedCode Desktop 构建仅支持 Windows x64")
+    }
+    const builderToolchain = resolveBuilderToolchain(context.paths.repositoryRoot)
+    const tools = {
+      ...(await readToolVersions(context.paths.repositoryRoot, builderToolchain)),
+      sevenZip: portableExtractorLock.version,
+    }
 
-  failureStage = "server"
-  const server = await buildServer(context.paths, context.identity, baseline)
-  const assetDigest = await validateBrandAssets(context.paths.frameworkRoot)
-  const assets = await deriveDesktopAssets(context.paths)
-  const electronVite = await loadElectronViteApi(context.paths)
-  failureStage = "main"
-  await compileElectronVite({ assets, identity: context.identity, paths: context.paths, server }, electronVite)
-  await verifyElectronViteEvidence(context.paths)
-  const outputRoot = path.join(context.paths.stageDir, "desktop", "out")
-  const adapter = await loadAdapter(context.paths)
-  failureStage = "audit"
-  const outputAudit = await auditElectronOutput(outputRoot, adapter.auditPolicy)
-  const ledger = await verifyUnifiedLedgerEvidence(context.paths, adapter.modules, server.ledgerFile)
-  if (context.request.auditOnly) {
-    console.log(`兼容审计完成：${outputRoot}`)
-    return { auditOnly: true as const, ledger, outputAudit, server }
-  }
-  const nativePackageDir = path.join(
-    context.paths.repositoryRoot,
-    "packages",
-    "desktop",
-    "node_modules",
-    "@lydell",
-    "node-pty-win32-x64",
-  )
-  const packaging = await preparePackagingInput(context.paths, context.identity, nativePackageDir)
-  const brandedExecutable = createBrandedExecutableVersionHook({
-    identity: context.identity,
-    paths: context.paths,
-    operations: createReseditVersionOperations({
-      moduleFile: builderToolchain.reseditModuleFile,
-      readPeMetadata,
-      repositoryRoot: context.paths.repositoryRoot,
-    }),
-  })
-  const builderContext = {
-    arch: "x64" as const,
-    afterSign: brandedExecutable.afterSign,
-    assets,
-    electronVersion: tools.electron,
-    identity: context.identity,
-    nativePackageDir,
-    paths: context.paths,
-    platform: "win32" as const,
-  }
-  failureStage = "package"
-  await packagePortable(
-    context.paths,
-    createBuilderConfig(builderContext),
-    context.identity,
-    builderToolchain.electronBuilderFile,
-  )
-  const resourceEditAudit = brandedExecutable.requireAudit()
-  const executable = await findPortableArtifact(context.paths.outDir, context.identity.artifactName)
-  const siblingRoot = path.join(context.paths.outDir, "win-unpacked")
-  const siblingAudit = await auditPackagedApplication(
-    context.paths,
-    context.identity,
-    assets,
-    packaging.nativeManifest,
-    siblingRoot,
-  )
-  const extracted = await auditFinalPortablePayload({
-    executable,
-    paths: context.paths,
-    siblingRoot,
-    auditApplication: (root) =>
-      auditPackagedApplication(context.paths, context.identity, assets, packaging.nativeManifest, root),
-  })
-  if (JSON.stringify(extracted.application) !== JSON.stringify(siblingAudit)) {
-    throw new Error("最终 Portable 提取应用审计与 win-unpacked 审计不一致")
-  }
-  const packageAudit = extracted.application.package
-  const portableAudit = {
-    ...extracted.portable,
-    applicationPe: extracted.application.pe,
-    nativeExecutableSignatures: extracted.application.nativeExecutableSignatures,
-    resourceEdit: resourceEditAudit,
-  }
-  const peAudit = await auditPortablePe(executable, context.identity)
-  const artifactBytes = await readFile(executable)
-  const artifact = {
-    size: artifactBytes.byteLength,
-    sha256: sha256(artifactBytes),
-  }
-  const transformLedger = await verifyUnifiedLedgerEvidence(context.paths, adapter.modules, server.ledgerFile)
-  const digests = await digestBuildInputs(context.paths)
-  const release = context.identity.tag
-    ? {
-        targetTag: context.identity.tag,
-        annotatedTagCommand: createAnnotatedTagCommand({
-          artifactName: context.identity.artifactName,
-          artifactSha256: artifact.sha256,
-          commit: context.identity.commit,
-          tag: context.identity.tag,
-          version: context.identity.version,
-        }),
-      }
-    : { targetTag: null, annotatedTagCommand: null }
-  const runtimeHome = await writeRuntimeFixtureConfig(path.join(context.paths.workspaceRoot, "runtime-home"))
-  const runtime = await createRuntimeAcceptanceEvidence({ home: runtimeHome, visibleVersion: context.identity.version })
-  const finalized = await withCertifiedGitSource(context.git, context.sourceBefore!, async (sourceAfter) => {
-    const manifest = createReleaseManifest({
+    failureStage = "server"
+    const server = await buildServer(context.paths, context.identity, { desktopVersion: context.adapter.desktopVersion }, context.adapter)
+    const assetDigest = await validateBrandAssets(context.paths.frameworkRoot)
+    const assets = await deriveDesktopAssets(context.paths)
+    const electronVite = await loadElectronViteApi(context.paths)
+    failureStage = "main"
+    await compileElectronVite({ adapter: context.adapter, assets, identity: context.identity, paths: context.paths, server }, electronVite)
+    await verifyElectronViteEvidence(context.paths)
+    const outputRoot = path.join(context.paths.stageDir, "desktop", "out")
+    const adapter = context.adapter
+    failureStage = "audit"
+    const outputAudit = await auditElectronOutput(outputRoot, adapter.auditPolicy)
+    const ledger = await verifyUnifiedLedgerEvidence(context.paths, adapter.modules, server.ledgerFile)
+    if (context.request.auditOnly) {
+      console.log(`兼容审计完成：${outputRoot}`)
+      return { auditOnly: true as const, ledger, outputAudit, server }
+    }
+    const nativePackageDir = path.join(
+      context.paths.repositoryRoot,
+      "packages",
+      "desktop",
+      "node_modules",
+      "@lydell",
+      "node-pty-win32-x64",
+    )
+    const packaging = await preparePackagingInput(context.paths, context.identity, nativePackageDir)
+    const brandedExecutable = createBrandedExecutableVersionHook({
       identity: context.identity,
-      baseline: {
-        tag: baselineData.tag,
-        commit: baselineData.commit,
-        desktopVersion: baseline.desktopVersion,
-      },
-      builtAtUtc: new Date().toISOString(),
-      source: { before: context.sourceBefore!, after: sourceAfter },
-      tools,
-      digests: { ...digests, assets: assetDigest.digest },
-      cache: {
-        server: server.cacheHit,
-        electronVite: false,
-        portable: false,
-        portableExtractorTool: extracted.portable.extractor.cacheHit,
-      },
-      release,
-      artifact,
-      transformation: transformLedger,
-      enterprise: { policy: adapter.enterprisePolicy, audit: outputAudit },
-      audit: {
-        output: outputAudit,
-        package: packageAudit,
-        pe: peAudit,
-        portable: portableAudit,
-        runtime,
-      },
+      paths: context.paths,
+      operations: createReseditVersionOperations({
+        moduleFile: builderToolchain.reseditModuleFile,
+        readPeMetadata,
+        repositoryRoot: context.paths.repositoryRoot,
+      }),
     })
-    const published = await publishRelease({
-      artifactsRoot: context.paths.artifactsDir,
+    const builderContext = {
+      arch: "x64" as const,
+      afterSign: brandedExecutable.afterSign,
+      assets,
+      electronVersion: tools.electron,
+      identity: context.identity,
+      nativePackageDir,
+      paths: context.paths,
+      platform: "win32" as const,
+    }
+    failureStage = "package"
+    await packagePortable(
+      context.paths,
+      createBuilderConfig(builderContext),
+      context.identity,
+      builderToolchain.electronBuilderFile,
+    )
+    const resourceEditAudit = brandedExecutable.requireAudit()
+    const executable = await findPortableArtifact(context.paths.outDir, context.identity.artifactName)
+    const siblingRoot = path.join(context.paths.outDir, "win-unpacked")
+    const siblingAudit = await auditPackagedApplication(
+      context.paths,
+      context.identity,
+      assets,
+      packaging.nativeManifest,
+      siblingRoot,
+    )
+    const extracted = await auditFinalPortablePayload({
       executable,
-      manifest,
-      outputRoot: context.paths.outputRoot,
-      repositoryRoot: context.paths.repositoryRoot,
+      paths: context.paths,
+      siblingRoot,
+      auditApplication: (root) =>
+        auditPackagedApplication(context.paths, context.identity, assets, packaging.nativeManifest, root),
     })
-    return { manifest, published }
-  })
-  const manifest = finalized.manifest
-  const published = finalized.published
-  console.log(`产物：${published.executable}`)
-  console.log(`发行清单：${published.manifest}`)
-  if (release.targetTag && release.annotatedTagCommand) {
-    console.log(`Tag 候选：${release.targetTag}`)
-    console.log(`中文 annotated tag 命令（仅输出，未执行）：${release.annotatedTagCommand}`)
-  }
-  return {
-    ...published,
-    manifest: published.manifest,
-    releaseManifest: manifest,
-  }
+    if (JSON.stringify(extracted.application) !== JSON.stringify(siblingAudit)) {
+      throw new Error("最终 Portable 提取应用审计与 win-unpacked 审计不一致")
+    }
+    const packageAudit = extracted.application.package
+    const portableAudit = {
+      ...extracted.portable,
+      applicationPe: extracted.application.pe,
+      nativeExecutableSignatures: extracted.application.nativeExecutableSignatures,
+      resourceEdit: resourceEditAudit,
+    }
+    const peAudit = await auditPortablePe(executable, context.identity)
+    const artifactBytes = await readFile(executable)
+    const artifact = {
+      size: artifactBytes.byteLength,
+      sha256: sha256(artifactBytes),
+    }
+    const transformLedger = await verifyUnifiedLedgerEvidence(context.paths, adapter.modules, server.ledgerFile)
+    const digests = await digestBuildInputs(context.paths)
+    const release = context.identity.tag
+      ? {
+          targetTag: context.identity.tag,
+          annotatedTagCommand: createAnnotatedTagCommand({
+            artifactName: context.identity.artifactName,
+            artifactSha256: artifact.sha256,
+            commit: context.identity.commit,
+            tag: context.identity.tag,
+            version: context.identity.version,
+          }),
+        }
+      : { targetTag: null, annotatedTagCommand: null }
+    const runtimeHome = await writeRuntimePortableConfig(path.join(context.paths.workspaceRoot, "runtime-home"))
+    const runtime = await createRuntimeAcceptanceEvidence({
+      executable,
+      home: runtimeHome,
+      visibleVersion: context.identity.version,
+    })
+    const finalized = await withCertifiedGitSource(context.git, context.sourceBefore!, async (sourceAfter) => {
+      const manifest = createReleaseManifest({
+        identity: context.identity,
+        baseline: {
+          tag: context.adapter.tag,
+          commit: context.adapter.commit,
+          desktopVersion: context.adapter.desktopVersion,
+        },
+        resourceEditorTool: context.adapter.resourceEditorTool,
+        builtAtUtc: new Date().toISOString(),
+        source: { before: context.sourceBefore!, after: sourceAfter },
+        tools,
+        digests: { ...digests, assets: assetDigest.digest },
+        cache: {
+          server: server.cacheHit,
+          electronVite: false,
+          portable: false,
+          portableExtractorTool: extracted.portable.extractor.cacheHit,
+        },
+        release,
+        artifact,
+        transformation: transformLedger,
+        enterprise: { audit: outputAudit },
+        audit: {
+          output: outputAudit,
+          package: packageAudit,
+          pe: peAudit,
+          portable: portableAudit,
+          runtime,
+        },
+      })
+      const published = await publishRelease({
+        artifactsRoot: context.paths.artifactsDir,
+        executable,
+        manifest,
+        outputRoot: context.paths.outputRoot,
+        repositoryRoot: context.paths.repositoryRoot,
+      })
+      return { manifest, published }
+    })
+    const manifest = finalized.manifest
+    const published = finalized.published
+    console.log(`产物：${published.executable}`)
+    console.log(`发行清单：${published.manifest}`)
+    if (release.targetTag && release.annotatedTagCommand) {
+      console.log(`Tag 候选：${release.targetTag}`)
+      console.log(`中文 annotated tag 命令（仅输出，未执行）：${release.annotatedTagCommand}`)
+    }
+    return {
+      ...published,
+      manifest: published.manifest,
+      releaseManifest: manifest,
+    }
   } catch (error) {
-    await writeBuildFailure(context.paths, context.identity, error, failureStage)
+    await writeBuildFailure(context.paths, context.identity, context.adapter, error, failureStage)
     throw error
   }
 }
@@ -253,20 +259,22 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
 async function writeBuildFailure(
   paths: ReturnType<typeof createBuildPaths>,
   identity: BuildIdentity,
+  adapter: VersionAdapter,
   error: unknown,
   fallbackStage: FailureStage,
 ) {
   try {
-    const [digests, adapter] = await Promise.all([digestBuildInputs(paths), loadAdapter(paths)])
+    const digests = await digestBuildInputs(paths)
     const context = readFailureContext(error)
     await writeFailureReport({
       root: paths.stageDir,
       stage: context?.stage ?? fallbackStage,
       code:
-        context?.code ?? (error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "BUILD_FAILED"),
+        context?.code ??
+        (error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "BUILD_FAILED"),
       error,
       gitSha256: sha256(identity.commit),
-      productProfileSha256: adapter.productProfileSha256 ?? "0".repeat(64),
+      productProfileSha256: adapter.productProfileSha256,
       frameworkSha256: digests.framework,
       adapterSha256: digests.adapter,
       lastModule: context?.lastModule ?? null,
@@ -370,9 +378,7 @@ export async function auditElectronOutput(root: string, policy: AuditPolicy) {
     if (/^(?:main|preload)\//.test(file) && file.endsWith(".js")) {
       runtimeImports.push(...findForbiddenRuntimeImports(file, text))
     }
-    if (
-      /electron-updater|startBackgroundCli|sentry\.io|SENTRY_AUTH_TOKEN|tui\.json/i.test(text)
-    ) {
+    if (/electron-updater|startBackgroundCli|sentry\.io|SENTRY_AUTH_TOKEN|tui\.json/i.test(text)) {
       banned.push(file)
     }
   }
@@ -717,51 +723,6 @@ async function loadElectronViteApi(paths: ReturnType<typeof createBuildPaths>): 
   }
 }
 
-async function loadAdapter(paths: ReturnType<typeof createBuildPaths>) {
-  const loaded: unknown = await import(pathToFileURL(path.join(paths.versionRoot, "index.ts")).href)
-  if (
-    !loaded ||
-    typeof loaded !== "object" ||
-    !("adapter11818" in loaded) ||
-    !loaded.adapter11818 ||
-    typeof loaded.adapter11818 !== "object" ||
-    !("auditPolicy" in loaded.adapter11818) ||
-    !("enterprisePolicy" in loaded.adapter11818) ||
-    !("productProfileSha256" in loaded.adapter11818) ||
-    typeof loaded.adapter11818.productProfileSha256 !== "string" ||
-    !/^[a-f0-9]{64}$/.test(loaded.adapter11818.productProfileSha256) ||
-    !("modules" in loaded.adapter11818) ||
-    !Array.isArray(loaded.adapter11818.modules) ||
-    !loaded.adapter11818.modules.every(
-      (module) =>
-        !!module &&
-        typeof module === "object" &&
-        "id" in module &&
-        typeof module.id === "string" &&
-        "file" in module &&
-        typeof module.file === "string" &&
-        "stage" in module &&
-        ["server", "main", "preload", "renderer"].includes(String(module.stage)),
-    )
-  ) {
-    throw new Error("Task 2/6 版本适配器公共接口无效")
-  }
-  return {
-    auditPolicy: requireAuditPolicy(loaded.adapter11818.auditPolicy),
-    enterprisePolicy: requireEnterprisePolicy(loaded.adapter11818.enterprisePolicy),
-    productProfileSha256: loaded.adapter11818.productProfileSha256,
-    modules: loaded.adapter11818.modules.map((module) => ({
-      id: module.id,
-      file: module.file,
-      stage: module.stage as "server" | "main" | "preload" | "renderer",
-    })),
-  }
-}
-
-function requireEnterprisePolicy(input: unknown): EnterprisePolicy {
-  return assertEnterprisePolicy(input)
-}
-
 function requireBuildTargets(input: unknown): ElectronViteApi["requiredBuildTargets"] {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Task 6 requiredBuildTargets 无效")
   if (Object.keys(input).sort().join(",") !== "main,preload,renderer") {
@@ -805,7 +766,7 @@ function requireAuditPolicy(input: unknown): AuditPolicy {
       !("expected" in value) ||
       (value.expected !== "any" && typeof value.expected !== "number") ||
       !("classification" in value) ||
-      !["preserved", "product", "entrypoint"].includes(String(value.classification)) ||
+      !["forbidden", "preserved", "evidence"].includes(String(value.classification)) ||
       !("reason" in value) ||
       typeof value.reason !== "string"
     ) {
@@ -828,15 +789,25 @@ function requireAuditPolicy(input: unknown): AuditPolicy {
 }
 
 function requireAuditClassification(value: unknown): AuditAllowance["classification"] {
-  if (value === "preserved" || value === "product" || value === "entrypoint") return value
+  if (value === "forbidden" || value === "preserved" || value === "evidence") return value
   throw new Error("版本适配器 audit classification 无效")
 }
 
 type ElectronViteBuildContext = {
+  adapter: VersionAdapter
   assets: DerivedAssets
   identity: BuildIdentity
   paths: ReturnType<typeof createBuildPaths>
   server: Pick<ServerBundle, "file" | "digest" | "size" | "assets">
+}
+
+async function assertBaselineTagCommit(git: Git, adapter: VersionAdapter) {
+  const result = await git.run(["rev-parse", `${adapter.tag}^{}`])
+  const commit = result.stdout.trim()
+  if (result.exitCode !== 0 || !/^[a-f0-9]{40}$/.test(commit)) throw new Error("无法读取受信基线 tag")
+  if (commit !== adapter.commit) {
+    throw new Error(`受信基线 tag ${adapter.tag} 指向 ${commit}，与适配器 commit ${adapter.commit} 不一致`)
+  }
 }
 
 type ElectronViteApi = {
@@ -917,16 +888,26 @@ async function verifyUnifiedLedgerEvidence(
 ) {
   const serverRoot = path.join(paths.stageDir, "ledger", "server")
   const electronRoot = path.join(paths.stageDir, "ledger", "electron")
-  await Promise.all([requireConcreteRoot(serverRoot, "当前 server 统一 ledger"), requireConcreteRoot(electronRoot, "当前 Electron 统一 ledger")])
+  await Promise.all([
+    requireConcreteRoot(serverRoot, "当前 server 统一 ledger"),
+    requireConcreteRoot(electronRoot, "当前 Electron 统一 ledger"),
+  ])
   const relativeServerLedger = path.relative(serverRoot, serverLedgerFile)
-  if (!relativeServerLedger || path.isAbsolute(relativeServerLedger) || relativeServerLedger.startsWith(`..${path.sep}`)) {
+  if (
+    !relativeServerLedger ||
+    path.isAbsolute(relativeServerLedger) ||
+    relativeServerLedger.startsWith(`..${path.sep}`)
+  ) {
     throw new Error("当前 server ledger 越出受控目录")
   }
-  const electronLedgerFiles = (await listConcreteFiles(electronRoot)).filter((file) => /^unified-ledger-[a-f0-9]{64}\.json$/.test(file))
+  const electronLedgerFiles = (await listConcreteFiles(electronRoot)).filter((file) =>
+    /^unified-ledger-[a-f0-9]{64}\.json$/.test(file),
+  )
   if (electronLedgerFiles.length !== 1) throw new Error("构建缺少当前 Electron 统一 ledger")
   const ledgers = await Promise.all(
-    [serverLedgerFile, path.join(electronRoot, electronLedgerFiles[0]!)]
-      .map(async (file) => JSON.parse(await readFile(file, "utf8")) as UnifiedLedger),
+    [serverLedgerFile, path.join(electronRoot, electronLedgerFiles[0]!)].map(
+      async (file) => JSON.parse(await readFile(file, "utf8")) as UnifiedLedger,
+    ),
   )
   ledgers.forEach(validateLedger)
   const events = ledgers.flatMap((ledger) => ledger.events)
@@ -938,7 +919,12 @@ async function verifyUnifiedLedgerEvidence(
   if (new Set(events.map((event) => event.productProfileSha256)).size !== 1) {
     throw new Error("统一 ledger 产品 Profile 摘要不一致")
   }
-  const ledger = { version: 2 as const, events: events.sort((left, right) => `${left.stage}:${left.moduleId}`.localeCompare(`${right.stage}:${right.moduleId}`)) }
+  const ledger = {
+    version: 2 as const,
+    events: events.sort((left, right) =>
+      `${left.stage}:${left.moduleId}`.localeCompare(`${right.stage}:${right.moduleId}`),
+    ),
+  }
   return { ledger, sha256: sha256(`${JSON.stringify(ledger, null, 2)}\n`) }
 }
 

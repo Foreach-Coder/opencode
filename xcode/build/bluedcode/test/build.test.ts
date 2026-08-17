@@ -64,7 +64,7 @@ describe("preflightBuild", () => {
   test("dev 不 fetch、不消费发行序号并完成真实 Git/快照预检", async () => {
     const events: string[] = []
     const result = await preflightBuild(["--channel", "dev"], {
-      git: gitFixture(events, { dirty: "" }),
+      git: gitFixture(events, { dirty: "", commit: adapter11818.commit }),
       repositoryRoot: "D:/fixture/repository",
       verifySnapshot: async () => {
         events.push("snapshot")
@@ -74,12 +74,79 @@ describe("preflightBuild", () => {
 
     expect(result.identity).toMatchObject({
       channel: "dev",
-      commit: "0123456789abcdef0123456789abcdef01234567",
-      version: "1.18.18-dev-0123456789",
+      commit: adapter11818.commit,
+      version: `1.18.18-dev-${adapter11818.commit.slice(0, 10)}`,
     })
     expect(result.releaseTags).toEqual([])
     expect(events.some((event) => event.includes("fetch"))).toBe(false)
     expect(events.at(-1)).toBe("snapshot")
+  })
+
+  test("dev HEAD 无 baseline exact tag 时仍按受信 baseline 选择适配器", async () => {
+    const events: string[] = []
+    const headCommit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd"
+    const result = await preflightBuild(["--channel", "dev"], {
+      git: gitFixture(events, { dirty: "", commit: headCommit, exactTag: null }),
+      repositoryRoot: "D:/fixture/repository",
+      verifySnapshot: async () => {
+        events.push("snapshot")
+        return { frameworkVersion: 1, files: { "brand.json": "a".repeat(64) } }
+      },
+    })
+
+    expect(result.identity.commit).toBe(headCommit)
+    expect(result.identity.version).toBe(`1.18.18-dev-${headCommit.slice(0, 10)}`)
+    expect(result.adapter).toBe(adapter11818)
+    expect(events).toContain(`git:rev-parse ${adapter11818.tag}^{}`)
+    expect(events.at(-1)).toBe("snapshot")
+  })
+
+  test("baseline tag 指向未知 commit 时在快照和构建阶段之前由 preflight 拒绝", async () => {
+    const events: string[] = []
+    await expectFailure(
+      preflightBuild(["--channel", "dev"], {
+        git: gitFixture(events, { dirty: "", commit: adapter11818.commit, baselineTagCommit: "0".repeat(40) }),
+        repositoryRoot: "D:/fixture/repository",
+        verifySnapshot: async () => {
+          events.push("snapshot")
+          return { frameworkVersion: 1, files: {} }
+        },
+      }),
+      /受信基线 tag/,
+    )
+    expect(events).not.toContain("snapshot")
+  })
+
+  test("baseline tag 缺失时在快照和构建阶段之前由 preflight 拒绝", async () => {
+    const events: string[] = []
+    await expectFailure(
+      preflightBuild(["--channel", "dev"], {
+        git: gitFixture(events, { dirty: "", commit: adapter11818.commit, baselineTagCommit: null }),
+        repositoryRoot: "D:/fixture/repository",
+        verifySnapshot: async () => {
+          events.push("snapshot")
+          return { frameworkVersion: 1, files: {} }
+        },
+      }),
+      /无法读取受信基线 tag/,
+    )
+    expect(events).not.toContain("snapshot")
+  })
+
+  test("未知 Desktop version 在快照和构建阶段之前由 preflight 拒绝", async () => {
+    const events: string[] = []
+    await expectFailure(
+      preflightBuild(["--channel", "dev"], {
+        git: gitFixture(events, { dirty: "", commit: adapter11818.commit, desktopVersion: "9.99.99" }),
+        repositoryRoot: "D:/fixture/repository",
+        verifySnapshot: async () => {
+          events.push("snapshot")
+          return { frameworkVersion: 1, files: {} }
+        },
+      }),
+      /未注册/,
+    )
+    expect(events).not.toContain("snapshot")
   })
 
   test("prod 在 fetch 后、重活前不消费 ignored overlay 但仍认证 tracked source", async () => {
@@ -87,6 +154,7 @@ describe("preflightBuild", () => {
     await preflightBuild(["--channel", "prod", "--release", "260815-02"], {
       git: gitFixture(events, {
         dirty: "",
+        commit: adapter11818.commit,
         overlay: "packages/opencode/script/build-config.ts\n",
         tags: "bluedcode-v1.18.17-260815-01\n",
       }),
@@ -259,21 +327,35 @@ test("release-manifest exact schema 记录完整 commit、摘要、账本、审�
       },
       portable: portableAuditFixture(),
       runtime: {
-        fixtureConfigDirectory: ".config/bluedcode",
-        mode: "fixture",
-        staleSession: {
-          appShellLoaded: true,
-          recoveryError: { code: "SESSION_NOT_FOUND", message: "Session not found: stale-session" },
-        },
+        mode: "portable",
+        executableStarted: true,
+        serverHealthReady: true,
+        preloadReady: true,
+        rendererReady: true,
+        adminModelLoaded: true,
+        exitedCleanly: true,
+        lingeringProcesses: [],
+        configDirectory: ".config/bluedcode",
         visibleVersion: "1.18.18-dev-0123456789",
-        smoke: {
-          appShellLoaded: true,
+        adminConfig: {
+          apiKeySha256: "be1a186ad5399278bd0942db2185028509cd423bf6635b3ac76667935504b1ba",
+          modelId: "gpt-4.1",
+          providerId: "openai-proxy",
+        },
+        publicNetworkCalls: [],
+        checks: {
           defaultSessionCore: "v1",
+          sessionCoreSwitchesTo: "v2",
           deepLinkRefresh: { moved: true, refreshed: true },
           disabledEntrypoints: ["auth", "connect-provider", "share", "update"],
-          loadedModel: "openai-proxy/gpt-4.1",
-          publicNetworkCalls: [],
-          sessionCoreSwitchesTo: "v2",
+          staleSession: {
+            appShellLoaded: true,
+            recoveryError: { code: "SESSION_NOT_FOUND", message: "Session not found: stale-session" },
+          },
+        },
+        logs: {
+          stdoutSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          stderrSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         },
       },
       releaseDirectory: {
@@ -283,6 +365,12 @@ test("release-manifest exact schema 记录完整 commit、摘要、账本、审�
     },
   })
   expect(serializeReleaseManifest(manifest)).toBe(`${JSON.stringify(manifest, null, 2)}\n`)
+  expect(() =>
+    serializeReleaseManifest({
+      ...manifest,
+      enterprise: { ...manifest.enterprise, policy: { ...manifest.enterprise.policy, enabled: false } },
+    }),
+  ).toThrow("企业策略必须由产品 Profile 派生")
 })
 
 test("manifest cache 语义区分 Portable 重打与提取工具缓存并锁定 exact schema", () => {
@@ -303,9 +391,55 @@ test("manifest cache 语义区分 Portable 重打与提取工具缓存并锁定 
   }
 })
 
-test("manifest runtime fixture 证据要求无主进程错误、V1/V2、受限入口和零公网调用", () => {
+test("manifest runtime portable 证据要求无主进程错误、V1/V2、受限入口和零公网调用", () => {
   const manifest = manifestFixture(Buffer.from("portable-exe"))
   Reflect.set(manifest.audit, "runtime", {
+    mode: "portable",
+    visibleVersion: "1.18.18-dev-0123456789",
+    executableStarted: true,
+    serverHealthReady: true,
+    preloadReady: true,
+    rendererReady: true,
+    adminModelLoaded: true,
+    exitedCleanly: true,
+    lingeringProcesses: [],
+    configDirectory: ".config/bluedcode",
+    mainProcessError: "ReferenceError",
+    publicNetworkCalls: [],
+    checks: {
+      defaultSessionCore: "v1",
+      sessionCoreSwitchesTo: "v2",
+      deepLinkRefresh: { moved: true, refreshed: true },
+      disabledEntrypoints: ["auth", "connect-provider", "share", "update"],
+    },
+  })
+
+  expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|运行时|主进程/i)
+})
+
+test("manifest runtime portable 缺失或伪造 stale-session recovery 证据时 fail closed", () => {
+  const manifest = manifestFixture(Buffer.from("portable-exe"))
+  Reflect.set(manifest.audit.runtime.checks, "staleSession", { appShellLoaded: true })
+
+  expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|stale|session|恢复/i)
+})
+
+test("manifest runtime portable 拒绝错误的 stale-session recovery code 或 message", () => {
+  for (const recoveryError of [
+    { code: "SESSION_OTHER", message: "Session not found: stale-session" },
+    { code: "SESSION_NOT_FOUND", message: "Session not found: another-session" },
+  ]) {
+    const manifest = manifestFixture(Buffer.from("portable-exe"))
+    Reflect.set(manifest.audit.runtime.checks, "staleSession", { appShellLoaded: true, recoveryError })
+
+    expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|stale|session|恢复/i)
+  }
+})
+
+test("manifest runtime 拒绝 source-only fixture 与明文管理员 API key", () => {
+  const fixtureManifest = manifestFixture(Buffer.from("portable-exe"))
+  Reflect.set(fixtureManifest.audit, "runtime", {
+    fixtureConfigDirectory: ".config/bluedcode",
     mode: "fixture",
     visibleVersion: "1.18.18-dev-0123456789",
     smoke: {
@@ -313,32 +447,29 @@ test("manifest runtime fixture 证据要求无主进程错误、V1/V2、受限�
       defaultSessionCore: "v1",
       deepLinkRefresh: { moved: true, refreshed: true },
       disabledEntrypoints: ["auth", "connect-provider", "share", "update"],
-      mainProcessError: "ReferenceError",
+      loadedModel: "openai-proxy/gpt-4.1",
       publicNetworkCalls: [],
       sessionCoreSwitchesTo: "v2",
     },
+    staleSession: {
+      appShellLoaded: true,
+      recoveryError: { code: "SESSION_NOT_FOUND", message: "Session not found: stale-session" },
+    },
   })
+  expect(() => serializeReleaseManifest(fixtureManifest)).toThrow(/runtime|Portable|fixture/i)
 
-  expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|运行时|主进程/i)
-})
+  const secretManifest = manifestFixture(Buffer.from("portable-exe"))
+  Reflect.set(secretManifest.audit.runtime, "adminConfig", {
+    apiKey: "sk-runtime-acceptance-secret",
+    modelId: "gpt-4.1",
+    providerId: "openai-proxy",
+  })
+  expect(() => serializeReleaseManifest(secretManifest)).toThrow(/runtime|secret|密钥|明文/i)
 
-test("manifest runtime fixture 缺失或伪造 stale-session recovery 证据时 fail closed", () => {
-  const manifest = manifestFixture(Buffer.from("portable-exe"))
-  Reflect.set(manifest.audit.runtime, "staleSession", { appShellLoaded: true })
-
-  expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|stale|session|恢复/i)
-})
-
-test("manifest runtime fixture 拒绝错误的 stale-session recovery code 或 message", () => {
-  for (const recoveryError of [
-    { code: "SESSION_OTHER", message: "Session not found: stale-session" },
-    { code: "SESSION_NOT_FOUND", message: "Session not found: another-session" },
-  ]) {
-    const manifest = manifestFixture(Buffer.from("portable-exe"))
-    Reflect.set(manifest.audit.runtime, "staleSession", { appShellLoaded: true, recoveryError })
-
-    expect(() => serializeReleaseManifest(manifest)).toThrow(/runtime|stale|session|恢复/i)
-  }
+  const nestedSecretManifest = manifestFixture(Buffer.from("portable-exe"))
+  Reflect.set(nestedSecretManifest.audit.runtime, "extra", { api_key: "sk-real-secret-example" })
+  Reflect.set(nestedSecretManifest.audit.runtime.checks, "token", "internal-token")
+  expect(() => serializeReleaseManifest(nestedSecretManifest)).toThrow(/runtime|secret|密钥|明文|schema/i)
 })
 
 test("manifest 与已认证 resedit 完整图摘要和文件清单精确交叉验证", () => {
@@ -572,16 +703,16 @@ test("Electron output 将已声明的 fail-closed CLI/WSL 协议交给输出审�
         id: "main-fail-closed-wsl",
         path: "main/index.js",
         token: "wsl-servers-install-",
-        expected: 1,
-        classification: "entrypoint" as const,
+        expected: "any" as const,
+        classification: "evidence" as const,
         reason: "测试已声明的 fail-closed WSL 协议。",
       },
       {
         id: "preload-fail-closed-cli",
         path: "preload/index.js",
         token: '"install-cli"',
-        expected: 1,
-        classification: "entrypoint" as const,
+        expected: "any" as const,
+        classification: "evidence" as const,
         reason: "测试已声明的 fail-closed CLI 协议。",
       },
     ],
@@ -938,21 +1069,43 @@ test("Portable PE 合同要求完整 ProductVersion、独立数字版本与 unsi
   expect(() => validatePortablePe({ ...metadata, signatureStatus: "Valid" }, identity)).toThrow("unsigned")
 })
 
-function gitFixture(events: string[], options: { dirty: string; overlay?: string; tags?: string }): Git {
+function gitFixture(
+  events: string[],
+  options: {
+    dirty: string
+    overlay?: string
+    tags?: string
+    commit?: string
+    tag?: string
+    exactTag?: string | null
+    baselineTagCommit?: string | null
+    desktopVersion?: string
+  },
+): Git {
   return {
     async run(args) {
       events.push(`git:${args.join(" ")}`)
       const command = args.join(" ")
       if (command === "fetch --tags") return gitResult("")
       if (command === "tag --list bluedcode-v*") return gitResult(options.tags ?? "")
-      if (command === "rev-parse HEAD") return gitResult("0123456789abcdef0123456789abcdef01234567\n")
-      if (command === "rev-parse --short=10 HEAD") return gitResult("0123456789\n")
+      const commit = options.commit ?? "0123456789abcdef0123456789abcdef01234567"
+      if (command === "rev-parse HEAD") return gitResult(`${commit}\n`)
+      if (command === "rev-parse --short=10 HEAD") return gitResult(`${commit.slice(0, 10)}\n`)
       if (command === "rev-parse --abbrev-ref HEAD") return gitResult("task-7\n")
+      if (command === "describe --tags --exact-match HEAD") {
+        if (options.exactTag === null) return gitFailure("no exact tag")
+        return gitResult(`${options.exactTag ?? options.tag ?? "v1.18.18"}\n`)
+      }
+      if (command === `rev-parse ${adapter11818.tag}^{}`) {
+        if (options.baselineTagCommit === null) return gitFailure("missing baseline tag")
+        return gitResult(`${options.baselineTagCommit ?? adapter11818.commit}\n`)
+      }
       if (command === "ls-files --stage -z") return gitResult("100644 abc 0\ttracked.ts\0")
-      if (command === "ls-tree -r -z --full-tree 0123456789abcdef0123456789abcdef01234567") {
+      if (command === `ls-tree -r -z --full-tree ${commit}`) {
         return gitResult("100644 blob abc\ttracked.ts\0")
       }
-      if (command === "show HEAD:packages/desktop/package.json") return gitResult('{"version":"1.18.18"}\n')
+      if (command === "show HEAD:packages/desktop/package.json")
+        return gitResult(`{"version":"${options.desktopVersion ?? "1.18.18"}"}\n`)
       if (command === "status --porcelain=v1 -z --untracked-files=all") return gitResult(options.dirty)
       if (command.startsWith("ls-files --others --ignored")) return gitResult(options.overlay ?? "")
       return {
@@ -968,6 +1121,10 @@ function gitResult(stdout: string) {
   return { exitCode: 0, stdout, stderr: "" }
 }
 
+function gitFailure(stderr: string) {
+  return { exitCode: 1, stdout: "", stderr }
+}
+
 function manifestFixture(
   executable: Buffer,
   cache = {
@@ -976,7 +1133,7 @@ function manifestFixture(
     portable: false,
     portableExtractorTool: true,
   } satisfies ReleaseManifestInput["cache"],
-  resourceEditorTool = resourceEditorLock,
+  resourceEditTool = resourceEditorLock,
 ) {
   return createReleaseManifest({
     identity: {
@@ -994,6 +1151,7 @@ function manifestFixture(
       commit: "31406ccc51b4bd2a4e1e086b2bcaa5f7f804f26d",
       desktopVersion: "1.18.18",
     },
+    resourceEditorTool: resourceEditorLock,
     builtAtUtc: "2026-08-15T01:02:03.000Z",
     source: { before: sourceStateFixture(), after: sourceStateFixture() },
     tools: {
@@ -1033,16 +1191,6 @@ function manifestFixture(
       sha256: "e".repeat(64),
     },
     enterprise: {
-      policy: {
-        enabled: true,
-        providerMode: "admin-static-only",
-        blockedAuthWrites: true,
-        blockedPublicShare: true,
-        blockedPublicCatalogRefresh: true,
-        blockedTelemetry: true,
-        blockedPublicUpdates: true,
-        blockedPublicProductLinks: true,
-      },
       audit: {
         scannedFiles: ["main/index.js"],
         allowed: [],
@@ -1073,23 +1221,37 @@ function manifestFixture(
         signatureStatus: "NotSigned",
         passed: true,
       },
-      portable: portableAuditFixture(resourceEditorTool),
+      portable: portableAuditFixture(resourceEditTool),
       runtime: {
-        fixtureConfigDirectory: ".config/bluedcode",
-        mode: "fixture",
-        staleSession: {
-          appShellLoaded: true,
-          recoveryError: { code: "SESSION_NOT_FOUND", message: "Session not found: stale-session" },
-        },
+        mode: "portable",
+        executableStarted: true,
+        serverHealthReady: true,
+        preloadReady: true,
+        rendererReady: true,
+        adminModelLoaded: true,
+        exitedCleanly: true,
+        lingeringProcesses: [],
+        configDirectory: ".config/bluedcode",
         visibleVersion: "1.18.18-dev-0123456789",
-        smoke: {
-          appShellLoaded: true,
+        adminConfig: {
+          apiKeySha256: "be1a186ad5399278bd0942db2185028509cd423bf6635b3ac76667935504b1ba",
+          modelId: "gpt-4.1",
+          providerId: "openai-proxy",
+        },
+        publicNetworkCalls: [],
+        checks: {
           defaultSessionCore: "v1",
+          sessionCoreSwitchesTo: "v2",
           deepLinkRefresh: { moved: true, refreshed: true },
           disabledEntrypoints: ["auth", "connect-provider", "share", "update"],
-          loadedModel: "openai-proxy/gpt-4.1",
-          publicNetworkCalls: [],
-          sessionCoreSwitchesTo: "v2",
+          staleSession: {
+            appShellLoaded: true,
+            recoveryError: { code: "SESSION_NOT_FOUND", message: "Session not found: stale-session" },
+          },
+        },
+        logs: {
+          stdoutSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          stderrSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         },
       },
     },

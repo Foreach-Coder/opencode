@@ -20,7 +20,17 @@ export function transformModule(input: TransformInput, rules: readonly Transform
           ? transformHtml(current, rule)
           : transformTypescript(input.file, current, rule)
     const output = applyReplacements(current, transformed.replacements)
-    records.push({ id: rule.id, file: rule.file, hits: transformed.hits, before, after: sha256(output) })
+    records.push({
+      id: rule.id,
+      file: rule.file,
+      kind: rule.kind === "ts-string" ? "semantic-block" : "static-resource",
+      hits: transformed.replacements.reduce(
+        (total, replacement) => total + countLiteral(current.slice(replacement.start, replacement.end), rule.from),
+        0,
+      ),
+      before,
+      after: sha256(output),
+    })
     return output
   }, input.code)
   return { code, records }
@@ -51,4 +61,16 @@ function sha256(value: string) {
 
 function normalizePath(value: string) {
   return value.replaceAll("\\", "/")
+}
+
+function countLiteral(value: string, token: string) {
+  let count = 0
+  let cursor = 0
+  while (cursor <= value.length - token.length) {
+    const found = value.indexOf(token, cursor)
+    if (found === -1) return count
+    count += 1
+    cursor = found + token.length
+  }
+  return count
 }

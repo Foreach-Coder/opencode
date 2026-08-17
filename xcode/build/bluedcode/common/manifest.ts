@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
 import { lstat, readFile, readdir, rename } from "node:fs/promises"
 import path from "node:path"
+import { Product } from "../../../../packages/product/src"
 import type { AuditReport } from "./audit"
-import { assertEnterprisePolicy, type EnterprisePolicy } from "./enterprise"
 import type { GitSourceState } from "./config"
 import {
   assertConcreteDirectory,
@@ -18,7 +18,6 @@ import { nsisControlPayload, portableExtractorLock, type PortablePayloadAudit } 
 import type { BuildIdentity } from "./types"
 import type { UnifiedLedger } from "./ledger"
 import type { RuntimeAcceptanceEvidence } from "./runtime-acceptance"
-import { resourceEditorLock } from "../version/1.18.18/resource-editor-lock"
 
 const smartScreenWarning = "Windows SmartScreen 可能显示“未知发布者”" as const
 
@@ -44,12 +43,23 @@ type ResourcePeMetadata = Omit<PeAudit, "passed" | "signatureStatus"> & { signat
 
 export type ResourceEditAudit = {
   target: string
-  tool: typeof resourceEditorLock
+  tool: unknown
   before: ResourcePeMetadata
   after: ResourcePeMetadata
   iconResources: { beforeSha256: string; afterSha256: string }
   nonVersionResources: { beforeSha256: string; afterSha256: string }
   passed: true
+}
+
+export type EnterprisePolicy = {
+  enabled: boolean
+  providerMode: "admin-static-only" | "disabled"
+  blockedAuthWrites: boolean
+  blockedPublicShare: boolean
+  blockedPublicCatalogRefresh: boolean
+  blockedTelemetry: boolean
+  blockedPublicUpdates: boolean
+  blockedPublicProductLinks: boolean
 }
 
 export type ReleaseManifest = {
@@ -113,6 +123,7 @@ export type ReleaseManifest = {
 export type ReleaseManifestInput = {
   identity: BuildIdentity
   baseline: { tag: string; commit: string; desktopVersion: string }
+  resourceEditorTool: unknown
   builtAtUtc: string
   tools: ReleaseManifest["build"]["tools"]
   source: ReleaseManifest["build"]["source"]
@@ -121,7 +132,7 @@ export type ReleaseManifestInput = {
   release: ReleaseManifest["release"]
   artifact: { size: number; sha256: string }
   transformation: ReleaseManifest["transformation"]
-  enterprise: ReleaseManifest["enterprise"]
+  enterprise: { audit: AuditReport }
   audit: Omit<ReleaseManifest["audit"], "releaseDirectory">
 }
 
@@ -162,7 +173,7 @@ export function createReleaseManifest(input: ReleaseManifestInput): ReleaseManif
     },
     transformation: input.transformation,
     enterprise: {
-      policy: assertEnterprisePolicy(input.enterprise.policy),
+      policy: enterprisePolicyFromProfile(Product.profile.operations),
       audit: input.enterprise.audit,
     },
     audit: {
@@ -172,6 +183,19 @@ export function createReleaseManifest(input: ReleaseManifestInput): ReleaseManif
         passed: true,
       },
     },
+  }
+}
+
+export function enterprisePolicyFromProfile(operations: typeof Product.profile.operations): EnterprisePolicy {
+  return {
+    enabled: operations["provider.read"] === "allow-admin-static",
+    providerMode: operations["provider.read"] === "allow-admin-static" ? "admin-static-only" : "disabled",
+    blockedAuthWrites: operations["auth.manage"] === "deny",
+    blockedPublicShare: operations["share.public"] === "deny",
+    blockedPublicCatalogRefresh: operations["catalog.public"] === "deny",
+    blockedTelemetry: operations.telemetry === "deny",
+    blockedPublicUpdates: operations["update.public"] === "deny",
+    blockedPublicProductLinks: operations["proxy.public"] === "deny",
   }
 }
 
@@ -337,7 +361,12 @@ function validateManifestInput(input: ReleaseManifestInput) {
   ) {
     throw new Error("最终 Portable 内嵌品牌应用 EXE 必须通过 unsigned 审计")
   }
-  validateResourceEditAudit(input.audit.portable.resourceEdit, input.audit.portable.applicationPe, input.identity.name)
+  validateResourceEditAudit(
+    input.audit.portable.resourceEdit,
+    input.audit.portable.applicationPe,
+    input.identity.name,
+    input.resourceEditorTool,
+  )
   if (
     input.audit.portable.nativeExecutableSignatures.length !== 1 ||
     input.audit.portable.nativeExecutableSignatures[0]?.file !==
@@ -355,32 +384,105 @@ function validateManifestInput(input: ReleaseManifestInput) {
 }
 
 function validateRuntimeAcceptance(runtime: RuntimeAcceptanceEvidence, identity: BuildIdentity) {
+  assertNoRuntimeSecrets(runtime, "runtime")
+  assertExactKeys(runtime, [
+    "adminConfig",
+    "checks",
+    "configDirectory",
+    "executableStarted",
+    "exitedCleanly",
+    "lingeringProcesses",
+    "logs",
+    "mode",
+    "preloadReady",
+    "publicNetworkCalls",
+    "rendererReady",
+    "serverHealthReady",
+    "adminModelLoaded",
+    "visibleVersion",
+  ], "runtime")
+  assertExactKeys(runtime.adminConfig, ["apiKeySha256", "modelId", "providerId"], "runtime.adminConfig")
+  assertExactKeys(runtime.checks, [
+    "deepLinkRefresh",
+    "defaultSessionCore",
+    "disabledEntrypoints",
+    "sessionCoreSwitchesTo",
+    "staleSession",
+  ], "runtime.checks")
+  assertExactKeys(runtime.checks.deepLinkRefresh, ["moved", "refreshed"], "runtime.checks.deepLinkRefresh")
+  assertExactKeys(runtime.checks.staleSession, ["appShellLoaded", "recoveryError"], "runtime.checks.staleSession")
+  assertExactKeys(runtime.checks.staleSession.recoveryError, ["code", "message"], "runtime.checks.staleSession.recoveryError")
+  assertExactKeys(runtime.logs, ["stderrSha256", "stdoutSha256"], "runtime.logs")
   if (
     !runtime ||
-    runtime.mode !== "fixture" ||
-    runtime.fixtureConfigDirectory !== ".config/bluedcode" ||
+    runtime.mode !== "portable" ||
+    runtime.configDirectory !== ".config/bluedcode" ||
     runtime.visibleVersion !== identity.version
   ) {
-    throw new Error("manifest runtime fixture 身份证据无效")
+    throw new Error("manifest runtime Portable 身份证据无效")
   }
-  const smoke = runtime.smoke
   if (
-    !smoke ||
-    smoke.appShellLoaded !== true ||
-    smoke.defaultSessionCore !== "v1" ||
-    smoke.sessionCoreSwitchesTo !== "v2" ||
-    smoke.loadedModel !== "openai-proxy/gpt-4.1" ||
-    smoke.deepLinkRefresh?.moved !== true ||
-    smoke.deepLinkRefresh?.refreshed !== true ||
-    JSON.stringify(smoke.disabledEntrypoints) !== JSON.stringify(["auth", "connect-provider", "share", "update"]) ||
-    !Array.isArray(smoke.publicNetworkCalls) ||
-    smoke.publicNetworkCalls.length !== 0 ||
-    "mainProcessError" in smoke ||
-    runtime.staleSession?.appShellLoaded !== true ||
-    runtime.staleSession.recoveryError?.code !== "SESSION_NOT_FOUND" ||
-    runtime.staleSession.recoveryError.message !== "Session not found: stale-session"
+    runtime.executableStarted !== true ||
+    runtime.serverHealthReady !== true ||
+    runtime.preloadReady !== true ||
+    runtime.rendererReady !== true ||
+    runtime.adminModelLoaded !== true ||
+    runtime.exitedCleanly !== true ||
+    !Array.isArray(runtime.lingeringProcesses) ||
+    runtime.lingeringProcesses.length !== 0 ||
+    !Array.isArray(runtime.publicNetworkCalls) ||
+    runtime.publicNetworkCalls.length !== 0 ||
+    "mainProcessError" in runtime ||
+    runtime.checks?.defaultSessionCore !== "v1" ||
+    runtime.checks.sessionCoreSwitchesTo !== "v2" ||
+    runtime.checks.deepLinkRefresh?.moved !== true ||
+    runtime.checks.deepLinkRefresh?.refreshed !== true ||
+    JSON.stringify(runtime.checks.disabledEntrypoints) !== JSON.stringify(["auth", "connect-provider", "share", "update"]) ||
+    runtime.checks.staleSession?.appShellLoaded !== true ||
+    runtime.checks.staleSession.recoveryError?.code !== "SESSION_NOT_FOUND" ||
+    runtime.checks.staleSession.recoveryError.message !== "Session not found: stale-session"
   ) {
-    throw new Error("manifest runtime fixture 主进程、Profile 或企业策略证据无效")
+    throw new Error("manifest runtime Portable 主进程、Profile 或企业策略证据无效")
+  }
+  if (
+    runtime.adminConfig?.providerId !== "openai-proxy" ||
+    runtime.adminConfig.modelId !== "gpt-4.1" ||
+    !/^[a-f0-9]{64}$/.test(runtime.adminConfig.apiKeySha256)
+  ) {
+    throw new Error("manifest runtime Portable 管理员模型证据无效")
+  }
+  if (JSON.stringify(runtime).includes("sk-runtime-acceptance-secret") || "apiKey" in runtime.adminConfig) {
+    throw new Error("manifest runtime 不得包含明文 secret 密钥")
+  }
+  if (!/^[a-f0-9]{64}$/.test(runtime.logs?.stdoutSha256) || !/^[a-f0-9]{64}$/.test(runtime.logs.stderrSha256)) {
+    throw new Error("manifest runtime Portable 日志摘要无效")
+  }
+}
+
+function assertExactKeys(value: unknown, expected: readonly string[], label: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`manifest ${label} schema 无效`)
+  const actual = Object.keys(value).sort((left, right) => left.localeCompare(right))
+  const sortedExpected = [...expected].sort((left, right) => left.localeCompare(right))
+  if (JSON.stringify(actual) !== JSON.stringify(sortedExpected)) throw new Error(`manifest ${label} schema 无效`)
+}
+
+function assertNoRuntimeSecrets(value: unknown, label: string) {
+  if (typeof value === "string") {
+    if (/(?:sk-[A-Za-z0-9_-]{8,}|secret|password|api[_-]?key|token)/i.test(value)) {
+      throw new Error(`manifest ${label} 不得包含明文 secret 密钥`)
+    }
+    return
+  }
+  if (!value || typeof value !== "object") return
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoRuntimeSecrets(item, `${label}[${index}]`))
+    return
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key !== "apiKeySha256" && /(?:secret|password|api[_-]?key|token)/i.test(key)) {
+      throw new Error(`manifest ${label}.${key} 不得包含明文 secret 密钥`)
+    }
+    assertNoRuntimeSecrets(child, `${label}.${key}`)
   }
 }
 
@@ -393,12 +495,17 @@ function validateSource(source: GitSourceState, label: string) {
   requireDigest(source.trackedContentSha256, `manifest source ${label} tracked content digest`)
 }
 
-function validateResourceEditAudit(resourceEdit: ResourceEditAudit, applicationPe: PeAudit, productName: string) {
+function validateResourceEditAudit(
+  resourceEdit: ResourceEditAudit,
+  applicationPe: PeAudit,
+  productName: string,
+  resourceEditorTool: unknown,
+) {
   if (
     !resourceEdit ||
     !isTrue(Reflect.get(resourceEdit, "passed")) ||
     resourceEdit.target !== `win-unpacked/${productName}.exe` ||
-    JSON.stringify(resourceEdit.tool) !== JSON.stringify(resourceEditorLock)
+    !resourceEdit.tool || typeof resourceEdit.tool !== "object" || JSON.stringify(resourceEdit.tool) !== JSON.stringify(resourceEditorTool)
   ) {
     throw new Error("manifest 品牌应用 PE 资源编辑工具或目标无效")
   }
@@ -437,6 +544,12 @@ function validateReleaseManifest(manifest: ReleaseManifest) {
     throw new Error("release manifest 顶层 schema 无效")
   }
   if (manifest.schemaVersion !== 1) throw new Error("release manifest schemaVersion 无效")
+  if (
+    JSON.stringify(manifest.enterprise.policy) !==
+    JSON.stringify(enterprisePolicyFromProfile(Product.profile.operations))
+  ) {
+    throw new Error("release manifest 企业策略必须由产品 Profile 派生")
+  }
   if (!manifest.artifact.unsigned || manifest.artifact.smartScreen !== smartScreenWarning) {
     throw new Error("release manifest 必须声明 unsigned SmartScreen 限制")
   }

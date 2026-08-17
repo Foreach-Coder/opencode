@@ -34,6 +34,7 @@ const pickerFilters = (ext?: string[]) => {
 const pickedFiles = createPickedFileAuthorizations()
 
 type Deps = {
+  visibleVersion: string
   killSidecar: () => Promise<void> | void
   relaunch: () => void
   awaitInitialization: () => Promise<ServerReadyData>
@@ -262,7 +263,7 @@ export function registerIpcHandlers(deps: Deps) {
     if (!win) throw new Error("Window not found")
     const id = getWindowID(win)
     if (!id) throw new Error("Window ID not found")
-    return { id, version: app.getVersion() }
+    return { id, version: deps.visibleVersion }
   })
 
   ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {

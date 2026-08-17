@@ -3,12 +3,15 @@ import { createHash } from "node:crypto"
 import { lstat, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createBuildPaths } from "../common/paths"
-import { buildServer, type ServerBundle } from "../common/server"
+import { buildServer as buildServerInternal, type ServerBundle } from "../common/server"
 import type { BuildIdentity } from "../common/types"
 import { baseline } from "../version/1.18.18/baseline"
+import { version11818Adapter } from "../version/1.18.18"
 
 const commit = "0123456789abcdef0123456789abcdef01234567"
 const roots: string[] = []
+const buildServer: typeof buildServerInternal = (paths, identity, trustedBaseline) =>
+  buildServerInternal(paths, identity, trustedBaseline, version11818Adapter)
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))

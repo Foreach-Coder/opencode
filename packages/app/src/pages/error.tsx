@@ -1,5 +1,4 @@
 import { TextField } from "@opencode-ai/ui/text-field"
-import * as Sentry from "@sentry/solid"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
 import { Component, createSignal, onMount, Show } from "solid-js"
@@ -9,6 +8,7 @@ import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
 import { errorDescriptionKey } from "./error-description"
 import { ProductCapabilities } from "@/product/capabilities"
+import { ProductTelemetry } from "@/product/telemetry"
 
 export type InitError = {
   name: string
@@ -308,7 +308,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               {language.t("error.page.action.exportLogs")}
             </Button>
           </Show>
-          <Show when={Sentry.isEnabled}>
+          <Show when={ProductTelemetry.isEnabled()}>
             {(_) => {
               const [reported, setReported] = createSignal(false)
               return (
@@ -316,7 +316,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                   size="large"
                   disabled={reported()}
                   onClick={() => {
-                    Sentry.captureException(props.error)
+                    ProductTelemetry.captureException(props.error)
                     setReported(true)
                   }}
                 >

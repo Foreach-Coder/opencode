@@ -26,7 +26,8 @@ import {
   type SoundSettingsController,
 } from "./general-controllers"
 import "./settings-v2.css"
-import { ProductCapabilities } from "@/product/capabilities"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
 const fontSettings = {
@@ -557,7 +558,7 @@ export const SettingsGeneralV2: Component<{
 
         <SoundsSection controller={sounds} />
 
-        <Show when={desktop() && ProductCapabilities.visibleDesktopEntries().updater}>
+        <Show when={desktop() && ProductUiRegistry.surface(Product.profile).publicActions.update}>
           <UpdatesSection />
         </Show>
 

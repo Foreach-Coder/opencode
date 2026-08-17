@@ -51,7 +51,7 @@ export function parseBuildArgs(argv: string[]): BuildRequest {
 export async function resolveBuildIdentity(
   request: BuildRequest,
   git: Git,
-  baseline: BuildBaseline,
+  baseline?: BuildBaseline,
 ): Promise<BuildIdentity> {
   const [head, shortHead, desktopPackage] = await Promise.all([
     requireGit(git.run(["rev-parse", "HEAD"]), "无法读取 Git commit"),
@@ -65,7 +65,7 @@ export async function resolveBuildIdentity(
   if (shortCommit !== commit.slice(0, 10)) throw new Error("Git 短 commit 与完整 commit 不一致")
 
   const version = readDesktopVersion(desktopPackage)
-  if (version !== baseline.desktopVersion) {
+  if (baseline && version !== baseline.desktopVersion) {
     throw new Error(`Desktop version ${version} 与受信基线 ${baseline.desktopVersion} 不匹配`)
   }
   const product = deriveChannelIdentity(Product.profile, request.channel)

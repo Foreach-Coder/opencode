@@ -44,6 +44,7 @@ export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError",
 export interface Interface {
   readonly get: (providerID: string) => Effect.Effect<Info | undefined, AuthError>
   readonly all: () => Effect.Effect<Record<string, Info>, AuthError>
+  readonly writePreflight: () => Effect.Effect<void>
   readonly set: (key: string, info: Info) => Effect.Effect<void, AuthError>
   readonly remove: (key: string) => Effect.Effect<void, AuthError>
 }
@@ -71,8 +72,12 @@ const layer = Layer.effect(
       return (yield* all())[providerID]
     })
 
-    const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
+    const writePreflight = Effect.fn("Auth.writePreflight")(function* () {
       ProductPolicy.rejectAuthWrite()
+    })
+
+    const set = Effect.fn("Auth.set")(function* (key: string, info: Info) {
+      yield* writePreflight()
       const norm = key.replace(/\/+$/, "")
       const data = yield* all()
       if (norm !== key) delete data[key]
@@ -83,7 +88,7 @@ const layer = Layer.effect(
     })
 
     const remove = Effect.fn("Auth.remove")(function* (key: string) {
-      ProductPolicy.rejectAuthWrite()
+      yield* writePreflight()
       const norm = key.replace(/\/+$/, "")
       const data = yield* all()
       delete data[key]
@@ -91,7 +96,7 @@ const layer = Layer.effect(
       yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
     })
 
-    return Service.of({ get, all, set, remove })
+    return Service.of({ get, all, writePreflight, set, remove })
   }),
 )
 

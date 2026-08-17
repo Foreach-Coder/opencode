@@ -1,4 +1,5 @@
 import { Config } from "@/config/config"
+import { Installation } from "@/installation"
 import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
@@ -10,7 +11,6 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
 import { ProductPolicy as ConfigProductPolicy } from "@/product/policy"
-import { ProductPolicy as NetworkProductPolicy } from "@/product/network-policy"
 import { ProductHttpPolicy } from "@/product/http-policy"
 
 function eventData(data: unknown): Sse.Event {
@@ -60,6 +60,7 @@ function eventResponse() {
 export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handlers) =>
   Effect.gen(function* () {
     const config = yield* Config.Service
+    const installation = yield* Installation.Service
 
     const health = Effect.fn("GlobalHttpApi.health")(function* () {
       return { healthy: true as const, version: InstallationVersion }
@@ -83,7 +84,12 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const upgradeRaw = Effect.fn("GlobalHttpApi.upgradeRaw")(() =>
-      Effect.succeed(ProductHttpPolicy.reject(NetworkProductPolicy.rejectPublicUpdate)),
+      ProductHttpPolicy.translate(
+        installation.upgrade("unknown", "").pipe(
+          Effect.orDie,
+          Effect.as({ success: true as const, version: "" }),
+        ),
+      ),
     )
 
     return handlers

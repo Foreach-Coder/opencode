@@ -1,6 +1,5 @@
 // @refresh reload
 
-import * as Sentry from "@sentry/solid"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { loadInitialLocale } from "@/context/language"
@@ -11,6 +10,7 @@ import { dict as zh } from "@/i18n/zh"
 import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
+import { ProductTelemetry } from "./product/telemetry"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -70,7 +70,7 @@ const notify: Platform["notify"] = async (title, description, onClick) => {
 
   const notification = new Notification(title, {
     body: description ?? "",
-    icon: "https://opencode.ai/favicon-96x96-v3.png",
+    icon: "./favicon.png",
   })
 
   notification.onclick = () => {
@@ -131,21 +131,10 @@ const platform: Platform = {
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
-  Sentry.init({
+  ProductTelemetry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
     release: import.meta.env.VITE_SENTRY_RELEASE ?? `web@${pkg.version}`,
-    initialScope: {
-      tags: {
-        platform: "web",
-      },
-    },
-    integrations: (integrations) => {
-      return integrations.filter(
-        (i) =>
-          i.name !== "Breadcrumbs" && !(import.meta.env.OPENCODE_CHANNEL === "prod" && i.name === "GlobalHandlers"),
-      )
-    },
   })
 }
 

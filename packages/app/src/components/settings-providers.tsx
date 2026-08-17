@@ -12,10 +12,12 @@ import { DialogConnectProvider, useProviderConnectController } from "./dialog-co
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
 import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
-import { ProductCapabilities } from "@/product/capabilities"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
+type ProviderAccess = Pick<ProviderItem, "managedBy" | "configurableByUser">
 
 const PROVIDER_NOTES = [
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
@@ -34,6 +36,17 @@ export const SettingsProviders: Component<{ onBack?: () => void }> = (props) => 
       <SettingsProvidersContent onBack={props.onBack} />
     </SettingsServerScope>
   )
+}
+
+export function providerUiState(provider: ProviderAccess) {
+  return {
+    visible: ProductUiRegistry.surface(Product.profile).settings.providers !== "hidden",
+    ...ProductUiRegistry.providerActions(Product.profile, provider),
+  }
+}
+
+export function providerCatalogRegistered() {
+  return ProductUiRegistry.surface(Product.profile).settings.providers === "configurable"
 }
 
 const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => {
@@ -86,9 +99,7 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
   }
 
   const canDisconnect = (item: ProviderItem) =>
-    ProductCapabilities.visibleProviderActions(item).disconnect &&
-    source(item) !== "env" &&
-    (protocol() === "v1" || !isConfigCustom(item.id))
+    providerUiState(item).disconnect && source(item) !== "env" && (protocol() === "v1" || !isConfigCustom(item.id))
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
@@ -171,7 +182,8 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
+                  <Show when={providerUiState(item).visible}>
+                    <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
                     <div class="flex items-center gap-3 min-w-0">
                       <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong truncate">{item.name}</span>
@@ -180,7 +192,7 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
                     <Show
                       when={canDisconnect(item)}
                       fallback={
-                        <span class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
+                        <span data-provider-readonly class="text-14-regular text-text-base opacity-0 group-hover:opacity-100 transition-opacity duration-200 pr-3 cursor-default">
                           {language.t("settings.providers.connected.environmentDescription")}
                         </span>
                       }
@@ -189,14 +201,15 @@ const SettingsProvidersContent: Component<{ onBack?: () => void }> = (props) => 
                         {language.t("common.disconnect")}
                       </Button>
                     </Show>
-                  </div>
+                    </div>
+                  </Show>
                 )}
               </For>
             </Show>
           </SettingsList>
         </div>
 
-        <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+        <Show when={providerCatalogRegistered()}>
           <div class="flex flex-col gap-1">
             <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.providers.section.popular")}</h3>
             <SettingsList>

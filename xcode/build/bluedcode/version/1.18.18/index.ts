@@ -1,12 +1,7 @@
 import type { AuditPolicy } from "../../common/audit"
 import { Product } from "../../../../../packages/product/src"
-import {
-  deriveBuildTargets,
-  deriveFingerprints,
-  findModule,
-  type ModuleContract,
-} from "../../common/adapter"
-import type { EnterprisePolicy } from "../../common/enterprise"
+import { deriveBuildTargets, deriveFingerprints, findModule, type ModuleContract, type VersionAdapter } from "../../common/adapter"
+import { registerVersionAdapter } from "../../common/adapter-registry"
 import type { BuildIdentity } from "../../common/types"
 import { transformModule } from "../../common/transform/engine"
 import type { TransformResult, TransformRule } from "../../common/transform/types"
@@ -14,26 +9,11 @@ import baselineData from "./baseline.json"
 import { assetRules, desktopAssetPolicy } from "./rules/assets"
 import { transformLocale } from "./rules/locales"
 import { auditPolicy, preservedIdentities } from "./rules/preserved-identities"
-import { enterprisePolicy11818 } from "./rules/enterprise-policy"
 import { rendererRules, resolveRendererRules } from "./rules/renderer"
 import { sha256 } from "./rules/ast"
+import { resourceEditorLock } from "./resource-editor-lock"
 
 const productProfileSha256 = sha256(JSON.stringify(Product.profile))
-
-export type VersionAdapter = {
-  tag: string
-  commit: string
-  modules: readonly ModuleContract[]
-  fingerprints: Readonly<Record<string, string>>
-  rules: readonly TransformRule[]
-  hookTargets: readonly string[]
-  auditPolicy: AuditPolicy
-  enterprisePolicy: EnterprisePolicy
-  preservedIdentities: readonly string[]
-  assets: typeof desktopAssetPolicy
-  productProfileSha256: string
-  transform(file: string, code: string, identity: BuildIdentity): TransformResult
-}
 
 const fingerprints: Readonly<Record<string, string>> = baselineData.fingerprints
 const rules = [...rendererRules, ...assetRules]
@@ -85,17 +65,18 @@ const modules: readonly ModuleContract[] = [
 ]
 assertControlledTargets(modules)
 
-export const adapter11818: VersionAdapter = {
+export const version11818Adapter: VersionAdapter = {
   tag: baselineData.tag,
   commit: baselineData.commit,
+  desktopVersion: "1.18.18",
   modules,
   fingerprints: deriveFingerprints({ modules }),
   rules: modules.flatMap((module) => module.rules),
   hookTargets: deriveBuildTargets({ modules }).map((target) => target.file),
   auditPolicy,
-  enterprisePolicy: enterprisePolicy11818,
   preservedIdentities,
   assets: desktopAssetPolicy,
+  resourceEditorTool: resourceEditorLock,
   productProfileSha256,
   transform(file, code, identity, stage: ModuleContract["stage"] = "renderer") {
     const normalized = normalizePath(file)
@@ -109,14 +90,32 @@ export const adapter11818: VersionAdapter = {
   },
 }
 
-function transformControlled(file: string, code: string, identity: BuildIdentity, stage: ModuleContract["stage"]): TransformResult {
-  const selected = stage === "renderer" ? [...resolveRendererRules(identity.name), ...assetRules].filter((rule) => normalizePath(rule.file) === file) : []
+registerVersionAdapter(version11818Adapter)
+
+/** @deprecated 仅保留给既有版本专用测试；公共流程必须通过 registry 选择适配器。 */
+export const adapter11818 = version11818Adapter
+
+function transformControlled(
+  file: string,
+  code: string,
+  identity: BuildIdentity,
+  stage: ModuleContract["stage"],
+): TransformResult {
+  const selected =
+    stage === "renderer"
+      ? [...resolveRendererRules(identity.name), ...assetRules].filter((rule) => normalizePath(rule.file) === file)
+      : []
   const declared = selected.length ? transformModule({ file, code }, selected) : { code, records: [] }
-  const locale = stage === "renderer" || stage === "main" ? transformLocale(file, declared.code, identity) : { code: declared.code, records: [] }
+  const locale =
+    stage === "renderer" || stage === "main"
+      ? transformLocale(file, declared.code, identity)
+      : { code: declared.code, records: [] }
   const records = [...declared.records, ...locale.records]
   return {
     code: locale.code,
-    records: records.length ? records : [{ id: "build-contract-audit", file, hits: 1, before: sha256(code), after: sha256(code) }],
+    records: records.length
+      ? records
+      : [{ id: "build-contract-audit", file, kind: "evidence", hits: 1, before: sha256(code), after: sha256(code) }],
   }
 }
 

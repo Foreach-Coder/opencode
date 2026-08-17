@@ -12,10 +12,12 @@ import { DialogConnectProvider, useProviderConnectController } from "../dialog-c
 import { DialogCustomProvider } from "../dialog-custom-provider"
 import { SettingsListV2 } from "./parts/list"
 import "./settings-v2.css"
-import { ProductCapabilities } from "@/product/capabilities"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
+type ProviderAccess = Pick<ProviderItem, "managedBy" | "configurableByUser">
 
 const PROVIDER_NOTES = [
   { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
@@ -29,6 +31,17 @@ const PROVIDER_NOTES = [
 ] as const
 
 const PROVIDER_ICON_SIZE = 16
+
+export function providerUiState(provider: ProviderAccess) {
+  return {
+    visible: ProductUiRegistry.surface(Product.profile).settings.providers !== "hidden",
+    ...ProductUiRegistry.providerActions(Product.profile, provider),
+  }
+}
+
+export function providerCatalogRegistered() {
+  return ProductUiRegistry.surface(Product.profile).settings.providers === "configurable"
+}
 
 export const SettingsProvidersV2: Component<{
   directory: Accessor<string | undefined>
@@ -83,7 +96,7 @@ export const SettingsProvidersV2: Component<{
   }
 
   const canDisconnect = (item: ProviderItem) =>
-    ProductCapabilities.visibleProviderActions(item).disconnect &&
+    providerUiState(item).disconnect &&
     source(item) !== "env" &&
     (protocol() === "v1" || !isConfigCustom(item.id))
 
@@ -163,7 +176,8 @@ export const SettingsProvidersV2: Component<{
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="settings-v2-provider-row group">
+                  <Show when={providerUiState(item).visible}>
+                    <div class="settings-v2-provider-row group">
                     <div class="settings-v2-provider-lead">
                       <ProviderIcon
                         id={item.id}
@@ -188,14 +202,15 @@ export const SettingsProvidersV2: Component<{
                         {language.t("common.disconnect")}
                       </ButtonV2>
                     </Show>
-                  </div>
+                    </div>
+                  </Show>
                 )}
               </For>
             </Show>
           </SettingsListV2>
         </div>
 
-        <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+        <Show when={providerCatalogRegistered()}>
           <div class="settings-v2-section">
             <h3 class="settings-v2-section-title">{language.t("settings.providers.section.popular")}</h3>
             <SettingsListV2>

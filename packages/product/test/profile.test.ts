@@ -22,6 +22,42 @@ describe("Product Profile", () => {
     })
   })
 
+  test("production profile defines the complete operation matrix and local preference allowlist", () => {
+    expect(Product.profile.operations).toEqual({
+      "config.write.preference": "allow",
+      "config.write.integration": "deny",
+      "provider.read": "allow-admin-static",
+      "provider.manage": "deny",
+      "auth.manage": "deny",
+      "mcp.manage": "deny",
+      "plugin.manage": "deny",
+      "share.public": "deny",
+      "catalog.public": "deny",
+      telemetry: "deny",
+      "update.public": "deny",
+      "proxy.public": "deny",
+    })
+    expect(Product.localPreferenceKeys).toEqual([
+      "theme",
+      "language",
+      "font",
+      "keybinds",
+      "notifications",
+      "newLayoutDesigns",
+    ])
+  })
+
+  test("profile digest is stable for an equivalent profile value", () => {
+    const equivalentProfile = {
+      capabilities: Product.profile.capabilities,
+      identity: Product.profile.identity,
+      localPreferences: Product.profile.localPreferences,
+      operations: Product.profile.operations,
+    }
+
+    expect(Product.profileDigest(equivalentProfile)).toBe(Product.profileDigest(Product.profile))
+  })
+
   test("dev identity is deterministically isolated from prod", () => {
     expect(Product.deriveChannelIdentity(Product.profile, "dev")).toEqual({
       channel: "dev",

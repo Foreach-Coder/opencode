@@ -38,7 +38,6 @@ import {
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
-import { ProductPolicy } from "@/product/network-policy"
 import { ProductHttpPolicy } from "@/product/http-policy"
 
 const tryParseJson = (text: string) =>
@@ -253,13 +252,23 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return true
     })
 
-    const share = Effect.fn("SessionHttpApi.share")(() =>
-      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectPublicShare)),
-    )
+    const share = Effect.fn("SessionHttpApi.share")(function* (ctx) {
+      return yield* ProductHttpPolicy.translate(
+        Effect.gen(function* () {
+          yield* shareSvc.share(ctx.params.sessionID).pipe(Effect.orDie)
+          return yield* requireSession(ctx.params.sessionID)
+        }),
+      )
+    })
 
-    const unshare = Effect.fn("SessionHttpApi.unshare")(() =>
-      Effect.succeed(ProductHttpPolicy.reject(ProductPolicy.rejectPublicShare)),
-    )
+    const unshare = Effect.fn("SessionHttpApi.unshare")(function* (ctx) {
+      return yield* ProductHttpPolicy.translate(
+        Effect.gen(function* () {
+          yield* shareSvc.unshare(ctx.params.sessionID).pipe(Effect.orDie)
+          return yield* requireSession(ctx.params.sessionID)
+        }),
+      )
+    })
 
     const summarize = Effect.fn("SessionHttpApi.summarize")(function* (ctx: {
       params: { sessionID: SessionID }

@@ -13,6 +13,8 @@ import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./dialog-custom-provider-form"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 type Props = {
   onBack: () => void
@@ -20,6 +22,7 @@ type Props = {
 
 export function DialogCustomProvider(props: Props) {
   const language = useLanguage()
+  if (!ProductUiRegistry.surface(Product.profile).providerActions.configure) return
 
   return (
     <Dialog
@@ -45,6 +48,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   const serverSync = useServerSync()
   const serverSDK = useServerSDK()
   const language = useLanguage()
+  if (!ProductUiRegistry.surface(Product.profile).providerActions.configure) return
 
   const [form, setForm] = createStore<FormState>({
     providerID: "",

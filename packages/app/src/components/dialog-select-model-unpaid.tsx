@@ -11,7 +11,8 @@ import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
-import { ProductCapabilities } from "@/product/capabilities"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 
@@ -24,7 +25,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
   const language = useLanguage()
 
   const openProviders = (provider?: string) => {
-    if (!ProductCapabilities.visibleProviderActions({}).connect) return
+    if (!ProductUiRegistry.surface(Product.profile).providerActions.connect) return
     void import("./dialog-connect-provider").then((x) => {
       const controller = x.useProviderConnectController()
       controller.select(provider)
@@ -88,7 +89,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
           )}
         </List>
       </div>
-      <Show when={ProductCapabilities.visibleProviderActions({}).connect}>
+      <Show when={ProductUiRegistry.surface(Product.profile).providerActions.connect}>
         <div class="px-1.5 pb-1.5">
           <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
             <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">

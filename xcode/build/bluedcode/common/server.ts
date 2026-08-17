@@ -13,8 +13,8 @@ import {
 } from "./isolation"
 import type { BuildPaths } from "./paths"
 import { writeUnifiedLedger } from "./ledger"
+import type { VersionAdapter } from "./adapter"
 import type { BuildBaseline, BuildIdentity } from "./types"
-import { adapter11818 } from "../version/1.18.18"
 
 type ServerCacheValue = {
   file: string
@@ -52,6 +52,7 @@ export async function buildServer(
   paths: BuildPaths,
   identity: BuildIdentity,
   baseline: BuildBaseline,
+  adapter: VersionAdapter,
 ): Promise<ServerBundle> {
   const version = requireBaselineIdentity(identity, baseline)
   requireVersionRoot(paths, version)
@@ -145,8 +146,8 @@ export async function buildServer(
   await assertSafeDirectory(isolation, cached.directory)
   const value = requireServerCacheValue(cached.value)
   const file = await materializeServer(paths, isolation, key, cached.directory, value)
-  const contract = adapter11818.modules.find((module) => module.stage === "server")
-  if (!contract) throw new Error("1.18.18 缺少 server ModuleContract")
+  const contract = adapter.modules.find((module) => module.stage === "server")
+  if (!contract) throw new Error(`${adapter.tag} 缺少 server ModuleContract`)
   // Electron Vite clears only its own evidence directory before rebuilding;
   // keeping server evidence here prevents that cleanup from erasing it.
   const ledgerRoot = path.join(paths.stageDir, "ledger", "server")
@@ -163,7 +164,7 @@ export async function buildServer(
         inputSha256: digest(entry),
         outputSha256: value.digest,
         rules: [],
-        productProfileSha256: adapter11818.productProfileSha256,
+        productProfileSha256: adapter.productProfileSha256,
       },
     ],
   })

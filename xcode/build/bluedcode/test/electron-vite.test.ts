@@ -9,7 +9,7 @@ import { ensureSafeDirectory, prepareIsolation, removeSafeDirectory } from "../c
 import { createBuildPaths } from "../common/paths"
 import { buildServer } from "../common/server"
 import type { BuildIdentity } from "../common/types"
-import { adapter11818 } from "../version/1.18.18"
+import { adapter11818, version11818Adapter } from "../version/1.18.18"
 import { baseline } from "../version/1.18.18/baseline"
 import {
   createElectronViteChildEnv,
@@ -57,6 +57,11 @@ describe("createElectronViteConfig", () => {
         "packages/app/src/app.tsx",
       ]),
     )
+  })
+
+  test("构建驱动的 Electron Vite 上下文拒绝丢失 selected adapter", async () => {
+    const context = await contextFixture()
+    await expectFailure(createElectronViteConfig({ ...context, adapter: undefined } as ElectronViteContext), /adapter/)
   })
 
   test("配置复刻三入口并只使用隔离 server、stage 和绝对路径", async () => {
@@ -326,12 +331,12 @@ test("真实 compile smoke 生成三类输出、精确 ledger 且 tracked tree d
   await writeFile(models, "{}\n")
   const previousModels = process.env.MODELS_DEV_API_JSON
   process.env.MODELS_DEV_API_JSON = models
-  const server = await buildServer(paths, identity, baseline).finally(() => {
+  const server = await buildServer(paths, identity, baseline, version11818Adapter).finally(() => {
     if (previousModels === undefined) delete process.env.MODELS_DEV_API_JSON
     else process.env.MODELS_DEV_API_JSON = previousModels
   })
   const assets = await deriveDesktopAssets(paths)
-  const context: ElectronViteContext = { assets, identity, paths, server }
+  const context: ElectronViteContext = { adapter: version11818Adapter, assets, identity, paths, server }
   const contextFile = await writeElectronViteContext(context)
   const outputRoot = path.join(paths.stageDir, "desktop", "out")
   const staleBinary = path.join(outputRoot, "extra.dll")
@@ -382,16 +387,19 @@ test("真实 compile smoke 生成三类输出、精确 ledger 且 tracked tree d
   expect(outputFiles.some((file) => file.endsWith("tui.json"))).toBe(false)
 
   const ledgers = await Promise.all(
-    (await relativeFiles(path.join(paths.stageDir, "ledger"))).map(async (file) =>
-      JSON.parse(await readFile(path.join(paths.stageDir, "ledger", file), "utf8")) as {
-        events: Array<{ stage: string; productProfileSha256: string; file: string }>
-      },
+    (await relativeFiles(path.join(paths.stageDir, "ledger"))).map(
+      async (file) =>
+        JSON.parse(await readFile(path.join(paths.stageDir, "ledger", file), "utf8")) as {
+          events: Array<{ stage: string; productProfileSha256: string; file: string }>
+        },
     ),
   )
   const events = ledgers.flatMap((ledger) => ledger.events)
   expect(events.map((event) => event.stage)).toEqual(expect.arrayContaining(["server", "main", "preload", "renderer"]))
   expect(new Set(events.map((event) => event.productProfileSha256)).size).toBe(1)
-  expect(events.some((event) => event.file === "packages/app/src/pages/session/timeline/message-timeline.tsx")).toBe(false)
+  expect(events.some((event) => event.file === "packages/app/src/pages/session/timeline/message-timeline.tsx")).toBe(
+    false,
+  )
 
   const artifacts = await Promise.all(
     outputFiles.map(async (file) => {
@@ -444,14 +452,12 @@ test("真实 compile smoke 生成三类输出、精确 ledger 且 tracked tree d
   const outputText = await textOutput(outputRoot)
   expect(outputText).toContain("PRODUCT_CAPABILITY_DISABLED: 遥测网络已由产品策略禁用")
   expect(outputText).not.toContain('startsWith("OTEL_")')
-  expect(outputText).not.toMatch(
-    /@sentry|sentry\.io|SENTRY_|electron-updater|startBackgroundCli/,
-  )
+  expect(outputText).not.toMatch(/@sentry|sentry\.io|SENTRY_|electron-updater|startBackgroundCli/)
   const rendererText = await textOutput(path.join(outputRoot, "renderer"))
   expect(rendererText).not.toContain("0 0 234 42")
   expect(rendererText).toContain("wordmark.svg")
-  expect(rendererText).toContain(identity.version)
-  expect(rendererText).toContain("bluedcode.desktop.window.")
+  expect(rendererText).toContain("api.getDesktopInitialization?.()")
+  expect(outputText).toContain("version: deps.visibleVersion")
   expect(rendererText).toContain("./favicon.png")
   expect(rendererText).not.toContain("https://opencode.ai/favicon")
   expect(outputText).toContain("get-desktop-initialization")
@@ -463,6 +469,7 @@ async function contextFixture() {
     const identity = await identityFixture()
     const paths = createBuildPaths(identity, repositoryRoot)
     return {
+      adapter: version11818Adapter,
       assets: await deriveDesktopAssets(paths),
       identity,
       paths,

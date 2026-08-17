@@ -1,4 +1,4 @@
-import { Component, createSignal, startTransition } from "solid-js"
+import { Component, createSignal, Show, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -10,14 +10,19 @@ import { SettingsKeybinds } from "./settings-keybinds"
 import { SettingsProviders } from "./settings-providers"
 import { SettingsModels } from "./settings-models"
 import { SettingsServers } from "./settings-servers"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
   const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
-  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
+  const settingsTabs = ProductUiRegistry.settingsTabs(Product.profile)
+  const initialTab = props.defaultValue && settingsTabs[props.defaultValue as keyof typeof settingsTabs] ? props.defaultValue : "general"
+  const [tab, setTab] = createSignal(initialTab)
 
   const showProviders = () => {
+    if (!settingsTabs.providers) return
     void dialog.show(() => <DialogSettings defaultValue="providers" />)
   }
 
@@ -37,32 +42,42 @@ export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
                 <div class="flex flex-col gap-1.5">
                   <Tabs.SectionTitle>{language.t("settings.section.desktop")}</Tabs.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
-                    <Tabs.Trigger value="general">
+                    <Show when={settingsTabs.general}>
+                      <Tabs.Trigger value="general">
                       <Icon name="sliders" />
                       {language.t("settings.tab.general")}
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="shortcuts">
+                      </Tabs.Trigger>
+                    </Show>
+                    <Show when={settingsTabs.shortcuts}>
+                      <Tabs.Trigger value="shortcuts">
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="servers">
+                      </Tabs.Trigger>
+                    </Show>
+                    <Show when={settingsTabs.servers}>
+                      <Tabs.Trigger value="servers">
                       <Icon name="server" />
                       {language.t("status.popover.tab.servers")}
-                    </Tabs.Trigger>
+                      </Tabs.Trigger>
+                    </Show>
                   </div>
                 </div>
 
                 <div class="flex flex-col gap-1.5">
                   <Tabs.SectionTitle>{language.t("settings.section.server")}</Tabs.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
-                    <Tabs.Trigger value="providers">
+                    <Show when={settingsTabs.providers}>
+                      <Tabs.Trigger value="providers">
                       <Icon name="providers" />
                       {language.t("settings.providers.title")}
-                    </Tabs.Trigger>
-                    <Tabs.Trigger value="models">
+                      </Tabs.Trigger>
+                    </Show>
+                    <Show when={settingsTabs.models}>
+                      <Tabs.Trigger value="models">
                       <Icon name="models" />
                       {language.t("settings.models.title")}
-                    </Tabs.Trigger>
+                      </Tabs.Trigger>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -73,21 +88,21 @@ export const DialogSettings: Component<{ defaultValue?: string }> = (props) => {
             </div>
           </div>
         </Tabs.List>
-        <Tabs.Content value="general" class="no-scrollbar">
+        <Show when={settingsTabs.general}><Tabs.Content value="general" class="no-scrollbar">
           <SettingsGeneral />
-        </Tabs.Content>
-        <Tabs.Content value="shortcuts" class="no-scrollbar">
+        </Tabs.Content></Show>
+        <Show when={settingsTabs.shortcuts}><Tabs.Content value="shortcuts" class="no-scrollbar">
           <SettingsKeybinds />
-        </Tabs.Content>
-        <Tabs.Content value="servers" class="no-scrollbar">
+        </Tabs.Content></Show>
+        <Show when={settingsTabs.servers}><Tabs.Content value="servers" class="no-scrollbar">
           <SettingsServers />
-        </Tabs.Content>
-        <Tabs.Content value="providers" class="no-scrollbar">
+        </Tabs.Content></Show>
+        <Show when={settingsTabs.providers}><Tabs.Content value="providers" class="no-scrollbar">
           <SettingsProviders onBack={showProviders} />
-        </Tabs.Content>
-        <Tabs.Content value="models" class="no-scrollbar">
+        </Tabs.Content></Show>
+        <Show when={settingsTabs.models}><Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
-        </Tabs.Content>
+        </Tabs.Content></Show>
       </Tabs>
     </Dialog>
   )

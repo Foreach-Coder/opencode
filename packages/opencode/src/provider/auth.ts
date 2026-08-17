@@ -85,6 +85,8 @@ export type Error = Auth.AuthError | OauthMissing | OauthCodeMissing | OauthCall
 
 export interface Interface {
   readonly methods: () => Effect.Effect<Methods>
+  readonly authorizePreflight: () => Effect.Effect<void>
+  readonly callbackPreflight: () => Effect.Effect<void>
   readonly authorize: (
     input: {
       providerID: ProviderV2.ID
@@ -98,21 +100,30 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pr
 export const use = serviceUse(Service)
 
 const decode = Schema.decodeUnknownSync(Methods)
+const authorizePreflight = Effect.fn("ProviderAuth.authorizePreflight")(function* () {
+  ProductPolicy.rejectProviderWrite()
+})
+const callbackPreflight = Effect.fn("ProviderAuth.callbackPreflight")(function* () {
+  ProductPolicy.rejectAuthWrite()
+})
 const layer = Layer.succeed(
   Service,
   Service.of({
     methods: Effect.fn("ProviderAuth.methods")(function* () {
       return decode({})
     }),
+    authorizePreflight,
+    callbackPreflight,
     authorize: Effect.fn("ProviderAuth.authorize")(function* (
       _input: { providerID: ProviderV2.ID } & AuthorizeInput,
     ) {
-      ProductPolicy.rejectProviderWrite()
+      yield* authorizePreflight()
+      return undefined
     }),
     callback: Effect.fn("ProviderAuth.callback")(function* (
       _input: { providerID: ProviderV2.ID } & CallbackInput,
     ) {
-      ProductPolicy.rejectAuthWrite()
+      yield* callbackPreflight()
     }),
   }),
 )

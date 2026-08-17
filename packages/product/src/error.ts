@@ -1,3 +1,5 @@
+import type { ProductOperation } from "./profile"
+
 export type ErrorCode =
   | "PRODUCT_CAPABILITY_DISABLED"
   | "PROVIDER_MANAGED_BY_ADMIN"
@@ -19,4 +21,16 @@ export class ProductError extends Error {
 
 export function isProductError(error: unknown): error is ProductError {
   return error instanceof ProductError
+}
+
+export function errorCodeForOperation(operation: ProductOperation): ErrorCode {
+  if (operation === "config.write.integration") return "CONFIG_WRITE_DISABLED"
+  if (operation === "provider.manage") return "PROVIDER_MANAGED_BY_ADMIN"
+  if (operation === "share.public") return "PUBLIC_SHARE_DISABLED"
+  if (operation === "update.public") return "PUBLIC_UPDATE_DISABLED"
+  return "PRODUCT_CAPABILITY_DISABLED"
+}
+
+export function messageForOperation(operation: ProductOperation) {
+  return `产品操作 ${operation} 已禁用`
 }

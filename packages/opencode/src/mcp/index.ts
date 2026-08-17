@@ -34,6 +34,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
+import { Product } from "@foreachcode/product"
 
 const DEFAULT_TIMEOUT = 30_000
 const CLIENT_OPTIONS = {
@@ -115,6 +116,13 @@ type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][numbe
 type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
 type ResourceTemplateInfo = Awaited<ReturnType<MCPClient["listResourceTemplates"]>>["resourceTemplates"][number]
 type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
+
+export function adminMcpConfig(config: Pick<Config.Interface, "getAdminIntegrations">) {
+  return Effect.map(config.getAdminIntegrations(), (snapshot) => snapshot.mcp ?? {})
+}
+
+export const runtimeMcpEntries = adminMcpConfig
+export const initializeMcpRegistry = runtimeMcpEntries
 
 function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
   return typeof entry === "object" && entry !== null && "type" in entry
@@ -491,9 +499,8 @@ const layer = Layer.effect(
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("MCP.state")(function* () {
-        const cfg = yield* cfgSvc.get()
+        const config = yield* initializeMcpRegistry(cfgSvc)
         const bridge = yield* EffectBridge.make()
-        const config = cfg.mcp ?? {}
         const s: State = {
           config: {},
           status: {},
@@ -591,7 +598,7 @@ const layer = Layer.effect(
     const status = Effect.fn("MCP.status")(function* () {
       const s = yield* InstanceState.get(state)
 
-      const cfg = yield* cfgSvc.get()
+      const cfg = yield* cfgSvc.getAdminIntegrations()
       const config = cfg.mcp ?? {}
       const result: Record<string, Status> = {}
 
@@ -639,6 +646,7 @@ const layer = Layer.effect(
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
+      Product.authorize(Product.profile, "mcp.manage")
       const s = yield* InstanceState.get(state)
       s.config[name] = mcp
       yield* createAndStore(name, mcp)
@@ -667,9 +675,9 @@ const layer = Layer.effect(
       const result: Record<string, McpTool> = {}
       const s = yield* InstanceState.get(state)
 
-      const cfg = yield* cfgSvc.get()
+      const cfg = yield* cfgSvc.getAdminIntegrations()
       const config = cfg.mcp ?? {}
-      const defaultTimeout = cfg.experimental?.mcp_timeout
+      const defaultTimeout = (yield* cfgSvc.get()).experimental?.mcp_timeout
 
       for (const [clientName, client] of Object.entries(s.clients)) {
         if (s.status[clientName]?.status !== "connected") continue
@@ -695,7 +703,8 @@ const layer = Layer.effect(
       targetClientName?: string,
     ) {
       return Effect.gen(function* () {
-        const cfg = yield* cfgSvc.get()
+        const cfg = yield* cfgSvc.getAdminIntegrations()
+        const defaultTimeout = (yield* cfgSvc.get()).experimental?.mcp_timeout
         return yield* Effect.forEach(
           Object.entries(s.clients).filter(
             ([name]) => s.status[name]?.status === "connected" && (!targetClientName || name === targetClientName),
@@ -704,7 +713,7 @@ const layer = Layer.effect(
             McpCatalog.fetch(
               clientName,
               client,
-              (c) => listFn(c, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
+              (c) => listFn(c, requestTimeout(s, clientName, cfg.mcp?.[clientName], defaultTimeout)),
               label,
               key,
             ).pipe(Effect.map((items) => Object.entries(items ?? {}))),
@@ -749,9 +758,10 @@ const layer = Layer.effect(
         yield* Effect.logWarning(`client not found for ${label}`, { clientName })
         return undefined
       }
-      const cfg = yield* cfgSvc.get()
+      const cfg = yield* cfgSvc.getAdminIntegrations()
+      const defaultTimeout = (yield* cfgSvc.get()).experimental?.mcp_timeout
       return yield* Effect.tryPromise({
-        try: () => fn(client, requestTimeout(s, clientName, cfg.mcp?.[clientName], cfg.experimental?.mcp_timeout)),
+        try: () => fn(client, requestTimeout(s, clientName, cfg.mcp?.[clientName], defaultTimeout)),
         catch: (error) => error,
       }).pipe(
         Effect.tapError((error) =>
@@ -791,7 +801,7 @@ const layer = Layer.effect(
       const s = yield* InstanceState.get(state)
       if (s.config[mcpName]) return s.config[mcpName]
 
-      const cfg = yield* cfgSvc.get()
+      const cfg = yield* cfgSvc.getAdminIntegrations()
       const mcpConfig = cfg.mcp?.[mcpName]
       if (!mcpConfig || !isMcpConfigured(mcpConfig)) return undefined
       return mcpConfig
@@ -961,7 +971,7 @@ const layer = Layer.effect(
       const runtimeConfig = (yield* InstanceState.has(state))
         ? (yield* InstanceState.get(state)).config[mcpName]
         : undefined
-      const mcpConfig = runtimeConfig ?? (yield* cfgSvc.get()).mcp?.[mcpName]
+      const mcpConfig = runtimeConfig ?? (yield* cfgSvc.getAdminIntegrations()).mcp?.[mcpName]
       if (!mcpConfig || !isMcpConfigured(mcpConfig) || mcpConfig.type !== "remote") return "not_authenticated"
       const entry = yield* auth.getForUrl(mcpName, mcpConfig.url)
       if (!entry?.tokens) return "not_authenticated"

@@ -11,15 +11,19 @@ describe("ProductCapabilities", () => {
     ).toEqual({ connect: false, configure: false, disconnect: false })
   })
 
-  test("hides public provider management while keeping the new layout switch available and off by default", () => {
+  test("hides public provider management while preserving local preference controls", () => {
     expect(ProductCapabilities.visibleProviderActions({})).toEqual({
       connect: false,
       configure: false,
       disconnect: false,
     })
-    expect(ProductCapabilities.visibleSettingsToggles({ newLayout: undefined })).toEqual({
-      newLayout: true,
-      defaultNewLayout: false,
+    expect(ProductCapabilities.visibleSettingsToggles()).toMatchObject({
+      theme: true,
+      language: true,
+      font: true,
+      keybinds: true,
+      notifications: true,
+      newLayoutDesigns: true,
     })
   })
 

@@ -5,7 +5,8 @@ import { pathToFileURL } from "node:url"
 import type { UserConfig } from "electron-vite"
 import type { Plugin, PluginOption } from "vite"
 import type { DerivedAssets } from "../../common/assets"
-import { deriveRequiredBuildTargets } from "../../common/adapter"
+import { deriveRequiredBuildTargets, type VersionAdapter } from "../../common/adapter"
+import { selectVersionAdapter, type VersionAdapterSelection } from "../../common/adapter-registry"
 import { createBrandPlugins, createBrandTransformSession, type BrandBuildTarget } from "../../common/plugins"
 import {
   assertConcreteDirectory,
@@ -20,7 +21,7 @@ import {
 import type { BuildPaths } from "../../common/paths"
 import type { ServerArtifact, ServerBundle } from "../../common/server"
 import type { BuildIdentity } from "../../common/types"
-import { adapter11818 } from "."
+import { version11818Adapter } from "."
 
 const runtimePublicFiles = [
   "assets/Inter.ttf",
@@ -46,12 +47,13 @@ const brandedPublicFiles = [
 
 const nonDesktopPublicFiles = ["_headers"] as const
 
-export const requiredBuildTargets = deriveRequiredBuildTargets(adapter11818) satisfies Record<
+export const requiredBuildTargets = deriveRequiredBuildTargets(version11818Adapter) satisfies Record<
   BrandBuildTarget,
   readonly string[]
 >
 
 export type ElectronViteContext = {
+  adapter: VersionAdapter
   assets: DerivedAssets
   identity: BuildIdentity
   paths: BuildPaths
@@ -147,7 +149,7 @@ export async function createElectronViteConfig(context: ElectronViteContext): Pr
   const session = createBrandTransformSession(["main", "preload", "renderer"])
   const brandPlugins = (target: BrandBuildTarget) =>
     createBrandPlugins({
-      adapter: adapter11818,
+      adapter: context.adapter,
       identity: context.identity,
       isolation,
       ledgerRoot,
@@ -291,7 +293,15 @@ export function createElectronViteChildEnv(
 
 export async function writeElectronViteContext(context: ElectronViteContext) {
   await validateContext(context)
-  const value = `${JSON.stringify(context, null, 2)}\n`
+  const serialized: ElectronViteSerializedContext = {
+    ...context,
+    adapter: {
+      tag: context.adapter.tag,
+      commit: context.adapter.commit,
+      desktopVersion: context.adapter.desktopVersion,
+    },
+  }
+  const value = `${JSON.stringify(serialized, null, 2)}\n`
   const isolation = await prepareIsolation(context.paths)
   const directory = path.join(context.paths.stageDir, "electron-vite")
   const file = path.join(directory, `context-${createHash("sha256").update(value).digest("hex")}.json`)
@@ -715,7 +725,7 @@ async function lstatOptional(target: string) {
 function assertRequiredBuildTargets() {
   for (const [target, files] of Object.entries(requiredBuildTargets)) {
     if (new Set(files).size !== files.length) throw new Error(`${target} requiredBuildTargets 存在重复路径`)
-    const missing = files.filter((file) => !adapter11818.fingerprints[file])
+    const missing = files.filter((file) => !version11818Adapter.fingerprints[file])
     if (missing.length)
       throw new Error(`${target} requiredBuildTargets 缺少 1.18.18 fingerprint: ${missing.join(", ")}`)
   }
@@ -725,13 +735,16 @@ async function loadContextFromEnvironment() {
   const file = process.env.BLUEDCODE_ELECTRON_VITE_CONTEXT
   if (!file || !path.isAbsolute(file)) throw new Error("缺少绝对 BLUEDCODE_ELECTRON_VITE_CONTEXT")
   const parsed: unknown = JSON.parse(await readFile(file, "utf8"))
-  if (!isElectronViteContext(parsed)) throw new Error("Electron Vite context JSON 无效")
-  return parsed
+  if (!isElectronViteSerializedContext(parsed)) throw new Error("Electron Vite context JSON 无效")
+  return { ...parsed, adapter: selectVersionAdapter(parsed.adapter) }
 }
 
-function isElectronViteContext(value: unknown): value is ElectronViteContext {
+type ElectronViteSerializedContext = Omit<ElectronViteContext, "adapter"> & { adapter: VersionAdapterSelection }
+
+function isElectronViteSerializedContext(value: unknown): value is ElectronViteSerializedContext {
   if (!value || typeof value !== "object") return false
-  if (!("assets" in value) || !("identity" in value) || !("paths" in value) || !("server" in value)) return false
+  if (!("adapter" in value) || !("assets" in value) || !("identity" in value) || !("paths" in value) || !("server" in value)) return false
+  if (!hasStringFields(value.adapter, ["tag", "commit", "desktopVersion"])) return false
   if (!hasStringFields(value.assets, ["iconIco", "faviconSvg", "faviconPng", "wordmarkSvg"])) return false
   if (!hasStringFields(value.server, ["file", "digest"])) return false
   if (!("size" in value.server) || typeof value.server.size !== "number") return false

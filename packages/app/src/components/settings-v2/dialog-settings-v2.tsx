@@ -1,4 +1,4 @@
-import { Component, createMemo, createSignal, startTransition } from "solid-js"
+import { Component, createMemo, createSignal, Show, startTransition } from "solid-js"
 import { Dialog } from "@opencode-ai/ui/v2/dialog-v2"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -14,6 +14,8 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useTabs } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
+import { Product } from "@foreachcode/product"
+import { ProductUiRegistry } from "@/product/ui-registry"
 
 export const DialogSettings: Component<{
   sessionID?: string
@@ -25,7 +27,9 @@ export const DialogSettings: Component<{
   const layout = useLayout()
   const tabs = useTabs()
   const serverSync = useServerSync()
-  const [tab, setTab] = createSignal(props.defaultValue ?? "general")
+  const settingsTabs = ProductUiRegistry.settingsTabs(Product.profile)
+  const initialTab = props.defaultValue && settingsTabs[props.defaultValue as keyof typeof settingsTabs] ? props.defaultValue : "general"
+  const [tab, setTab] = createSignal(initialTab)
   const directory = createMemo(() => {
     const route = layout.route()
     if (route.type === "dir-new-sesssion") return route.dir
@@ -38,6 +42,7 @@ export const DialogSettings: Component<{
   })
 
   const showProviders = () => {
+    if (!settingsTabs.providers) return
     void dialog.show(() => <DialogSettings sessionID={props.sessionID} defaultValue="providers" />)
   }
 
@@ -57,32 +62,42 @@ export const DialogSettings: Component<{
                 <div class="flex flex-col gap-1.5">
                   <TabsV2.SectionTitle>{language.t("settings.section.desktop")}</TabsV2.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
-                    <TabsV2.Trigger value="general">
+                    <Show when={settingsTabs.general}>
+                      <TabsV2.Trigger value="general">
                       <Icon name="sliders" />
                       {language.t("settings.tab.general")}
-                    </TabsV2.Trigger>
-                    <TabsV2.Trigger value="shortcuts">
+                      </TabsV2.Trigger>
+                    </Show>
+                    <Show when={settingsTabs.shortcuts}>
+                      <TabsV2.Trigger value="shortcuts">
                       <Icon name="keyboard" />
                       {language.t("settings.tab.shortcuts")}
-                    </TabsV2.Trigger>
+                      </TabsV2.Trigger>
+                    </Show>
                   </div>
                 </div>
 
                 <div class="flex flex-col gap-1.5">
                   <TabsV2.SectionTitle>{language.t("settings.section.server")}</TabsV2.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
-                    <TabsV2.Trigger value="servers">
+                    <Show when={settingsTabs.servers}>
+                      <TabsV2.Trigger value="servers">
                       <Icon name="server" />
                       {language.t("status.popover.tab.servers")}
-                    </TabsV2.Trigger>
-                    <TabsV2.Trigger value="providers">
+                      </TabsV2.Trigger>
+                    </Show>
+                    <Show when={settingsTabs.providers}>
+                      <TabsV2.Trigger value="providers">
                       <Icon name="providers" />
                       {language.t("settings.providers.title")}
-                    </TabsV2.Trigger>
-                    <TabsV2.Trigger value="models">
+                      </TabsV2.Trigger>
+                    </Show>
+                    <Show when={settingsTabs.models}>
+                      <TabsV2.Trigger value="models">
                       <Icon name="models" />
                       {language.t("settings.models.title")}
-                    </TabsV2.Trigger>
+                      </TabsV2.Trigger>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -93,21 +108,21 @@ export const DialogSettings: Component<{
             </div>
           </div>
         </TabsV2.List>
-        <TabsV2.Content value="general" class="settings-v2-panel">
+        <Show when={settingsTabs.general}><TabsV2.Content value="general" class="settings-v2-panel">
           <SettingsGeneralV2 sessionID={props.sessionID} />
-        </TabsV2.Content>
-        <TabsV2.Content value="shortcuts" class="settings-v2-panel">
+        </TabsV2.Content></Show>
+        <Show when={settingsTabs.shortcuts}><TabsV2.Content value="shortcuts" class="settings-v2-panel">
           <SettingsKeybinds v2 />
-        </TabsV2.Content>
-        <TabsV2.Content value="servers" class="settings-v2-panel">
+        </TabsV2.Content></Show>
+        <Show when={settingsTabs.servers}><TabsV2.Content value="servers" class="settings-v2-panel">
           <SettingsServersV2 />
-        </TabsV2.Content>
-        <TabsV2.Content value="providers" class="settings-v2-panel">
+        </TabsV2.Content></Show>
+        <Show when={settingsTabs.providers}><TabsV2.Content value="providers" class="settings-v2-panel">
           <SettingsProvidersV2 directory={directory} onBack={showProviders} />
-        </TabsV2.Content>
-        <TabsV2.Content value="models" class="settings-v2-panel">
+        </TabsV2.Content></Show>
+        <Show when={settingsTabs.models}><TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
-        </TabsV2.Content>
+        </TabsV2.Content></Show>
       </TabsV2>
     </Dialog>
   )

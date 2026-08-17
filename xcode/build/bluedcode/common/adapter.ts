@@ -1,5 +1,7 @@
 import type { TransformResult, TransformRule } from "./transform/types"
 import type { BuildIdentity } from "./types"
+import type { AuditPolicy } from "./audit"
+import type { DerivedAssets } from "./assets"
 
 export type BuildStage = "server" | "main" | "preload" | "renderer"
 
@@ -16,6 +18,20 @@ export type BuildTarget = Pick<ModuleContract, "id" | "file" | "stage"> & { modu
 export type ContractAdapter = {
   modules: readonly ModuleContract[]
   transform(file: string, code: string, identity: BuildIdentity, stage?: BuildStage): TransformResult
+}
+
+export type VersionAdapter = ContractAdapter & {
+  tag: string
+  commit: string
+  desktopVersion: string
+  fingerprints: Readonly<Record<string, string>>
+  rules: readonly TransformRule[]
+  hookTargets: readonly string[]
+  auditPolicy: AuditPolicy
+  preservedIdentities: readonly string[]
+  assets: unknown
+  resourceEditorTool?: unknown
+  productProfileSha256: string
 }
 
 export function deriveBuildTargets(adapter: Pick<ContractAdapter, "modules">): readonly BuildTarget[] {
