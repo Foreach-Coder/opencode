@@ -148,6 +148,20 @@ describe("createElectronViteConfig", () => {
     expect(loaded).not.toContain('Image("logo-wordmark", "./wordmark.svg", props)')
   })
 
+  test("V1 首页字标必须移除上游透明度并保留尺寸 class", async () => {
+    const config = await createElectronViteConfig(await contextFixture())
+    const plugin = requireStaticBrandPlugin(config.renderer?.plugins)
+
+    const id = await plugin.resolveId.call({}, "@opencode-ai/ui/logo")
+    expect(typeof id).toBe("string")
+    const loaded = String(await plugin.load.call({}, id))
+    const module = evaluateStaticBrandModule(loaded)
+    const logo = module.Logo({ class: "md:w-xl opacity-12 shrink-0" })
+
+    expect(logo.src).toBe("./wordmark.png")
+    expect(logo.className).toBe("md:w-xl shrink-0")
+  })
+
   test("构建前封闭整个 Electron out 根并移除旧的二进制与 legacy sibling", async () => {
     const context = await contextFixture()
     const outputRoot = path.join(context.paths.stageDir, "desktop", "out")
@@ -701,6 +715,25 @@ function isOutputAudit(value: unknown): value is {
         /^[a-f0-9]{64}$/.test(artifact.digest),
     )
   )
+}
+
+function evaluateStaticBrandModule(source: string) {
+  const transformed = source
+    .replaceAll("export const Mark =", "const Mark =")
+    .replaceAll("export const Splash =", "const Splash =")
+    .replaceAll("export const Logo =", "const Logo =")
+    .replaceAll("export const WordmarkV2 =", "const WordmarkV2 =")
+  const document = {
+    createElement(tag: string) {
+      return { tag, dataset: {}, src: "", className: "" }
+    },
+  }
+  return Function(
+    "document",
+    `${transformed}; return { Mark: typeof Mark === "undefined" ? undefined : Mark, Splash: typeof Splash === "undefined" ? undefined : Splash, Logo: typeof Logo === "undefined" ? undefined : Logo, WordmarkV2: typeof WordmarkV2 === "undefined" ? undefined : WordmarkV2 }`,
+  )(document) as {
+    Logo(input: { class?: string }): { src: string; className: string }
+  }
 }
 
 async function expectFailure(operation: Promise<unknown>, message: string | RegExp) {

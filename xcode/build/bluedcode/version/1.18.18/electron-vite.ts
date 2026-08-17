@@ -528,9 +528,10 @@ const Image = (component, src, props) => {
   const element = document.createElement("img")
   element.dataset.component = component
   element.src = src
-  if (props.class) element.className = props.class
+  if (props.class) element.className = withoutOpacity(props.class)
   return element
 }
+const withoutOpacity = (value) => value.split(/\\s+/).filter((item) => item && !item.startsWith("opacity-")).join(" ")
 export const WordmarkV2 = (props) => Image("logo-wordmark-v2", "./wordmark.png", props)
 `
       }
@@ -540,9 +541,10 @@ const Image = (component, src, props) => {
   const element = document.createElement("img")
   element.dataset.component = component
   element.src = src
-  if (props.class) element.className = props.class
+  if (props.class) element.className = component === "logo-wordmark" ? withoutOpacity(props.class) : props.class
   return element
 }
+const withoutOpacity = (value) => value.split(/\\s+/).filter((item) => item && !item.startsWith("opacity-")).join(" ")
 export const Mark = (props) => Image("logo-mark", "./favicon.svg", props)
 export const Splash = (props) => Image("logo-splash", "./favicon.svg", props)
 export const Logo = (props) => Image("logo-wordmark", "./wordmark.png", props)

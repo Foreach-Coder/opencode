@@ -36,7 +36,7 @@
     "version/1.18.18/baseline.json": "bb40f2ebf9989a00c9b41142ac5ddc33fff1993fc84e5f2a6d428b136884a1e9",
     "version/1.18.18/baseline.ts": "5cf286a099095551a35bcc7e12f82ce89fd12cfbbcfa7ad175183cd7e4d75815",
     "version/1.18.18/electron-builder.ts": "6fe12f80e3dc449ebba5442596932ae6f9133480aefb2681452d43983891266c",
-    "version/1.18.18/electron-vite.ts": "4a587c84ed2b5445701a53ccd84767dd03a89a5bed0233dfb0f6428818ceb602",
+    "version/1.18.18/electron-vite.ts": "d9aa86f86eced7d3cb5327e2d5c36593148f9d5a9be7b73f107352d830d360b2",
     "version/1.18.18/index.ts": "4186221ddeb8b4b7657d31566782be0ea99dd493c86d359ad92e2e11989245af",
     "version/1.18.18/resource-editor-lock.ts": "cdbce5b253d03f934a2348df808556feed83a43aff250967a13e3956afe7d230",
     "version/1.18.18/rules/assets.ts": "33b6069454ee83573a4cb3ca7ba2d17375a07af6e02f5e53524cf3d013a52c2d",
