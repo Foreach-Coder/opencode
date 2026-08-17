@@ -50,7 +50,7 @@ export const assetRules: readonly TransformRule[] = [
 ]
 
 export const desktopAssetPolicy = {
-  include: ["app-icon.svg", "app-icon.png", "wordmark.svg"],
+  include: ["app-icon.svg", "app-icon.png", "wordmark.png", "wordmark.svg"],
   renderer: ["favicon.svg", "favicon.png", "favicon.ico"],
   exclude: ["tui.json"],
 } as const

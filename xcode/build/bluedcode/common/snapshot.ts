@@ -3,14 +3,27 @@ import { readdir } from "node:fs/promises"
 import path from "node:path"
 import type { SnapshotManifest } from "./types"
 
-const snapshotFiles = ["brand.json", "app-icon.svg", "app-icon.png", "wordmark.svg", "tui.json"] as const
+const snapshotFiles = [
+  "brand.json",
+  "app-icon.svg",
+  "app-icon.png",
+  "wordmark.png",
+  "wordmark.svg",
+  "tui.json",
+] as const
 const permittedRootFiles = new Set(["snapshot-manifest.json", "build.ts", ...snapshotFiles])
 
-export async function verifySnapshot(root: string, options: { includeFramework?: boolean } = {}): Promise<SnapshotManifest> {
+export async function verifySnapshot(
+  root: string,
+  options: { includeFramework?: boolean } = {},
+): Promise<SnapshotManifest> {
   const manifest = parseManifest(await Bun.file(path.join(root, "snapshot-manifest.json")).text())
   const expected = options.includeFramework ? await frameworkFiles(root) : [...snapshotFiles]
   const names = Object.keys(manifest.files).sort()
-  if (options.includeFramework && (names.length !== expected.length || names.some((name, index) => name !== expected[index])))
+  if (
+    options.includeFramework &&
+    (names.length !== expected.length || names.some((name, index) => name !== expected[index]))
+  )
     throw new Error("snapshot-manifest.json 包含缺失或多余文件")
 
   const entries = await readdir(root, { withFileTypes: true })
@@ -44,11 +57,7 @@ function parseManifest(content: string): SnapshotManifest {
     throw new Error("snapshot-manifest.json 无效")
   }
   for (const [file, hash] of Object.entries(parsed.files)) {
-    if (
-      !isSnapshotPath(file) ||
-      typeof hash !== "string" ||
-      !/^[a-f0-9]{64}$/.test(hash)
-    ) {
+    if (!isSnapshotPath(file) || typeof hash !== "string" || !/^[a-f0-9]{64}$/.test(hash)) {
       throw new Error("snapshot-manifest.json 无效")
     }
   }

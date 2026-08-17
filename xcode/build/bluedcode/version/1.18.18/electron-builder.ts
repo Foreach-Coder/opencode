@@ -112,6 +112,10 @@ export function createBuilderConfig(context: BuilderContext): Configuration {
       type: "module",
       version: context.identity.version,
     },
+    extraResources: [
+      { from: context.assets.iconIco, to: "icons/icon.ico" },
+      { from: context.assets.faviconPng, to: "icons/dock.png" },
+    ],
     files: [
       "package.json",
       "!**/node_modules/**/*",
@@ -124,7 +128,7 @@ export function createBuilderConfig(context: BuilderContext): Configuration {
       {
         from: assetRoot,
         to: "assets",
-        filter: ["favicon.png", "favicon.svg", "icon.ico", "wordmark.svg"],
+        filter: ["favicon.png", "favicon.svg", "icon.ico", "wordmark.png", "wordmark.svg"],
       },
     ],
     forceCodeSigning: false,
@@ -838,9 +842,12 @@ function requireBuilderContext(context: BuilderContext) {
   if (!/^\d+\.\d+\.\d+$/.test(context.electronVersion)) throw new Error("Electron 版本无效")
   const assetRoot = path.dirname(context.assets.iconIco)
   if (
-    ![context.assets.faviconPng, context.assets.faviconSvg, context.assets.wordmarkSvg].every(
-      (file) => path.dirname(file) === assetRoot,
-    ) ||
+    ![
+      context.assets.faviconPng,
+      context.assets.faviconSvg,
+      context.assets.wordmarkPng,
+      context.assets.wordmarkSvg,
+    ].every((file) => path.dirname(file) === assetRoot) ||
     !isStrictDescendant(path.join(context.paths.stageDir, "assets"), assetRoot)
   ) {
     throw new Error("Task 5 派生资源必须位于同一隔离摘要目录")

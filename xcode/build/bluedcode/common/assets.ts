@@ -13,7 +13,7 @@ import {
 import type { BuildPaths } from "./paths"
 import { verifySnapshot } from "./snapshot"
 
-const visualFiles = ["app-icon.png", "app-icon.svg", "brand.json", "wordmark.svg"] as const
+const visualFiles = ["app-icon.png", "app-icon.svg", "brand.json", "wordmark.png", "wordmark.svg"] as const
 const icoSizes = [16, 24, 32, 48, 64, 128, 256] as const
 const pngSignature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
 const MAX_DIMENSION = 4096
@@ -61,6 +61,7 @@ export type DerivedAssets = {
   iconIco: string
   faviconSvg: string
   faviconPng: string
+  wordmarkPng: string
   wordmarkSvg: string
 }
 
@@ -70,12 +71,16 @@ export async function validateBrandAssets(root: string): Promise<AssetDigest> {
   const iconSvg = await readUtf8(path.join(root, brand.appIconSvg))
   const wordmarkSvg = await readUtf8(path.join(root, brand.wordmarkSvg))
   const iconValidation = await validateSvg(iconSvg, ["./app-icon.png"])
-  await validateSvg(wordmarkSvg)
+  const wordmarkValidation = await validateSvg(wordmarkSvg, ["./wordmark.png"])
   const iconSize = requireIconSvg(iconSvg, iconValidation.hrefs)
   const png = await validatePng(new Uint8Array(await readFile(path.join(root, "app-icon.png"))))
   if (png.width !== iconSize) throw new Error("品牌 icon SVG viewBox 与 PNG 尺寸不一致")
+  if (wordmarkValidation.hrefs.length !== 1 || wordmarkValidation.hrefs[0] !== "./wordmark.png") {
+    throw new Error("品牌 wordmark SVG 必须恰好一个 href=./wordmark.png")
+  }
+  decodePixels(parsePng(new Uint8Array(await readFile(path.join(root, "wordmark.png")))))
 
-  const [appIconPng, appIconSvg, brandJson, wordmark] = await Promise.all(
+  const [appIconPng, appIconSvg, brandJson, wordmarkPng, wordmarkSvgHash] = await Promise.all(
     visualFiles.map(async (file) =>
       createHash("sha256")
         .update(await readFile(path.join(root, file)))
@@ -86,7 +91,8 @@ export async function validateBrandAssets(root: string): Promise<AssetDigest> {
     "app-icon.png": appIconPng,
     "app-icon.svg": appIconSvg,
     "brand.json": brandJson,
-    "wordmark.svg": wordmark,
+    "wordmark.png": wordmarkPng,
+    "wordmark.svg": wordmarkSvgHash,
   }
   const digest = createHash("sha256")
   for (const file of visualFiles) digest.update(file).update("\0").update(files[file]).update("\0")
@@ -174,7 +180,8 @@ export async function deriveDesktopAssets(paths: BuildPaths): Promise<DerivedAss
   const iconSvg = await readUtf8(path.join(paths.frameworkRoot, "app-icon.svg"))
   const iconValidation = await validateSvg(iconSvg, ["./app-icon.png"])
   requireIconSvg(iconSvg, iconValidation.hrefs)
-  const wordmark = new Uint8Array(await readFile(path.join(paths.frameworkRoot, "wordmark.svg")))
+  const wordmarkSvg = new Uint8Array(await readFile(path.join(paths.frameworkRoot, "wordmark.svg")))
+  const wordmarkPng = new Uint8Array(await readFile(path.join(paths.frameworkRoot, "wordmark.png")))
   const decoded = decodePixels(parsePng(new Uint8Array(await readFile(path.join(paths.frameworkRoot, "app-icon.png")))))
   const pngs = icoSizes.map((size) => encodePng(resize(decoded, size)))
   const faviconPng = encodePng(resize(decoded, 96))
@@ -192,6 +199,7 @@ export async function deriveDesktopAssets(paths: BuildPaths): Promise<DerivedAss
     iconIco: path.join(directory, "icon.ico"),
     faviconSvg: path.join(directory, "favicon.svg"),
     faviconPng: path.join(directory, "favicon.png"),
+    wordmarkPng: path.join(directory, "wordmark.png"),
     wordmarkSvg: path.join(directory, "wordmark.svg"),
   }
   await publishAssets(
@@ -202,7 +210,8 @@ export async function deriveDesktopAssets(paths: BuildPaths): Promise<DerivedAss
       ["icon.ico", encodeIco(pngs)],
       ["favicon.svg", new TextEncoder().encode(faviconSvg)],
       ["favicon.png", faviconPng],
-      ["wordmark.svg", wordmark],
+      ["wordmark.png", wordmarkPng],
+      ["wordmark.svg", wordmarkSvg],
     ]),
   )
   return result

@@ -110,8 +110,12 @@ describe("createBuilderConfig", () => {
       {
         from: path.dirname(context.assets.iconIco),
         to: "assets",
-        filter: ["favicon.png", "favicon.svg", "icon.ico", "wordmark.svg"],
+        filter: ["favicon.png", "favicon.svg", "icon.ico", "wordmark.png", "wordmark.svg"],
       },
+    ])
+    expect(config.extraResources).toEqual([
+      { from: context.assets.iconIco, to: "icons/icon.ico" },
+      { from: context.assets.faviconPng, to: "icons/dock.png" },
     ])
     expect(config.asarUnpack).toEqual(
       nativeRuntimeFiles
@@ -445,6 +449,7 @@ function builderContext(identity: BuildIdentity) {
       iconIco: path.join(assetRoot, "icon.ico"),
       faviconPng: path.join(assetRoot, "favicon.png"),
       faviconSvg: path.join(assetRoot, "favicon.svg"),
+      wordmarkPng: path.join(assetRoot, "wordmark.png"),
       wordmarkSvg: path.join(assetRoot, "wordmark.svg"),
     },
     afterSign: async () => {},

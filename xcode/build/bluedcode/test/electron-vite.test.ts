@@ -197,6 +197,7 @@ describe("createElectronViteConfig", () => {
       "favicon.svg",
       "oc-theme-preload.js",
       "social-share.png",
+      "wordmark.png",
       "wordmark.svg",
     ])
     for (const file of ["assets/Inter.ttf", "assets/JetBrainsMonoNerdFontMono-Regular.woff2", "oc-theme-preload.js"]) {
@@ -207,6 +208,7 @@ describe("createElectronViteConfig", () => {
     expect(await digestFile(path.join(publicDir, "favicon.png"))).toBe(await digestFile(context.assets.faviconPng))
     expect(await digestFile(path.join(publicDir, "favicon.svg"))).toBe(await digestFile(context.assets.faviconSvg))
     expect(await digestFile(path.join(publicDir, "favicon.ico"))).toBe(await digestFile(context.assets.iconIco))
+    expect(await digestFile(path.join(publicDir, "wordmark.png"))).toBe(await digestFile(context.assets.wordmarkPng))
     expect(await digestFile(path.join(publicDir, "wordmark.svg"))).toBe(await digestFile(context.assets.wordmarkSvg))
     expect(await digestFile(path.join(publicDir, "social-share.png"))).toBe(await digestFile(context.assets.faviconPng))
     for (const forbidden of [
@@ -536,6 +538,7 @@ function derivedAssetFixture(stageDir: string): DerivedAssets {
     iconIco: path.join(root, "icon.ico"),
     faviconSvg: path.join(root, "favicon.svg"),
     faviconPng: path.join(root, "favicon.png"),
+    wordmarkPng: path.join(root, "wordmark.png"),
     wordmarkSvg: path.join(root, "wordmark.svg"),
   }
 }

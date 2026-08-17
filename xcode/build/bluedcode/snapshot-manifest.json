@@ -1,13 +1,13 @@
 {
   "frameworkVersion": 1,
   "files": {
-    "app-icon.png": "35f53db41ac742115ae1fb4dbb025471da6ec0aacd98e5b0677410a66e50038b",
-    "app-icon.svg": "14bd3cf865a42d119d9cb6c67aff6dd72dd40e55168e5cee54536a4fb3f8aba2",
+    "app-icon.png": "0013787751d618e5218e6f3ef06f40f9f52a4c828ad360b9109b5eb2a9d6c5aa",
+    "app-icon.svg": "1a6b25d1de9f09d74a40a5bbc9235fa188bb7103718cad75588b5bb6576a6a41",
     "brand.json": "79b1ab2fe5cbe2f6a54098982b6f8b5c3f67f6f1d949db3d452d6c2eac961c5e",
-    "build.ts": "d3892e48057eeac87ba3c69a2f9c4e9c19f916f5cc9c028492e0316ed42ffea7",
+    "build.ts": "b39c97c3098701855c6d6edd033ee484f8638a2799d5d49a8221862c2451332d",
     "common/adapter-registry.ts": "8976ed5ac9180eaafd81dc827f00762e986a30a92d9e14460aa377abf134d252",
     "common/adapter.ts": "efefa4eba5108338ab657b3466dfbfd1e0b1673ae4d80fa7c6f806599ffd137f",
-    "common/assets.ts": "f3ebb2d543ca653de0b1a45cc810ede087c6f73db64a031f07bef901de3bc94e",
+    "common/assets.ts": "2333ffabc3bea6b703790939d9709afee8ddce0882bd3c22c4e64aecfc246e66",
     "common/audit.ts": "5819ac3efcf8ffb925f9ee709a861b3c740848fd629a5b6c0a5fabcf95f29bee",
     "common/build.ts": "ee0fecfd6a9616dc68c33877e0a5d08f13f50e1a0cebf349a48156bedac3a2f6",
     "common/cache.ts": "6ec01fef26bbb0b4387039ebf29b07c8f985aeb109934a10bd2752e7b0441c62",
@@ -23,7 +23,7 @@
     "common/release.ts": "19a73899b0caa5fcd0c13e7176e4e987d6535621e74a2f535b720308416edbce",
     "common/runtime-acceptance.ts": "6c5a13af103c9fe46ba3433a4adc6422354795944567fd9a5f2388262b74601a",
     "common/server.ts": "0f26e6c81dee74c35a73c07cc67d537333637e0cbf6004c3eeec3a3b1f5c8bd4",
-    "common/snapshot.ts": "33d9a20eb2925e443a35756fac2730484f2fdf21e6d9e7ec5d20e211651d841c",
+    "common/snapshot.ts": "9cec76f54679205ba6c2b93332e51d04f65dec7f73a197ca979c53a9ca1487b8",
     "common/transform/engine.ts": "fc42b2e315b6edfb5165484a700ef4dc1d3ec4903109c2a945f7d2eef63c4186",
     "common/transform/html.ts": "089b7b5735b9474d91323c1589df297f423070e0c23a37a3f294f0c2c046a049",
     "common/transform/text.ts": "ad184ee95c41f0f470a54faaa123f673d28cc5d6726b58ef2529cb19199795c3",
@@ -35,11 +35,11 @@
     "tui.json": "555066d8bdbdf2987d1312daff661a9bab1775fd9b5ae34ece9bc9dd2c0df04e",
     "version/1.18.18/baseline.json": "bb40f2ebf9989a00c9b41142ac5ddc33fff1993fc84e5f2a6d428b136884a1e9",
     "version/1.18.18/baseline.ts": "5cf286a099095551a35bcc7e12f82ce89fd12cfbbcfa7ad175183cd7e4d75815",
-    "version/1.18.18/electron-builder.ts": "c92976d9c18cfd6134e60d802ccc2e0952ec7f93c2114f58b9451b0e59b66e2b",
-    "version/1.18.18/electron-vite.ts": "a29e43aedb98338746c6bfb2b72bb5de95ae67984ae6e3c609dd323810203903",
+    "version/1.18.18/electron-builder.ts": "6fe12f80e3dc449ebba5442596932ae6f9133480aefb2681452d43983891266c",
+    "version/1.18.18/electron-vite.ts": "cf68ab7e75a29fc7bd7ec3862dbfbbeacc4146170f0b9952045b9cae3f855849",
     "version/1.18.18/index.ts": "4186221ddeb8b4b7657d31566782be0ea99dd493c86d359ad92e2e11989245af",
     "version/1.18.18/resource-editor-lock.ts": "cdbce5b253d03f934a2348df808556feed83a43aff250967a13e3956afe7d230",
-    "version/1.18.18/rules/assets.ts": "03c7307249dfe13c35e28b11738d17c258dc0d3c3ce83f1ce57d19bca72db1a9",
+    "version/1.18.18/rules/assets.ts": "33b6069454ee83573a4cb3ca7ba2d17375a07af6e02f5e53524cf3d013a52c2d",
     "version/1.18.18/rules/ast.ts": "dd2bd0330eaa25756e9f6369d4c5458ced0540b40677dfc2b9a67b24efd56d07",
     "version/1.18.18/rules/disable-cli.ts": "8bef9d56046d5271b6657705e58b2d536bc2908737a166f1f9660d46037b2feb",
     "version/1.18.18/rules/global-paths.ts": "76b0738d59976f456f09fcd7e28e1cc7a342571fffbfe2e70391518fbfdfb1a4",
@@ -47,6 +47,7 @@
     "version/1.18.18/rules/locales.ts": "74dd834bf219e57e21fd9f36d489ef934d5738e8b3f718e6be968d73ceafd002",
     "version/1.18.18/rules/preserved-identities.ts": "6b021da9d5b83a1c2c3ca928acff8ba8fbdc6cf9ae96d968d909078ac0d15853",
     "version/1.18.18/rules/renderer.ts": "1174420dac9630093081b1f9b2631aa42e5d7a9742e683cb102eb24e55179089",
-    "wordmark.svg": "33d9937e5502c2c25bd46766626b820bffa382e7a552c13db710e7a30a71e1f5"
+    "wordmark.png": "f3170a92edae725bdb111c56d64c093011b6bef6df2f1a677ddd9d7f00a081b6",
+    "wordmark.svg": "0c7f78dc8108fe5d9b834a084eabd2824f2af7d95a3b7f8662be6999ed80866f"
   }
 }

@@ -1345,6 +1345,7 @@ function builderConfigFixture(paths: ReturnType<typeof createBuildPaths>, reposi
       iconIco: path.join(assetsRoot, "icon.ico"),
       faviconSvg: path.join(assetsRoot, "favicon.svg"),
       faviconPng: path.join(assetsRoot, "favicon.png"),
+      wordmarkPng: path.join(assetsRoot, "wordmark.png"),
       wordmarkSvg: path.join(assetsRoot, "wordmark.svg"),
     },
     electronVersion: "42.3.3",

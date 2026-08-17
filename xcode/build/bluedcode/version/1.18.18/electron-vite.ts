@@ -259,6 +259,7 @@ export async function stageRendererPublic(paths: BuildPaths, assets: DerivedAsse
         ["favicon.png", assets.faviconPng],
         ["favicon.svg", assets.faviconSvg],
         ["social-share.png", assets.faviconPng],
+        ["wordmark.png", assets.wordmarkPng],
         ["wordmark.svg", assets.wordmarkSvg],
       ].map(async ([file, sourceFile]) => [file, await readConcreteFile(assetRoot, sourceFile)] as const),
     ),
@@ -628,7 +629,11 @@ async function listConcreteFiles(root: string) {
 
 function requireAssetRoot(paths: BuildPaths, assets: DerivedAssets) {
   const root = path.dirname(assets.iconIco)
-  if (![assets.faviconPng, assets.faviconSvg, assets.wordmarkSvg].every((file) => path.dirname(file) === root)) {
+  if (
+    ![assets.faviconPng, assets.faviconSvg, assets.wordmarkPng, assets.wordmarkSvg].every(
+      (file) => path.dirname(file) === root,
+    )
+  ) {
     throw new Error("Task 5 派生资源不在同一不可变摘要目录")
   }
   requireStrictDescendant(path.join(paths.stageDir, "assets"), root, "Task 5 派生资源")
@@ -743,9 +748,18 @@ type ElectronViteSerializedContext = Omit<ElectronViteContext, "adapter"> & { ad
 
 function isElectronViteSerializedContext(value: unknown): value is ElectronViteSerializedContext {
   if (!value || typeof value !== "object") return false
-  if (!("adapter" in value) || !("assets" in value) || !("identity" in value) || !("paths" in value) || !("server" in value)) return false
+  if (
+    !("adapter" in value) ||
+    !("assets" in value) ||
+    !("identity" in value) ||
+    !("paths" in value) ||
+    !("server" in value)
+  )
+    return false
   if (!hasStringFields(value.adapter, ["tag", "commit", "desktopVersion"])) return false
-  if (!hasStringFields(value.assets, ["iconIco", "faviconSvg", "faviconPng", "wordmarkSvg"])) return false
+  if (!hasStringFields(value.assets, ["iconIco", "faviconSvg", "faviconPng", "wordmarkPng", "wordmarkSvg"])) {
+    return false
+  }
   if (!hasStringFields(value.server, ["file", "digest"])) return false
   if (!("size" in value.server) || typeof value.server.size !== "number") return false
   if (!("assets" in value.server) || !Array.isArray(value.server.assets)) return false

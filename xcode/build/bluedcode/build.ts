@@ -992,7 +992,11 @@ async function auditPackagedApplication(
     (await listConcreteFiles(outputRoot)).map(async (file) => asarExpectedFile(outputRoot, `out/${file}`, file)),
   )
   const assetRoot = path.dirname(assets.iconIco)
-  if (![assets.faviconPng, assets.faviconSvg, assets.wordmarkSvg].every((file) => path.dirname(file) === assetRoot)) {
+  if (
+    ![assets.faviconPng, assets.faviconSvg, assets.wordmarkPng, assets.wordmarkSvg].every(
+      (file) => path.dirname(file) === assetRoot,
+    )
+  ) {
     throw new Error("Task 5 派生资源目录不一致")
   }
   const expected = [
@@ -1001,6 +1005,7 @@ async function auditPackagedApplication(
     await asarExpectedFile(assetRoot, "assets/favicon.png", path.basename(assets.faviconPng)),
     await asarExpectedFile(assetRoot, "assets/favicon.svg", path.basename(assets.faviconSvg)),
     await asarExpectedFile(assetRoot, "assets/icon.ico", path.basename(assets.iconIco)),
+    await asarExpectedFile(assetRoot, "assets/wordmark.png", path.basename(assets.wordmarkPng)),
     await asarExpectedFile(assetRoot, "assets/wordmark.svg", path.basename(assets.wordmarkSvg)),
     ...nativeRuntimeFiles.map((file) => `node_modules/@lydell/node-pty-win32-x64/${file}`),
   ]

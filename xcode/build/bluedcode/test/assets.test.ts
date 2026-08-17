@@ -44,6 +44,7 @@ test("校验规范品牌资源并生成不含路径的视觉摘要", async () =>
     "app-icon.png": expect.stringMatching(/^[a-f0-9]{64}$/),
     "app-icon.svg": expect.stringMatching(/^[a-f0-9]{64}$/),
     "brand.json": expect.stringMatching(/^[a-f0-9]{64}$/),
+    "wordmark.png": expect.stringMatching(/^[a-f0-9]{64}$/),
     "wordmark.svg": expect.stringMatching(/^[a-f0-9]{64}$/),
   })
 })
@@ -188,11 +189,15 @@ test("确定性派生固定 favicon 与升序 PNG-backed ICO，且只写 stage/a
 
   const first = await deriveDesktopAssets(paths)
   const firstBytes = await Promise.all(
-    [first.iconIco, first.faviconSvg, first.faviconPng, first.wordmarkSvg].map((file) => readFile(file)),
+    [first.iconIco, first.faviconSvg, first.faviconPng, first.wordmarkSvg, first.wordmarkPng].map((file) =>
+      readFile(file),
+    ),
   )
   const second = await deriveDesktopAssets(paths)
   const secondBytes = await Promise.all(
-    [second.iconIco, second.faviconSvg, second.faviconPng, second.wordmarkSvg].map((file) => readFile(file)),
+    [second.iconIco, second.faviconSvg, second.faviconPng, second.wordmarkSvg, second.wordmarkPng].map((file) =>
+      readFile(file),
+    ),
   )
 
   expect(second).toEqual(first)
@@ -204,9 +209,8 @@ test("确定性派生固定 favicon 与升序 PNG-backed ICO，且只写 stage/a
   )
   expect(await treeDigest(path.join(fixture.repositoryRoot, "packages"))).toBe(packagesBefore)
   expect(await Bun.file(first.faviconSvg).text()).toContain('href="./favicon.png"')
-  expect(await Bun.file(first.wordmarkSvg).text()).toBe(
-    await Bun.file(path.join(paths.frameworkRoot, "wordmark.svg")).text(),
-  )
+  expect(await Bun.file(first.wordmarkSvg).text()).toContain('href="./wordmark.png"')
+  expect(firstBytes[4]).toEqual(await readFile(path.join(paths.frameworkRoot, "wordmark.png")))
 })
 
 test("已存在的非完整摘要目录保持原样且不可被派生覆盖", async () => {
@@ -265,9 +269,15 @@ async function temporarySnapshot(name: string) {
   const root = testRoot(name)
   await mkdir(root, { recursive: true })
   await Promise.all(
-    ["brand.json", "app-icon.svg", "app-icon.png", "wordmark.svg", "tui.json", "snapshot-manifest.json"].map((file) =>
-      cp(path.join(snapshotRoot, file), path.join(root, file)),
-    ),
+    [
+      "brand.json",
+      "app-icon.svg",
+      "app-icon.png",
+      "wordmark.svg",
+      "wordmark.png",
+      "tui.json",
+      "snapshot-manifest.json",
+    ].map((file) => cp(path.join(snapshotRoot, file), path.join(root, file))),
   )
   return root
 }
@@ -293,7 +303,7 @@ async function repositoryFixture(name: string) {
 async function updateManifest(root: string) {
   const files = Object.fromEntries(
     await Promise.all(
-      ["brand.json", "app-icon.svg", "app-icon.png", "wordmark.svg", "tui.json"].map(async (file) => [
+      ["brand.json", "app-icon.svg", "app-icon.png", "wordmark.svg", "wordmark.png", "tui.json"].map(async (file) => [
         file,
         createHash("sha256")
           .update(await readFile(path.join(root, file)))

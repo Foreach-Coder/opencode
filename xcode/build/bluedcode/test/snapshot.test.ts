@@ -10,9 +10,15 @@ const parentResourceRoot = path.resolve(snapshotRoot, "../../../../xcode/build/b
 async function temporarySnapshot() {
   const root = await mkdtemp(path.join(os.tmpdir(), "bluedcode-snapshot-"))
   await Promise.all(
-    ["brand.json", "app-icon.svg", "app-icon.png", "wordmark.svg", "tui.json", "snapshot-manifest.json"].map((file) =>
-      cp(path.join(snapshotRoot, file), path.join(root, file)),
-    ),
+    [
+      "brand.json",
+      "app-icon.svg",
+      "app-icon.png",
+      "wordmark.svg",
+      "wordmark.png",
+      "tui.json",
+      "snapshot-manifest.json",
+    ].map((file) => cp(path.join(snapshotRoot, file), path.join(root, file))),
   )
   return root
 }
@@ -47,6 +53,7 @@ test("验证子仓快照而不访问父仓", async () => {
       "brand.json": expect.stringMatching(/^[a-f0-9]{64}$/),
       "app-icon.svg": expect.stringMatching(/^[a-f0-9]{64}$/),
       "app-icon.png": expect.stringMatching(/^[a-f0-9]{64}$/),
+      "wordmark.png": expect.stringMatching(/^[a-f0-9]{64}$/),
       "wordmark.svg": expect.stringMatching(/^[a-f0-9]{64}$/),
       "tui.json": expect.stringMatching(/^[a-f0-9]{64}$/),
     },
@@ -78,7 +85,14 @@ test("父级根仓 BluedCode 资源目录只能保留静态品牌资源", async 
   })
 
   expect(forbidden).toEqual([])
-  expect(files).toEqual(["app-icon.png", "app-icon.svg", "brand.json", "resource-manifest.json", "wordmark.svg"])
+  expect(files).toEqual([
+    "app-icon.png",
+    "app-icon.svg",
+    "brand.json",
+    "resource-manifest.json",
+    "wordmark.png",
+    "wordmark.svg",
+  ])
 })
 
 test("拒绝删除快照文件", async () => {
