@@ -35,7 +35,7 @@
     "tui.json": "555066d8bdbdf2987d1312daff661a9bab1775fd9b5ae34ece9bc9dd2c0df04e",
     "version/1.18.18/baseline.json": "bb40f2ebf9989a00c9b41142ac5ddc33fff1993fc84e5f2a6d428b136884a1e9",
     "version/1.18.18/baseline.ts": "5cf286a099095551a35bcc7e12f82ce89fd12cfbbcfa7ad175183cd7e4d75815",
-    "version/1.18.18/electron-builder.ts": "e01d8ae5386bcdd658cd22c0a65f3865ab0e2dad690da16d8deb063895e97069",
+    "version/1.18.18/electron-builder.ts": "c92976d9c18cfd6134e60d802ccc2e0952ec7f93c2114f58b9451b0e59b66e2b",
     "version/1.18.18/electron-vite.ts": "a29e43aedb98338746c6bfb2b72bb5de95ae67984ae6e3c609dd323810203903",
     "version/1.18.18/index.ts": "4186221ddeb8b4b7657d31566782be0ea99dd493c86d359ad92e2e11989245af",
     "version/1.18.18/resource-editor-lock.ts": "cdbce5b253d03f934a2348df808556feed83a43aff250967a13e3956afe7d230",

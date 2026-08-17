@@ -227,9 +227,7 @@ async function validateAfterPackContext(context: AfterPackContext, identity: Bui
   if (!context || typeof context !== "object") throw new Error("electron-builder afterSign context 无效")
   if (context.electronPlatformName !== "win32") throw new Error("electron-builder afterSign 仅允许 Windows")
   if (context.arch !== 1) throw new Error("electron-builder afterSign 仅允许 x64")
-  if (context.targets.length !== 1 || context.targets[0]?.name !== "dir") {
-    throw new Error("electron-builder afterSign target 必须唯一且为 dir")
-  }
+  if (!Array.isArray(context.targets)) throw new Error("electron-builder afterSign targets 无效")
   requirePackagerIdentity(context.packager, identity)
   const expectedOutDir = path.resolve(paths.outDir)
   const expectedAppOutDir = path.join(expectedOutDir, "win-unpacked")

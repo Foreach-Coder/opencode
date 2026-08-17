@@ -196,13 +196,13 @@ describe("afterSign 品牌应用 PE 版本资源兼容处理", () => {
     }
   })
 
-  test("拒绝错误 platform、arch、target 与 canonical output", async () => {
+  test("拒绝错误 platform、arch 与 canonical output，但不依赖真实 Builder target 名称", async () => {
     const fixture = await afterSignFixture("context")
     try {
       for (const override of [
         { electronPlatformName: "linux" },
         { arch: 3 },
-        { targets: [{ name: "portable" }] },
+        { targets: {} },
         { outDir: path.join(fixture.root, "escaped-out") },
         { appOutDir: path.join(fixture.root, "escaped-app") },
       ]) {
@@ -213,9 +213,15 @@ describe("afterSign 品牌应用 PE 版本资源兼容处理", () => {
         })
         await expectFailure(
           controller.afterSign({ ...afterSignContext(fixture), ...override }),
-          /afterSign|Windows|x64|dir|路径|output/i,
+          /afterSign|Windows|x64|targets|路径|output/i,
         )
       }
+      const controller = createBrandedExecutableVersionHook({
+        identity: fixture.identity,
+        paths: fixture.paths,
+        operations: operations([builderPeBefore(fixture.identity), brandedPeAfter(fixture.identity)]),
+      })
+      await controller.afterSign({ ...afterSignContext(fixture), targets: [{ name: "zip-internal-runtime-shape" }] })
     } finally {
       await rm(fixture.root, { recursive: true, force: true })
     }
