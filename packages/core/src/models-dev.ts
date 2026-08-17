@@ -11,6 +11,7 @@ import { InstallationChannel, InstallationVersion } from "./installation/version
 import { EventV2 } from "./event"
 import { makeGlobalNode } from "./effect/app-node"
 import { httpClient } from "./effect/app-node-platform"
+import { Product } from "@foreachcode/product"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -142,6 +143,14 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelsDev") {}
 
+export function requirePublicCatalogNetwork() {
+  if (Product.profile.capabilities.publicProviderCatalog) return
+  throw new Product.ProductError(
+    "PRODUCT_CAPABILITY_DISABLED",
+    "PRODUCT_CAPABILITY_DISABLED: 公共 Provider 目录已由产品策略禁用",
+  )
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -173,6 +182,7 @@ const layer = Layer.effect(
     })
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
+      requirePublicCatalogNetwork()
       return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
         HttpClientRequest.setHeader("User-Agent", USER_AGENT),
         http.execute,
@@ -235,6 +245,7 @@ const layer = Layer.effect(
     const get = (): Effect.Effect<Record<string, Provider>> => cachedGet
 
     const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+      requirePublicCatalogNetwork()
       if (!force && (yield* fresh())) return
       yield* Effect.scoped(
         Effect.gen(function* () {
@@ -252,7 +263,11 @@ const layer = Layer.effect(
       )
     })
 
-    if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+    if (
+      Product.profile.capabilities.publicProviderCatalog &&
+      !Flag.OPENCODE_DISABLE_MODELS_FETCH &&
+      !process.argv.includes("--get-yargs-completions")
+    ) {
       // Schedule.spaced runs the effect once, then waits between completions.
       yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced("60 minutes")), Effect.ignore))
     }

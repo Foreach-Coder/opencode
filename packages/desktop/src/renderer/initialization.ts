@@ -20,3 +20,10 @@ export function initializationReady<A>(state: (() => A | undefined) & { error: u
   initializationData(state)
   return true
 }
+
+export async function initializeLayoutState(input: { storedNewLayout: boolean | undefined }) {
+  return {
+    newLayoutEnabled: input.storedNewLayout ?? false,
+    settingsToggleVisible: true,
+  }
+}

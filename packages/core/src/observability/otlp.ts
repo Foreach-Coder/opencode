@@ -3,8 +3,7 @@ import { OtlpLogger } from "effect/unstable/observability"
 import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
 import { runID } from "./shared"
-
-const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
+import { Product } from "@foreachcode/product"
 
 const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
@@ -16,6 +15,14 @@ const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
       {} as Record<string, string>,
     )
   : undefined
+
+export function requireTelemetryNetwork() {
+  if (Product.profile.capabilities.telemetry) return
+  throw new Product.ProductError(
+    "PRODUCT_CAPABILITY_DISABLED",
+    "PRODUCT_CAPABILITY_DISABLED: 遥测网络已由产品策略禁用",
+  )
+}
 
 function resourceAttributes() {
   const value = process.env.OTEL_RESOURCE_ATTRIBUTES
@@ -48,12 +55,16 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
 }
 
 export function loggers() {
+  const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
   if (!endpoint) return []
+  requireTelemetryNetwork()
   return [OtlpLogger.make({ url: `${endpoint}/v1/logs`, resource: resource(), headers })]
 }
 
 export async function tracingLayer() {
+  const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
   if (!endpoint) return Layer.empty
+  requireTelemetryNetwork()
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")

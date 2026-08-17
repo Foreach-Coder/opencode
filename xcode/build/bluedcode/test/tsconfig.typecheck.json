@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "lib": ["ESNext", "DOM"],
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noImplicitAny": false,
+    "paths": {
+      "electron-builder": ["../../../../packages/desktop/node_modules/electron-builder"],
+      "electron-vite": ["../../../../packages/desktop/node_modules/electron-vite"],
+      "vite": ["../../../../packages/desktop/node_modules/vite"]
+    },
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext"
+  },
+  "files": ["typecheck-env.d.ts"],
+  "include": ["../build.ts", "../common/**/*.ts", "../version/1.18.18/electron-builder.ts"]
+}

@@ -80,6 +80,7 @@ const api: ElectronAPI = {
   draftBlobGet: (id) => ipcRenderer.invoke("draft-blob-get", id),
 
   getWindowID: () => ipcRenderer.invoke("get-window-id"),
+  getDesktopInitialization: () => ipcRenderer.invoke("get-desktop-initialization"),
   onMenuCommand: (cb) => {
     const handler = (_: unknown, id: string) => cb(id)
     ipcRenderer.on("menu-command", handler)

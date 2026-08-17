@@ -26,12 +26,11 @@ import {
 } from "./onboarding"
 import {
   getDefaultServerUrl,
-  preferAppEnv,
   setDefaultServerUrl,
   spawnLocalServer,
   type SidecarListener,
 } from "./server"
-import { setupAutoUpdater, showUpdaterDialog } from "./updater"
+import { createDisabledAutoUpdater, showUpdaterDialog } from "./updater"
 import { safeWebContentsURL } from "./window-state"
 import {
   getLastFocusedWindow,
@@ -42,26 +41,12 @@ import {
   setDockIcon,
   restoreMainWindows,
 } from "./windows"
-import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
-import { spawnWslSidecar } from "./wsl/sidecar"
-import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
-import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
+import { setDesktopRuntimeChannel } from "./product-identity"
 
-const APP_NAMES: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
-}
-const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
-}
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
-const SIDECAR_VERSION = process.env.OPENCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
@@ -122,7 +107,7 @@ const main = Effect.gen(function* () {
 
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
+  const desktopIdentity = setDesktopRuntimeChannel(app.isPackaged && CHANNEL === "prod" ? "prod" : "dev")
   const onboardingTestRoot = ((): string | undefined => {
     if (!TEST_ONBOARDING) return
 
@@ -138,35 +123,19 @@ const main = Effect.gen(function* () {
     process.env.XDG_STATE_HOME = join(root, "state")
     return root
   })()
-  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
-  app.setAppUserModelId(appId)
+  app.setName(desktopIdentity.displayName)
+  app.setAppUserModelId(desktopIdentity.appId)
   app.setPath(
     "userData",
-    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
+    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), desktopIdentity.appId),
   )
   if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
   initializeOldLayoutEligibility(app.getPath("userData"))
   logger = initLogging()
   initCrashReporter()
 
-  const wslServers = createWslServersController(
-    app.getVersion(),
-    async (distro) => {
-      logger.log("spawning wsl sidecar", { distro })
-      return spawnWslSidecar(distro, {
-        onLine: (line) => logger.log("wsl sidecar", { distro, stream: line.stream, text: line.text }),
-      })
-    },
-    {
-      logger: {
-        log: (message, meta) => logger.log(message, meta),
-        error: (message, meta) => logger.error(message, meta),
-      },
-    },
-  )
   const stopSidecars = async () => {
     await killSidecar()
-    wslServers.stopAll()
   }
   const relaunch = () => {
     setAppQuitting()
@@ -200,10 +169,8 @@ const main = Effect.gen(function* () {
     return
   }
 
-  const shellEnv = preferAppEnv(app.getPath("userData"))
-
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = argv.filter((arg: string) => arg.startsWith(`${desktopIdentity.protocol}://`))
     if (urls.length) {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
@@ -254,7 +221,6 @@ const main = Effect.gen(function* () {
 
   yield* Effect.promise(() => app.whenReady())
 
-  if (!TEST_ONBOARDING) migrate()
   yield* Effect.promise(() => cleanupStoreFiles(app.getPath("userData"))).pipe(
     Effect.tap((result) =>
       Effect.sync(() => {
@@ -268,10 +234,10 @@ const main = Effect.gen(function* () {
       }),
     ),
   )
-  app.setAsDefaultProtocolClient("opencode")
+  app.setAsDefaultProtocolClient(desktopIdentity.protocol)
   registerRendererProtocol()
   setDockIcon()
-  const updater = setupAutoUpdater(stopSidecars)
+  const updater = createDisabledAutoUpdater(stopSidecars)
   const menuDeps = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
@@ -311,11 +277,7 @@ const main = Effect.gen(function* () {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
     },
   })
-  registerWslIpcHandlers(wslServers)
-  void updater.start()
-  const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)
-  updateTimer.unref()
-  app.once("will-quit", () => clearInterval(updateTimer))
+  registerWslIpcHandlers()
   yield* Effect.promise(() => startNetLog()).pipe(
     Effect.catch((error) =>
       Effect.sync(() => {
@@ -325,27 +287,10 @@ const main = Effect.gen(function* () {
   )
 
   const loadingTask = yield* Effect.gen(function* () {
-    logger.log("sidecar connection started", { version: SIDECAR_VERSION })
+    logger.log("sidecar connection started", { version: "v1" })
 
     ensureLoopbackNoProxy()
     useEnvProxy()
-
-    if (SIDECAR_VERSION === "v2") {
-      logger.log("spawning v2 sidecar")
-      const sidecar = yield* Effect.promise(() => startBackgroundCli(logger, shellEnv?.XDG_STATE_HOME))
-      yield* Deferred.succeed(serverReady, {
-        url: sidecar.url,
-        username: sidecar.username,
-        password: sidecar.password,
-      })
-
-      if (process.platform === "win32") {
-        void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
-      }
-
-      logger.log("loading task finished")
-      return
-    }
 
     const port = yield* Effect.gen(function* () {
       const fromEnv = process.env.OPENCODE_PORT
@@ -389,10 +334,6 @@ const main = Effect.gen(function* () {
       username: "opencode",
       password,
     })
-
-    if (process.platform === "win32") {
-      void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
-    }
 
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),

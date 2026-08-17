@@ -21,7 +21,6 @@ import type { AsyncStorage } from "@solid-primitives/storage"
 import { createMemoryHistory, MemoryRouter, type BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import { render } from "solid-js/web"
-import pkg from "../../package.json"
 import { t } from "./i18n"
 import { initializationData } from "./initialization"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
@@ -31,6 +30,7 @@ import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
 import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
+import { desktopNotificationIcon, desktopVisibleVersion, desktopWindowStateKey } from "./product-identity"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -41,7 +41,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
-    release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${pkg.version}`,
+    release: import.meta.env.VITE_SENTRY_RELEASE ?? "desktop",
     initialScope: {
       tags: {
         platform: "desktop",
@@ -65,9 +65,7 @@ void window.api.updater.subscribe(setUpdaterState)
 
 const deepLinkEvent = "opencode:deep-link"
 
-type DesktopWindowState = {
-  id?: string
-}
+type DesktopWindowState = { id?: string; version: string }
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
@@ -83,7 +81,7 @@ const listenForDeepLinks = () => {
 }
 
 function windowLastActiveUrlKey(windowID: string) {
-  return `opencode.desktop.window.${windowID}.last-active-url`
+  return desktopWindowStateKey(windowID)
 }
 
 function getLastActiveUrl(windowID: string) {
@@ -168,7 +166,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
   return {
     platform: "desktop",
     os,
-    version: pkg.version,
+    version: desktopVisibleVersion(windowState),
     windowID: windowState.id,
 
     async openDirectoryPickerDialog(opts) {
@@ -257,7 +255,7 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
       const notification = new Notification(title, {
         body: description ?? "",
-        icon: "https://opencode.ai/favicon-96x96-v3.png",
+        icon: desktopNotificationIcon,
       })
       notification.onclick = () => {
         void window.api.showWindow()
@@ -439,9 +437,9 @@ function DesktopRoot(props: { windowState: DesktopWindowState }) {
 render(() => {
   const [windowState] = createResource(async () => {
     const api = window.api as typeof window.api & {
-      getWindowID?: () => Promise<string>
+      getDesktopInitialization?: () => Promise<{ id: string; version: string }>
     }
-    return { id: await api.getWindowID?.() }
+    return api.getDesktopInitialization?.() ?? { id: await api.getWindowID?.(), version: "unknown" }
   })
 
   return (

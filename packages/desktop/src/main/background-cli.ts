@@ -5,6 +5,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { app } from "electron"
+import { assertDesktopCapability } from "./product-capability"
 
 const execFileAsync = promisify(execFile)
 const root = dirname(fileURLToPath(import.meta.url))
@@ -17,6 +18,7 @@ type Logger = {
 }
 
 export async function startBackgroundCli(logger: Logger, shellStateHome?: string) {
+  assertDesktopCapability("cli")
   const bundled = app.isPackaged
     ? join(process.resourcesPath, executableName())
     : join(root, "../../resources", executableName())

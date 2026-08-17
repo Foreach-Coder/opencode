@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -7,12 +7,33 @@ import { Project } from "@opencode-ai/core/project"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { resolveProductConfigPaths } from "@opencode-ai/core/product-directories"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, ProjectDirectories.node])))
 
 const projectID = Project.ID.make("project-directories")
 const directory = AbsolutePath.make("/tmp/project-directories")
+
+test("BluedCode uses upstream config filenames under .config/bluedcode", () => {
+  const paths = resolveProductConfigPaths("C:\\Users\\Foreach")
+  expect(paths.configFiles.map((file) => file.replaceAll("/", "\\\\"))).toEqual([
+    "C:\\Users\\Foreach\\.config\\bluedcode\\config.json",
+    "C:\\Users\\Foreach\\.config\\bluedcode\\opencode.json",
+    "C:\\Users\\Foreach\\.config\\bluedcode\\opencode.jsonc",
+  ])
+  expect(paths.configFiles.some((file) => file.includes(".config\\opencode"))).toBe(false)
+  expect(paths.configFiles.some((file) => file.includes("ProgramData"))).toBe(false)
+})
+
+test("BluedCode dev uses an isolated upstream-compatible config directory", () => {
+  const paths = resolveProductConfigPaths("C:\\Users\\Foreach", "dev")
+  expect(paths.configFiles.map((file) => file.replaceAll("/", "\\\\"))).toEqual([
+    "C:\\Users\\Foreach\\.config\\bluedcode-dev\\config.json",
+    "C:\\Users\\Foreach\\.config\\bluedcode-dev\\opencode.json",
+    "C:\\Users\\Foreach\\.config\\bluedcode-dev\\opencode.jsonc",
+  ])
+})
 
 function setup() {
   return Database.Service.use(({ db }) =>

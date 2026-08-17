@@ -22,6 +22,11 @@ export type ServerReadyData = {
   password: string | null
 }
 
+export type DesktopInitialization = {
+  id: string
+  version: string
+}
+
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
   subscribe: (cb: (state: UpdaterState) => void) => Promise<() => void>
@@ -71,6 +76,7 @@ export type ElectronAPI = {
   draftBlobGet: (id: string) => Promise<ArrayBuffer | null>
 
   getWindowID: () => Promise<string>
+  getDesktopInitialization: () => Promise<DesktopInitialization>
   onMenuCommand: (cb: (id: string) => void) => () => void
   onDeepLink: (cb: (urls: string[]) => void) => () => void
 

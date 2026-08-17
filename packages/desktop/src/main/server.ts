@@ -6,6 +6,8 @@ import { getLogger } from "./logging"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
+import { Product } from "@foreachcode/product"
+import { resolveDesktopRuntimeIdentity, resolveSidecarServiceName } from "./product-identity"
 
 export type HealthCheck = { wait: Promise<void> }
 
@@ -16,7 +18,6 @@ type SidecarMessage =
 
 export type SidecarListener = { stop: () => Promise<void> }
 
-const SIDECAR_SERVICE_NAME = "opencode server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
 const SIDECAR_STOP_TIMEOUT = 6_000
 
@@ -49,6 +50,7 @@ export function preferAppEnv(userDataPath: string) {
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
+    BLUEDCODE_PRODUCT_DIRECTORY: resolveDesktopRuntimeIdentity().directoryName,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
   return shellEnv
@@ -61,17 +63,18 @@ export async function spawnLocalServer(
   options: SpawnLocalServerOptions,
 ) {
   const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
+  const serviceName = resolveSidecarServiceName()
   const child = utilityProcess.fork(sidecar, [], {
     cwd: process.cwd(),
     env: createSidecarEnv(),
-    serviceName: SIDECAR_SERVICE_NAME,
+    serviceName,
     stdio: "pipe",
   })
   let exited = false
   const exit = defer<number>()
 
   const onProcessGone = (_event: unknown, details: Details) => {
-    if (details.type !== "Utility" || details.name !== SIDECAR_SERVICE_NAME) return
+    if (details.type !== "Utility" || details.name !== serviceName) return
     options.onStderr?.(`utility process gone reason=${details.reason} exitCode=${details.exitCode}`)
   }
 

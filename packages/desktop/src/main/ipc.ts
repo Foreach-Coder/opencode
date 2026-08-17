@@ -24,6 +24,7 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { assertDesktopCapability } from "./product-capability"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -92,8 +93,14 @@ export function registerIpcHandlers(deps: Deps) {
     event.sender.once("destroyed", () => updaterSubscriptions.delete(id))
   })
   ipcMain.handle("updater-unsubscribe", (event) => updaterSubscriptions.delete(event.sender.id))
-  ipcMain.handle("updater-check", () => deps.updater.check())
-  ipcMain.handle("updater-install", () => deps.updater.install())
+  ipcMain.handle("updater-check", () => {
+    assertDesktopCapability("updater")
+    return deps.updater.check()
+  })
+  ipcMain.handle("updater-install", () => {
+    assertDesktopCapability("updater")
+    return deps.updater.install()
+  })
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("set-force-focus", (event: IpcMainInvokeEvent, enabled: boolean) =>
@@ -249,6 +256,13 @@ export function registerIpcHandlers(deps: Deps) {
     const id = getWindowID(win)
     if (!id) throw new Error("Window ID not found")
     return id
+  })
+  ipcMain.handle("get-desktop-initialization", (event: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) throw new Error("Window not found")
+    const id = getWindowID(win)
+    if (!id) throw new Error("Window ID not found")
+    return { id, version: app.getVersion() }
   })
 
   ipcMain.handle("get-window-focused", (event: IpcMainInvokeEvent) => {

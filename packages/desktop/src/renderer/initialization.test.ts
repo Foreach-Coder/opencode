@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { initializationData, initializationReady } from "./initialization"
+import { initializationData, initializationReady, initializeLayoutState } from "./initialization"
 
 describe("desktop renderer initialization", () => {
+  test("BluedCode defaults to V1 layout while preserving the new layout toggle", async () => {
+    const state = await initializeLayoutState({ storedNewLayout: undefined })
+    expect(state.newLayoutEnabled).toBe(false)
+    expect(state.settingsToggleVisible).toBe(true)
+  })
+
   test("throws the original initialization error before rendering server providers", () => {
     const error = new Error("sidecar startup failed")
 

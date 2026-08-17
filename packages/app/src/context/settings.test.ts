@@ -29,8 +29,9 @@ describe("agent visibility", () => {
 })
 
 describe("layout transition", () => {
-  test("blank profiles default to the new layout", () => {
-    expect(newLayoutDesignsDefault).toBe(true)
+  test("BluedCode blank profiles default to V1 while preserving an explicit V2 choice", () => {
+    expect(newLayoutDesignsDefault).toBe(false)
+    expect(resolveNewLayoutDesigns(false, true, newLayoutDesignsDefault)).toBe(true)
   })
 
   test("hides the transition until a sunset is scheduled", () => {

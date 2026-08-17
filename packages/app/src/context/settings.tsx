@@ -57,10 +57,10 @@ export interface Settings {
 export const monoDefault = "System Mono"
 export const sansDefault = "System Sans"
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
-const legacyNewLayoutDesignsDefault = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
-export const newLayoutDesignsDefault = true
+const legacyNewLayoutDesignsDefault = false
+export const newLayoutDesignsDefault = false
 // Existing users can switch layouts until local midnight on this date. Set new Date(YYYY, M-1, D) to show.
-export const oldInterfaceSunset = new Date(2026, 8, 14)
+export const oldInterfaceSunset = undefined
 const newLayoutDesignsUpgradeCutoff = "1.17.19"
 
 function compareVersions(a: string, b: string) {
@@ -252,11 +252,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const layoutTransitionClassified = createMemo(() => typeof store.general?.layoutTransitionEligible === "boolean")
     const layoutTransitionEligible = withFallback(() => store.general?.layoutTransitionEligible, false)
     const newInterfaceNoticeDismissed = withFallback(() => store.general?.newInterfaceNoticeDismissed, false)
-    const layoutUpgrade = createMemo(() =>
-      launchState.classified && !launchState.migrationApplied
-        ? shouldEnableNewLayout(launchState.previous, platform.version)
-        : false,
-    )
+    const layoutUpgrade = createMemo(() => false)
     const layoutTransition = createMemo(() =>
       layoutTransitionState(!!sunset, layoutTransitionEligible(), oldInterfaceRetired(), newInterfaceNoticeDismissed()),
     )
@@ -442,7 +438,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("general", "layoutTransitionEligible", eligible)
         },
         initializeAgentVisibility,
-        layoutTransitionAvailable: createMemo(() => ready() && layoutTransition().available),
+        layoutTransitionAvailable: createMemo(() => ready()),
         newInterfaceNoticeVisible: createMemo(() => ready() && layoutTransition().notice),
         dismissNewInterfaceNotice() {
           setStore("general", "newInterfaceNoticeDismissed", true)

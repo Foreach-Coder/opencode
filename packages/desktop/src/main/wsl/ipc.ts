@@ -4,8 +4,13 @@ import type { WslServersController } from "./servers"
 import { requireWslIpcString, requireWslIpcStrings } from "./policy"
 import type { WslServersState } from "../../preload/types"
 import { nativeT } from "../native-translations"
+import { assertDesktopCapability } from "../product-capability"
 
-export function registerWslIpcHandlers(controller: WslServersController) {
+export function registerWslIpcHandlers(controller?: WslServersController) {
+  if (!controller) {
+    registerUnavailableWslIpcHandlers()
+    return
+  }
   if (process.platform !== "win32") {
     registerUnavailableWslIpcHandlers()
     return
@@ -69,6 +74,7 @@ export function registerWslIpcHandlers(controller: WslServersController) {
 
 function registerUnavailableWslIpcHandlers() {
   const unavailable = () => {
+    assertDesktopCapability("wsl")
     throw new Error(nativeT("desktop.wsl.error.windowsOnly"))
   }
   const state = (): WslServersState => ({

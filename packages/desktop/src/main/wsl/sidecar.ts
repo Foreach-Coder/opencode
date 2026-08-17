@@ -6,6 +6,7 @@ import { checkHealth } from "../server"
 import { type WslCommandLine, resolveWslOpencode, shellEscape, wslArgs } from "./runtime"
 import { pollWslHealth } from "./startup"
 import { nativeT } from "../native-translations"
+import { assertDesktopCapability } from "../product-capability"
 
 export type WslSidecar = {
   listener: { stop: () => void; onExit: (cb: (code: number | null, signal: NodeJS.Signals | null) => void) => void }
@@ -18,6 +19,7 @@ export async function spawnWslSidecar(
   distro: string,
   opts: { onLine?: (line: WslCommandLine) => void; healthTimeoutMs?: number } = {},
 ): Promise<WslSidecar> {
+  assertDesktopCapability("wsl")
   const opencode = await resolveWslOpencode(distro)
   if (!opencode) throw new Error(nativeT("desktop.wsl.error.opencodeNotInstalled", { distro }))
 

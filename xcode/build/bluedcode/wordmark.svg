@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 42 5">
+  <title>BluedCode</title>
+  <style>
+    .blued { fill: #2f9cff; }
+    .code { fill: #172033; }
+    @media (prefers-color-scheme: dark) { .code { fill: #e6edf7; } }
+  </style>
+  <path class="blued" d="M0,0h1v1h-1zM1,0h1v1h-1zM2,0h1v1h-1zM5,0h1v1h-1zM10,0h1v1h-1zM13,0h1v1h-1zM15,0h1v1h-1zM16,0h1v1h-1zM17,0h1v1h-1zM18,0h1v1h-1zM20,0h1v1h-1zM21,0h1v1h-1zM22,0h1v1h-1zM0,1h1v1h-1zM3,1h1v1h-1zM5,1h1v1h-1zM10,1h1v1h-1zM13,1h1v1h-1zM15,1h1v1h-1zM20,1h1v1h-1zM23,1h1v1h-1zM0,2h1v1h-1zM1,2h1v1h-1zM2,2h1v1h-1zM5,2h1v1h-1zM10,2h1v1h-1zM13,2h1v1h-1zM15,2h1v1h-1zM16,2h1v1h-1zM17,2h1v1h-1zM20,2h1v1h-1zM23,2h1v1h-1zM0,3h1v1h-1zM3,3h1v1h-1zM5,3h1v1h-1zM10,3h1v1h-1zM13,3h1v1h-1zM15,3h1v1h-1zM20,3h1v1h-1zM23,3h1v1h-1zM0,4h1v1h-1zM1,4h1v1h-1zM2,4h1v1h-1zM5,4h1v1h-1zM6,4h1v1h-1zM7,4h1v1h-1zM8,4h1v1h-1zM10,4h1v1h-1zM11,4h1v1h-1zM12,4h1v1h-1zM13,4h1v1h-1zM15,4h1v1h-1zM16,4h1v1h-1zM17,4h1v1h-1zM18,4h1v1h-1zM20,4h1v1h-1zM21,4h1v1h-1zM22,4h1v1h-1z"/>
+  <path class="code" d="M27,0h1v1h-1zM28,0h1v1h-1zM29,0h1v1h-1zM31,0h1v1h-1zM32,0h1v1h-1zM33,0h1v1h-1zM35,0h1v1h-1zM36,0h1v1h-1zM39,0h1v1h-1zM40,0h1v1h-1zM41,0h1v1h-1zM27,1h1v1h-1zM31,1h1v1h-1zM33,1h1v1h-1zM35,1h1v1h-1zM37,1h1v1h-1zM39,1h1v1h-1zM27,2h1v1h-1zM31,2h1v1h-1zM33,2h1v1h-1zM35,2h1v1h-1zM37,2h1v1h-1zM39,2h1v1h-1zM40,2h1v1h-1zM27,3h1v1h-1zM31,3h1v1h-1zM33,3h1v1h-1zM35,3h1v1h-1zM37,3h1v1h-1zM39,3h1v1h-1zM27,4h1v1h-1zM28,4h1v1h-1zM29,4h1v1h-1zM31,4h1v1h-1zM32,4h1v1h-1zM33,4h1v1h-1zM35,4h1v1h-1zM36,4h1v1h-1zM39,4h1v1h-1zM40,4h1v1h-1zM41,4h1v1h-1z"/>
+</svg>
