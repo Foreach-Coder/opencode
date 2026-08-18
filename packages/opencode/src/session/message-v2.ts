@@ -35,6 +35,8 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
+import { serializeResponseAnnotations } from "@opencode-ai/core/session/response-annotation"
+import { annotationMetadata } from "./response-annotation"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -202,11 +204,14 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         parts: [],
       }
       for (const part of msg.parts) {
+        const annotations = annotationMetadata(part)?.annotations
         // User message parts should never be empty
-        if (part.type === "text" && !part.ignored && part.text !== "")
+        if (part.type === "text" && !part.ignored && (part.text !== "" || annotations))
           userMessage.parts.push({
             type: "text",
-            text: part.text,
+            text: annotations
+              ? serializeResponseAnnotations({ annotations, userRequest: part.text })
+              : part.text,
           })
         // text/plain and directory files are converted into text parts, ignore them
         if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {

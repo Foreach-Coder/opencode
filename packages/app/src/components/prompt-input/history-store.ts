@@ -3,15 +3,22 @@ import type { Prompt } from "@/context/prompt"
 import { Persist, persisted } from "@/utils/persist"
 import {
   clonePromptHistoryComments,
+  clonePromptHistoryResponseAnnotations,
   clonePromptParts,
   prependHistoryEntry,
   type PromptHistoryComment,
+  type PromptHistoryResponseAnnotation,
   type PromptHistoryStoredEntry,
 } from "./history"
 
 export type PromptInputHistory = {
   entries: (mode: "normal" | "shell") => PromptHistoryStoredEntry[]
-  add: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
+  add: (
+    prompt: Prompt,
+    mode: "normal" | "shell",
+    comments: PromptHistoryComment[],
+    responseAnnotations?: PromptHistoryResponseAnnotation[],
+  ) => void
 }
 
 type PromptHistoryState = { entries: PromptHistoryStoredEntry[] }
@@ -24,10 +31,10 @@ function createPromptInputHistoryStore(
 ): PromptInputHistory {
   return {
     entries: (mode) => (mode === "shell" ? shell.entries : normal.entries),
-    add(prompt, mode, comments) {
+    add(prompt, mode, comments, responseAnnotations = []) {
       const current = mode === "shell" ? shell : normal
       const setCurrent = mode === "shell" ? setShell : setNormal
-      const next = prependHistoryEntry(current.entries, prompt, comments)
+      const next = prependHistoryEntry(current.entries, prompt, comments, mode === "shell" ? [] : responseAnnotations)
       if (next === current.entries) return
       setCurrent("entries", next)
     },
@@ -52,12 +59,18 @@ export function createPersistedPromptInputHistory() {
   const history = createPromptInputHistoryStore(normal, setNormal, shell, setShell)
   return {
     ...history,
-    add(prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) {
+    add(
+      prompt: Prompt,
+      mode: "normal" | "shell",
+      comments: PromptHistoryComment[],
+      responseAnnotations: PromptHistoryResponseAnnotation[] = [],
+    ) {
       const ready = mode === "shell" ? shellInit : normalInit
-      if (!(ready instanceof Promise)) return history.add(prompt, mode, comments)
+      if (!(ready instanceof Promise)) return history.add(prompt, mode, comments, responseAnnotations)
       const saved = clonePromptParts(prompt)
       const metadata = clonePromptHistoryComments(comments)
-      void ready.then(() => history.add(saved, mode, metadata))
+      const annotations = clonePromptHistoryResponseAnnotations(responseAnnotations)
+      void ready.then(() => history.add(saved, mode, metadata, annotations))
     },
   }
 }

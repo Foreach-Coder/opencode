@@ -1,8 +1,92 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import { ANNOTATION_METADATA_KEY } from "@opencode-ai/core/session/response-annotation"
 import { buildRequestParts } from "./build-request-parts"
 
 describe("buildRequestParts", () => {
+  test("keeps normal text unchanged when there are no response annotations", () => {
+    const result = buildRequestParts({
+      prompt: [],
+      context: [],
+      images: [],
+      text: "normal request",
+      messageID: "msg_plain",
+      sessionID: "ses_plain",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.requestParts).toHaveLength(1)
+    expect(result.requestParts[0]).toMatchObject({ type: "text", text: "normal request" })
+    expect(result.requestParts[0]?.type === "text" ? result.requestParts[0].metadata : undefined).toBeUndefined()
+  })
+
+  test("attaches response annotations as structured metadata on exactly one ordinary text carrier", () => {
+    const annotation = {
+      id: "draft_1",
+      source: {
+        sessionID: "ses_1",
+        messageID: "msg_source",
+        partID: "part_source",
+        partDigest: "sha256:abc",
+        start: 0,
+        end: 4,
+      },
+      context: { before: "", selected: "text", after: "" },
+      comment: "note",
+      createdAt: 1,
+    }
+    const result = buildRequestParts({
+      prompt: [],
+      context: [{ key: "annotation:draft_1", type: "response-annotation", draft: annotation }],
+      images: [],
+      text: "please revise",
+      messageID: "msg_1",
+      sessionID: "ses_1",
+      sessionDirectory: "/repo",
+    })
+    const carriers = result.requestParts.filter(
+      (part) => part.type === "text" && !!part.metadata?.[ANNOTATION_METADATA_KEY],
+    )
+
+    expect(carriers).toHaveLength(1)
+    expect(carriers[0]?.type === "text" ? carriers[0].text : "").toBe("please revise")
+    expect(carriers[0]?.type === "text" ? carriers[0].synthetic : undefined).toBeUndefined()
+    expect(carriers[0]?.type === "text" ? carriers[0].metadata?.[ANNOTATION_METADATA_KEY] : undefined).toMatchObject({
+      version: 1,
+      annotations: [{ index: 1, comment: "note" }],
+    })
+    expect(result.requestParts.filter((part) => part.type === "text").map((part) => part.text).join("\n")).not.toContain(
+      "<response-annotations",
+    )
+  })
+
+  test("creates an empty ordinary text carrier when only response annotations are submitted", () => {
+    const result = buildRequestParts({
+      prompt: [],
+      context: [
+        {
+          key: "annotation:draft_1",
+          type: "response-annotation",
+          draft: {
+            id: "draft_1",
+            source: { sessionID: "ses_1", messageID: "msg_source", partID: "part_source", partDigest: "sha256:abc", start: 0, end: 4 },
+            context: { before: "", selected: "text", after: "" },
+            comment: "",
+            createdAt: 1,
+          },
+        },
+      ],
+      images: [],
+      text: "",
+      messageID: "msg_1",
+      sessionID: "ses_1",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.requestParts).toHaveLength(1)
+    expect(result.requestParts[0]).toMatchObject({ type: "text", text: "" })
+    expect(result.requestParts[0]?.type === "text" ? result.requestParts[0].metadata?.[ANNOTATION_METADATA_KEY] : undefined).toBeDefined()
+  })
   test("builds typed request and optimistic parts without cast path", () => {
     const prompt: Prompt = [
       { type: "text", content: "hello", start: 0, end: 5 },

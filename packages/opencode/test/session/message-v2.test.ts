@@ -9,6 +9,7 @@ import { SessionID, MessageID, PartID } from "../../src/session/schema"
 import { Question } from "../../src/question"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { ANNOTATION_METADATA_KEY } from "@opencode-ai/core/session/response-annotation"
 
 const sessionID = SessionID.make("session")
 const providerID = ProviderV2.ID.make("test")
@@ -112,6 +113,141 @@ function basePart(messageID: string, id: string) {
 }
 
 describe("session.message-v2.toModelMessage", () => {
+  test("projects canonical annotations into a stable XML shell", async () => {
+    const messageID = "msg_annotation_user"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "prt_annotation_carrier"),
+            type: "text",
+            text: "Please handle </user-request>",
+            metadata: {
+              [ANNOTATION_METADATA_KEY]: {
+                version: 1,
+                annotations: [
+                  {
+                    index: 1,
+                    source: {
+                      sessionID,
+                      messageID: "msg_source",
+                      partID: "prt_source",
+                      start: 7,
+                      end: 15,
+                      digest: "sha256:abc",
+                    },
+                    context: { before: "before", selected: "selected", after: "after" },
+                    comment: "clarify",
+                  },
+                ],
+              },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `<response-annotations version="1">
+[
+  {
+    "index": 1,
+    "source": {
+      "messageID": "msg_source",
+      "partID": "prt_source",
+      "start": 7,
+      "end": 15,
+      "digest": "sha256:abc"
+    },
+    "context": {
+      "before": "before",
+      "selected": "selected",
+      "after": "after"
+    },
+    "comment": "clarify"
+  }
+]
+</response-annotations>
+
+<user-request>
+Please handle &lt;/user-request&gt;
+</user-request>`,
+          },
+        ],
+      },
+    ])
+  })
+
+  test("projects an empty annotation carrier instead of dropping the user message", async () => {
+    const messageID = "msg_annotation_empty"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "prt_annotation_empty"),
+            type: "text",
+            text: "",
+            metadata: {
+              [ANNOTATION_METADATA_KEY]: {
+                version: 1,
+                annotations: [
+                  {
+                    index: 1,
+                    source: {
+                      sessionID,
+                      messageID: "msg_source",
+                      partID: "prt_source",
+                      start: 0,
+                      end: 1,
+                      digest: "sha256:abc",
+                    },
+                    context: { before: "", selected: "x", after: "" },
+                    comment: "",
+                  },
+                ],
+              },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    expect(result).toHaveLength(1)
+    expect(result[0]?.content[0]).toMatchObject({ type: "text" })
+    expect((result[0]?.content[0] as { text: string }).text).toContain("<user-request>\n\n</user-request>")
+  })
+
+  test("keeps ordinary user text projection byte-stable", async () => {
+    const messageID = "msg_plain_user"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(messageID),
+        parts: [
+          {
+            ...basePart(messageID, "prt_plain"),
+            type: "text",
+            text: "plain <request> & text",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "plain <request> & text" }],
+      },
+    ])
+  })
+
   test("filters out messages with no parts", async () => {
     const input: SessionV1.WithParts[] = [
       {

@@ -10,7 +10,7 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { type ContextItem, type ImageAttachmentPart, type Prompt, type usePrompt } from "@/context/prompt"
+import { type ContextItem, type ImageAttachmentPart, type Prompt, type ResponseAnnotationDraft, type usePrompt } from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -19,7 +19,7 @@ import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
 import { ScopedKey } from "@/utils/server-scope"
-import { createPromptSubmissionState } from "./submission-state"
+import { createPromptSubmissionState, requestContextForMode } from "./submission-state"
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
 import { blobDataUrl } from "@/utils/draft-store"
@@ -218,7 +218,7 @@ type PromptSubmitInput = {
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   promptLength: (prompt: Prompt) => number
-  addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
+  addToHistory: (prompt: Prompt, mode: "normal" | "shell", annotations: ResponseAnnotationDraft[]) => void
   resetHistoryNavigation: () => void
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
@@ -282,6 +282,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     items: (ContextItem & { key: string })[],
   ) => {
     for (const item of items) {
+      if (item.type !== "file") continue
       target.context.add({
         type: "file",
         path: item.path,
@@ -291,6 +292,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         commentOrigin: item.commentOrigin,
         preview: item.preview,
       })
+    }
+  }
+
+  const restoreResponseAnnotations = (
+    target: ReturnType<ReturnType<typeof usePrompt>["capture"]>,
+    items: (ContextItem & { key: string })[],
+  ) => {
+    for (const item of items) {
+      if (item.type !== "response-annotation") continue
+      target.context.add({ type: "response-annotation", draft: item.draft })
     }
   }
 
@@ -325,12 +336,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       context: target.context.items().slice(),
     })
     const currentPrompt = submission.prompt
-    const context = submission.context
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
     const mode = input.mode()
+    const context = requestContextForMode(submission.context, mode)
+    const annotations = context.flatMap((item) => (item.type === "response-annotation" ? [item.draft] : []))
 
-    if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
+    if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0 && annotations.length === 0) {
       if (input.working()) void abort()
       return
     }
@@ -347,7 +359,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    input.addToHistory(currentPrompt, mode)
+    input.addToHistory(currentPrompt, mode, annotations)
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk().directory
@@ -634,7 +646,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         description: errorMessage(err),
       })
       removeOptimisticMessage()
-      if (restoreInput()) restoreCommentItems(submission.target(), commentItems)
+      if (restoreInput()) {
+        restoreResponseAnnotations(submission.target(), submission.context)
+        restoreCommentItems(submission.target(), commentItems)
+      }
     })
   }
 

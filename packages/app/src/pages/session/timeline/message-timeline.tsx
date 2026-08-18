@@ -71,12 +71,18 @@ import { useTabs } from "@/context/tabs"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
+import { usePrompt } from "@/context/prompt"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
+import {
+  createResponseAnnotationSourceNavigator,
+  ResponseAnnotationSelection,
+} from "@/components/response-annotation-selection"
+import { ResponseAnnotationHistoryList } from "@opencode-ai/session-ui/response-annotation"
 import { sessionTitle } from "@/utils/session-title"
 import { scheduleConnectedMeasure } from "./measure"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 import { createTimelineProjection } from "./projection"
-import { MessageComment, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
+import { MessageComment, MessageResponseAnnotation, SummaryDiff, TimelineRow, TimelineRowMap } from "./rows"
 import { filterVirtualIndexes } from "./virtual-items"
 
 const emptyMessages: MessageType[] = []
@@ -90,6 +96,9 @@ type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<Timel
 
 const timelineFallbackItemSize = 60
 const timelineCache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
+
+const messageCompleted = (message: MessageType) =>
+  message.role === "assistant" && typeof message.time.completed === "number"
 
 const taskDescription = (part: PartType, sessionID: string) => {
   if (part.type !== "tool" || part.tool !== "task") return
@@ -273,6 +282,7 @@ export function MessageTimeline(props: {
   const initialMeasurements = cached?.measurements
   const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
   const platform = usePlatform()
+  const prompt = usePrompt()
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = createMemo(() => params.id)
@@ -457,6 +467,19 @@ export function MessageTimeline(props: {
       )
     },
   })
+  const annotationNavigator = createResponseAnnotationSourceNavigator({
+    root: listRoot,
+    revealMessage: (messageID) => {
+      const index = messageRowIndex().get(messageID)
+      if (index !== undefined) virtualizer.scrollToIndex(index, { align: "center" })
+    },
+    getPart: (messageID, partID) => {
+      const part = getMsgPart(messageID, partID)
+      if (part?.type !== "text") return
+      return { markdown: part.text }
+    },
+  })
+  onCleanup(annotationNavigator.dispose)
   const resizeItem = virtualizer.resizeItem
   let resizeAnchorScheduled = false
   const anchorResizedBottom = () => {
@@ -1071,19 +1094,32 @@ export function MessageTimeline(props: {
         {(message) => (
           <Show when={part()}>
             {(part) => (
-              <MessagePart
-                part={part()}
-                message={message()}
-                showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
-                turnDurationMs={turnDurationMs(row().userMessageID)}
-                useV2Actions={settings.general.newLayoutDesigns()}
-                defaultOpen={defaultOpen()}
-                toolOpen={toolOpen[part().id] ?? defaultOpen()}
-                onToolOpenChange={(open) => setToolOpen(part().id, open)}
-                deferToolContent
-                virtualizeDiff={false}
-                onContentRendered={onSizeChange}
-              />
+              <div
+                style={{ display: "contents" }}
+                data-timeline-message-id={message().id}
+                data-timeline-part-id={part().id}
+                data-timeline-part-role={message().role}
+                data-timeline-part-type={part().type}
+                data-timeline-part-completed={
+                  messageCompleted(message()) ? "true" : "false"
+                }
+              >
+                <MessagePart
+                  part={part()}
+                  message={message()}
+                  showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
+                  turnDurationMs={turnDurationMs(row().userMessageID)}
+                  useV2Actions={settings.general.newLayoutDesigns()}
+                  defaultOpen={defaultOpen()}
+                  toolOpen={toolOpen[part().id] ?? defaultOpen()}
+                  onToolOpenChange={(open) => setToolOpen(part().id, open)}
+                  deferToolContent
+                  virtualizeDiff={false}
+                  onContentRendered={onSizeChange}
+                  onResponseAnnotationSource={(annotation) => void annotationNavigator.go(annotation.source)}
+                  responseAnnotationSourceAvailable={(annotation) => annotationNavigator.available(annotation.source)}
+                />
+              </div>
             )}
           </Show>
         )}
@@ -1178,6 +1214,9 @@ export function MessageTimeline(props: {
           if (!settings.general.newLayoutDesigns()) return []
           return getMsgParts(userMessageRow().userMessageID).flatMap((part) => MessageComment.fromPart(part) ?? [])
         })
+        const responseAnnotations = createMemo(() =>
+          MessageResponseAnnotation.fromParts(getMsgParts(userMessageRow().userMessageID)),
+        )
         return (
           <TimelineRowFrame row={userMessageRow}>
             <Show when={message()}>
@@ -1191,6 +1230,22 @@ export function MessageTimeline(props: {
                       useV2Actions={settings.general.newLayoutDesigns()}
                       comments={messageComments()}
                     />
+                    <Show when={responseAnnotations().length > 0}>
+                      <div class="mt-2 ms-auto max-w-[82%] rounded-md border border-border-weak-base bg-background-base p-2">
+                        <For each={responseAnnotations()}>
+                          {(annotation) => (
+                            <ResponseAnnotationHistoryList
+                              annotations={[annotation]}
+                              onBackToSource={
+                                annotationNavigator.available(annotation.source)
+                                  ? () => annotationNavigator.go(annotation.source)
+                                  : undefined
+                              }
+                            />
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                   </div>
                 </div>
               )}
@@ -1401,6 +1456,27 @@ export function MessageTimeline(props: {
           </button>
         </Show>
       </div>
+      <Show when={sessionID()}>
+        {(id) => (
+          <ResponseAnnotationSelection
+            root={listRoot}
+            sessionID={id()}
+            label={language.t("command.context.addSelection")}
+            getPart={(messageID, partID) => {
+              const part = getMsgPart(messageID, partID)
+              if (part?.type !== "text") return
+              return { markdown: part.text }
+            }}
+            onAdd={(draft) => {
+              if (prompt.context.responseAnnotations().length >= 20) {
+                showToast({ variant: "error", title: language.t("common.requestFailed") })
+                return
+              }
+              prompt.context.addResponseAnnotation(draft)
+            }}
+          />
+        )}
+      </Show>
       <ScrollView
         viewportRef={bindListRoot}
         onWheel={handleListWheel}

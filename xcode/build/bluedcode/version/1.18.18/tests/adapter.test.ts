@@ -38,6 +38,19 @@ test("adapter transforms the declared static HTML resources", () => {
   expect(result.records.length).toBeGreaterThan(0)
 })
 
+test("adapter accepts the controlled response-annotation UI sources", async () => {
+  const files = [
+    "packages/app/src/i18n/en.ts",
+    "packages/app/src/i18n/zh.ts",
+    "packages/app/src/pages/session/timeline/message-timeline.tsx",
+  ]
+
+  for (const file of files) {
+    const source = await readFile(new URL(`../../../../../../${file}`, import.meta.url), "utf8")
+    expect(() => adapter11818.transform(file, source, identity)).not.toThrow()
+  }
+})
+
 test("同一 locale AST 字符串中的多个产品关键词以一个语义块记录", () => {
   const result = transformLocale(
     "packages/app/src/i18n/en.ts",

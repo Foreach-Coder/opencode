@@ -5,6 +5,10 @@ import { groupParts, renderable, type PartGroup } from "@opencode-ai/session-ui/
 import { TimelineRow, type SummaryDiff } from "./timeline-row"
 import { uniqueSummaryDiffs } from "./summary-diffs"
 import { compareMessages } from "@/utils/session-message"
+import {
+  ANNOTATION_METADATA_KEY,
+  type ResponseAnnotation,
+} from "@opencode-ai/core/session/response-annotation"
 
 export { TimelineRow, type SummaryDiff } from "./timeline-row"
 
@@ -342,5 +346,44 @@ export namespace MessageComment {
           }
         : undefined,
     }
+  }
+}
+
+export namespace MessageResponseAnnotation {
+  export const fromParts = (parts: Part[]) => {
+    const carriers = parts.flatMap((part) => {
+      if (part.type !== "text") return []
+      const value = part.metadata?.[ANNOTATION_METADATA_KEY]
+      if (!metadata(value)) return []
+      return [value.annotations]
+    })
+    if (carriers.length !== 1) return []
+    return carriers[0]!
+  }
+
+  function metadata(value: unknown): value is { version: 1; annotations: ResponseAnnotation[] } {
+    if (!value || typeof value !== "object") return false
+    const data = value as Record<string, unknown>
+    return data.version === 1 && Array.isArray(data.annotations) && data.annotations.every(annotation)
+  }
+
+  function annotation(value: unknown): value is ResponseAnnotation {
+    if (!value || typeof value !== "object") return false
+    const data = value as Record<string, unknown>
+    if (!Number.isInteger(data.index) || typeof data.comment !== "string") return false
+    if (!data.source || typeof data.source !== "object") return false
+    if (!data.context || typeof data.context !== "object") return false
+    const source = data.source as Record<string, unknown>
+    const context = data.context as Record<string, unknown>
+    return (
+      typeof source.messageID === "string" &&
+      typeof source.partID === "string" &&
+      Number.isInteger(source.start) &&
+      Number.isInteger(source.end) &&
+      typeof source.digest === "string" &&
+      typeof context.before === "string" &&
+      typeof context.selected === "string" &&
+      typeof context.after === "string"
+    )
   }
 }

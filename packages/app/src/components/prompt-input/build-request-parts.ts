@@ -1,27 +1,17 @@
 import { getFilename } from "@opencode-ai/core/util/path"
+import { ANNOTATION_METADATA_KEY } from "@opencode-ai/core/session/response-annotation"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
-import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
+import type { AgentPart, ContextItem, FileAttachmentPart, ImageAttachmentPart, Prompt, ResponseAnnotationDraft } from "@/context/prompt"
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
 type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
 
-type ContextFile = {
-  key: string
-  type: "file"
-  path: string
-  selection?: FileSelection
-  comment?: string
-  commentID?: string
-  commentOrigin?: "review" | "file"
-  preview?: string
-}
-
 type BuildRequestPartsInput = {
   prompt: Prompt
-  context: ContextFile[]
+  context: (ContextItem & { key: string })[]
   images: (Omit<ImageAttachmentPart, "blob"> & { dataUrl: string })[]
   text: string
   messageID: string
@@ -89,12 +79,17 @@ const toOptimisticPart = (part: PromptRequestPart, sessionID: string, messageID:
 }
 
 export function buildRequestParts(input: BuildRequestPartsInput) {
-  const requestParts: PromptRequestPart[] = input.text.trim()
+  const annotations = input.context
+    .flatMap((item) => (item.type === "response-annotation" ? [item.draft] : []))
+    .sort((a, b) => a.createdAt - b.createdAt)
+  const metadata = annotations.length ? { [ANNOTATION_METADATA_KEY]: responseAnnotationMetadata(annotations) } : undefined
+  const requestParts: PromptRequestPart[] = input.text.trim() || metadata
     ? [
         {
           id: Identifier.ascending("part"),
           type: "text",
           text: input.text,
+          metadata,
         },
       ]
     : []
@@ -144,6 +139,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
 
   const used = new Set(files.map((part) => part.url))
   const context = input.context.flatMap((item) => {
+    if (item.type === "response-annotation") return []
     const path = absolute(input.sessionDirectory, item.path)
     const url = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
@@ -209,5 +205,24 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   return {
     requestParts,
     optimisticParts: requestParts.map((part) => toOptimisticPart(part, input.sessionID, input.messageID)),
+  }
+}
+
+function responseAnnotationMetadata(annotations: ResponseAnnotationDraft[]) {
+  return {
+    version: 1 as const,
+    annotations: annotations.map((annotation, index) => ({
+      index: index + 1,
+      source: {
+        sessionID: annotation.source.sessionID,
+        messageID: annotation.source.messageID,
+        partID: annotation.source.partID,
+        digest: annotation.source.partDigest,
+        start: annotation.source.start,
+        end: annotation.source.end,
+      },
+      context: { ...annotation.context },
+      comment: annotation.comment,
+    })),
   }
 }

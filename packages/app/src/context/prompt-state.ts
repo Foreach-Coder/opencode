@@ -61,7 +61,16 @@ export type FileContextItem = {
   preview?: string
 }
 
-export type ContextItem = FileContextItem
+export type ResponseAnnotationDraft = {
+  id: string
+  source: { sessionID: string; messageID: string; partID: string; partDigest: string; start: number; end: number }
+  context: { before: string; selected: string; after: string }
+  comment: string
+  createdAt: number
+}
+
+export type ResponseAnnotationContextItem = { type: "response-annotation"; draft: ResponseAnnotationDraft }
+export type ContextItem = FileContextItem | ResponseAnnotationContextItem
 export type PromptScope = { draftID: string } | { dir: string; id?: string }
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
@@ -135,7 +144,7 @@ function clonePrompt(prompt: Prompt): Prompt {
 }
 
 function contextItemKey(item: ContextItem) {
-  if (item.type !== "file") return item.type
+  if (item.type === "response-annotation") return `response-annotation:${item.draft.id}`
   const start = item.selection?.startLine
   const end = item.selection?.endLine
   const key = `${item.type}:${item.path}:${start}:${end}`
@@ -151,6 +160,17 @@ export function isCommentItem(item: ContextItem | (ContextItem & { key: string }
   return item.type === "file" && !!item.comment?.trim()
 }
 
+function cloneResponseAnnotation(draft: ResponseAnnotationDraft): ResponseAnnotationDraft {
+  return { ...draft, source: { ...draft.source }, context: { ...draft.context } }
+}
+
+function responseAnnotationItems(items: ResponseAnnotationDraft[]) {
+  return items
+    .map(cloneResponseAnnotation)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((draft) => ({ key: contextItemKey({ type: "response-annotation", draft }), type: "response-annotation" as const, draft }))
+}
+
 function createPromptActions(setStore: SetStoreFunction<PromptStore>) {
   return {
     set(prompt: Prompt, cursorPosition?: number) {
@@ -164,6 +184,7 @@ function createPromptActions(setStore: SetStoreFunction<PromptStore>) {
       batch(() => {
         setStore("prompt", clonePrompt(DEFAULT_PROMPT))
         setStore("cursor", 0)
+        setStore("context", "items", (items) => items.filter((item) => item.type !== "response-annotation"))
       })
     },
   }
@@ -227,6 +248,43 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
         setStore("context", "items", (current) => [
           ...current.filter((item) => !isCommentItem(item)),
           ...items.map((item) => ({ ...item, key: contextItemKey(item) })),
+        ])
+      },
+      responseAnnotations: createMemo(() =>
+        store.context.items
+          .filter((item): item is ResponseAnnotationContextItem & { key: string } => item.type === "response-annotation")
+          .map((item) => item.draft),
+      ),
+      addResponseAnnotation(draft: ResponseAnnotationDraft) {
+        if (store.context.items.some((item) => item.type === "response-annotation" && item.draft.id === draft.id)) return
+        setStore("context", "items", (items) => [
+          ...items.filter((item) => item.type !== "response-annotation"),
+          ...responseAnnotationItems([...items.flatMap((item) => (item.type === "response-annotation" ? [item.draft] : [])), draft]),
+        ])
+      },
+      updateResponseAnnotation(id: string, patch: Partial<Omit<ResponseAnnotationDraft, "id" | "createdAt">>) {
+        setStore("context", "items", (items) =>
+          items.map((item) => {
+            if (item.type !== "response-annotation" || item.draft.id !== id) return item
+            const draft = {
+              ...item.draft,
+              ...patch,
+              source: patch.source ? { ...item.draft.source, ...patch.source } : item.draft.source,
+              context: patch.context ? { ...item.draft.context, ...patch.context } : item.draft.context,
+            }
+            return { ...item, draft }
+          }),
+        )
+      },
+      removeResponseAnnotation(id: string) {
+        setStore("context", "items", (items) =>
+          items.filter((item) => item.type !== "response-annotation" || item.draft.id !== id),
+        )
+      },
+      replaceResponseAnnotations(drafts: ResponseAnnotationDraft[]) {
+        setStore("context", "items", (items) => [
+          ...items.filter((item) => item.type !== "response-annotation"),
+          ...responseAnnotationItems(drafts),
         ])
       },
     },

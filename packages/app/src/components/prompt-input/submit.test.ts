@@ -1,9 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createStore } from "solid-js/store"
-import type { Prompt, PromptStore } from "@/context/prompt"
+import type { Prompt, PromptStore, ResponseAnnotationDraft } from "@/context/prompt"
 import type { ModelSelection } from "@/context/local"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+let requestContextForMode: typeof import("./submission-state").requestContextForMode
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -40,8 +41,11 @@ let selected = "/repo/worktree-a"
 let variant: string | undefined
 let permissionServer = "server-a"
 let createSessionGate: Promise<void> | undefined
+let failPromptRequest = false
+let resetPromptState = false
 
 let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+let contextItems: PromptStore["context"]["items"] = []
 const [promptStore, setPromptStore] = createStore<PromptStore>({
   prompt: promptValue,
   cursor: 0,
@@ -57,17 +61,36 @@ const prompt = {
     current: () => undefined,
     set: () => undefined,
   },
-  reset: () => undefined,
-  set: () => undefined,
+  reset: () => {
+    if (!resetPromptState) return
+    promptValue = [{ type: "text", content: "", start: 0, end: 0 }]
+    contextItems = contextItems.filter((item) => item.type !== "response-annotation")
+  },
+  set: (value: Prompt) => {
+    promptValue = value
+  },
   context: {
-    add: () => undefined,
+    add: (item: PromptStore["context"]["items"][number]) => {
+      if (item.type !== "response-annotation") return
+      contextItems = [...contextItems, { ...item, key: `response-annotation:${item.draft.id}` }]
+    },
     remove: () => undefined,
     removeComment: () => undefined,
     updateComment: () => undefined,
     replaceComments: () => undefined,
-    items: () => [],
+    items: () => contextItems,
   },
   capture: () => prompt,
+}
+
+function responseAnnotation(id: string): ResponseAnnotationDraft {
+  return {
+    id,
+    source: { sessionID: "session-1", messageID: "msg_source", partID: "part_source", partDigest: "sha256:abc", start: 0, end: 4 },
+    context: { before: "", selected: "text", after: "" },
+    comment: "note",
+    createdAt: 1,
+  }
 }
 
 const clientFor = (directory: string) => {
@@ -95,6 +118,7 @@ const clientFor = (directory: string) => {
         prompt: async (input: unknown) => {
           sentPrompts.push(directory)
           promptInputs.push(input)
+          if (failPromptRequest) throw new Error("fixture provider failure")
           return { data: undefined }
         },
         command: async (input: unknown) => {
@@ -134,6 +158,10 @@ beforeAll(async () => {
 
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
+    showToast: () => 0,
+  }))
+
+  mock.module("@/utils/toast", () => ({
     showToast: () => 0,
   }))
 
@@ -276,6 +304,7 @@ beforeAll(async () => {
 
   const mod = await import("./submit")
   createPromptSubmit = mod.createPromptSubmit
+  requestContextForMode = (await import("./submission-state")).requestContextForMode
 })
 
 beforeEach(() => {
@@ -292,6 +321,7 @@ beforeEach(() => {
   sentCommands.length = 0
   commands.length = 0
   promptValue = [{ type: "text", content: "ls", start: 0, end: 2 }]
+  contextItems = []
   params = {}
   search = {}
   sentShell.length = 0
@@ -300,11 +330,115 @@ beforeEach(() => {
   variant = undefined
   permissionServer = "server-a"
   createSessionGate = undefined
+  failPromptRequest = false
+  resetPromptState = false
   serverSessionSyncs = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
 
 describe("prompt submit worktree selection", () => {
+  test("drops response annotations from shell request context", () => {
+    const annotation = responseAnnotation("draft_1")
+    const context = [
+      { key: "annotation:draft_1", type: "response-annotation" as const, draft: annotation },
+      { key: "file:src/a.ts", type: "file" as const, path: "src/a.ts" },
+    ]
+
+    expect(requestContextForMode(context, "shell")).toEqual([{ key: "file:src/a.ts", type: "file", path: "src/a.ts" }])
+  })
+
+  test("does not add response annotations to shell history", async () => {
+    params = { id: "session-1" }
+    contextItems = [{ key: "annotation:draft_1", type: "response-annotation", draft: responseAnnotation("draft_1") }]
+    const submissions: Array<{ mode: "normal" | "shell"; annotations: ResponseAnnotationDraft[] }> = []
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "shell",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: (_value, mode, annotations) => submissions.push({ mode, annotations }),
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(sentShell).toHaveLength(1)
+    expect(submissions).toEqual([{ mode: "shell", annotations: [] }])
+  })
+
+  test("submits an annotation-only normal prompt", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "", start: 0, end: 0 }]
+    contextItems = [{ key: "annotation:draft_1", type: "response-annotation", draft: responseAnnotation("draft_1") }]
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(sentPrompts).toEqual(["/repo/main"])
+    expect((promptInputs[0] as { legacyParts?: Array<{ metadata?: Record<string, unknown>; text?: string }> }).legacyParts).toEqual([
+      expect.objectContaining({ text: "", metadata: { bluedcodeResponseAnnotations: expect.any(Object) } }),
+    ])
+  })
+
+  test("clears annotations after a successful normal submission and restores them after a failed one", async () => {
+    params = { id: "session-1" }
+    resetPromptState = true
+    const draft = responseAnnotation("draft_1")
+    contextItems = [{ key: "annotation:draft_1", type: "response-annotation", draft }]
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+    expect(contextItems).toEqual([])
+
+    contextItems = [{ key: "annotation:draft_1", type: "response-annotation", draft }]
+    failPromptRequest = true
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+    await Bun.sleep(0)
+
+    expect(contextItems).toEqual([{ key: "response-annotation:draft_1", type: "response-annotation", draft }])
+  })
   test("reads the latest worktree accessor value per submit", async () => {
     const submit = createPromptSubmit({
       prompt,

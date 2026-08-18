@@ -66,6 +66,8 @@ import { animate } from "motion"
 import { attached, inline, kind, typeLabel } from "./message-file"
 import { readPartText } from "./message-part-text"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
+import { responseAnnotationsForAssistant, responseAnnotationsForTextPart } from "./message-annotation"
+import type { ResponseAnnotation } from "@opencode-ai/core/session/response-annotation"
 
 async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -203,6 +205,8 @@ export interface MessagePartProps {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   useV2Actions?: boolean
+  onResponseAnnotationSource?: (annotation: ResponseAnnotation) => void
+  responseAnnotationSourceAvailable?: (annotation: ResponseAnnotation) => boolean
 }
 
 function MessageActionButton(
@@ -333,7 +337,14 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+function PacedMarkdown(props: {
+  text: string
+  cacheKey: string
+  streaming: boolean
+  annotations?: ResponseAnnotation[]
+  onResponseAnnotationSource?: (annotation: ResponseAnnotation) => void
+  responseAnnotationSourceAvailable?: (annotation: ResponseAnnotation) => boolean
+}) {
   const value = createPacedValue(
     () => props.text,
     () => props.streaming,
@@ -341,7 +352,14 @@ function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boole
 
   return (
     <Show when={value()}>
-      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} />
+      <Markdown
+        text={value()}
+        cacheKey={props.cacheKey}
+        streaming={props.streaming}
+        annotations={props.annotations}
+        onResponseAnnotationSource={props.onResponseAnnotationSource}
+        responseAnnotationSourceAvailable={props.responseAnnotationSourceAvailable}
+      />
     </Show>
   )
 }
@@ -1448,6 +1466,8 @@ export function Part(props: MessagePartProps) {
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
         useV2Actions={props.useV2Actions}
+        onResponseAnnotationSource={props.onResponseAnnotationSource}
+        responseAnnotationSourceAvailable={props.responseAnnotationSourceAvailable}
       />
     </Show>
   )
@@ -1705,6 +1725,24 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
   )
   const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const annotations = createMemo(() =>
+    responseAnnotationsForAssistant(
+      props.message,
+      data.store.message[props.message.sessionID] ?? [],
+      data.store.part,
+    ),
+  )
+  const partAnnotations = createMemo(() =>
+    responseAnnotationsForTextPart(
+      part().id,
+      (data.store.part[props.message.id] ?? []).map((item) => ({
+        id: item.id,
+        type: item.type,
+        text: item.type === "text" ? readPartText(data.store.part_text_accum_delta, item) : undefined,
+      })),
+      annotations(),
+    ),
+  )
   const isLastTextPart = createMemo(() => {
     const last = (data.store.part?.[props.message.id] ?? [])
       .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
@@ -1732,7 +1770,14 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     <Show when={text()}>
       <div data-component="text-part" data-timeline-part-id={part().id}>
         <div data-slot="text-part-body">
-          <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+          <PacedMarkdown
+            text={text()}
+            cacheKey={part().id}
+            streaming={streaming()}
+            annotations={partAnnotations()}
+            onResponseAnnotationSource={props.onResponseAnnotationSource}
+            responseAnnotationSourceAvailable={props.responseAnnotationSourceAvailable}
+          />
         </div>
         <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>

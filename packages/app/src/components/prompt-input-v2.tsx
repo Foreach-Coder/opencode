@@ -10,7 +10,13 @@ import { createEffect, createMemo, on, Show } from "solid-js"
 import { ModelSelectorPopoverV2 } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaidV2 } from "@/components/dialog-select-model-unpaid-v2"
 import type { PromptInputProps } from "@/components/prompt-input/contracts"
-import { normalizePromptHistoryEntry, promptLength, type PromptHistoryComment } from "@/components/prompt-input/history"
+import {
+  normalizePromptHistoryEntry,
+  normalizePromptHistoryMetadata,
+  promptHistoryMetadata,
+  promptLength,
+  type PromptHistoryComment,
+} from "@/components/prompt-input/history"
 import { createPersistedPromptInputHistory } from "@/components/prompt-input/history-store"
 import { promptDesignPlaceholder, promptPlaceholder } from "@/components/prompt-input/placeholder"
 import { createPromptSubmit } from "@/components/prompt-input/submit"
@@ -20,7 +26,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePermission } from "@/context/permission"
-import { type ImageAttachmentPart, usePrompt } from "@/context/prompt"
+import { type ImageAttachmentPart, type ResponseAnnotationDraft, usePrompt } from "@/context/prompt"
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -32,6 +38,10 @@ import {
   createPromptInputV2State,
   type PromptInputV2Interaction,
 } from "@opencode-ai/session-ui/v2/prompt-input/interaction"
+import type { PromptInputV2StoreTuple } from "@opencode-ai/session-ui/v2/prompt-input/store"
+import type { PromptInputV2PersistedState } from "@opencode-ai/session-ui/v2/prompt-input/types"
+import type { SetStoreFunction } from "solid-js/store"
+import { PromptResponseAnnotations } from "@/components/response-annotation-prompt"
 
 export type PromptInputV2ComposerProps = {
   class?: string
@@ -42,6 +52,11 @@ export type PromptInputV2ComposerProps = {
 export type PromptInputV2ControllerProps = Omit<PromptInputProps, "class" | "submission">
 export type PromptInputV2ComposerController = PromptInputV2Interaction & {
   readonly model: PromptInputProps["controls"]["model"]
+  readonly responseAnnotations: {
+    items: () => ResponseAnnotationDraft[]
+    update: (id: string, comment: string) => void
+    remove: (id: string) => void
+  }
 }
 
 export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
@@ -51,6 +66,13 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
 
   return (
     <div class="flex flex-col gap-3">
+      <Show when={props.controller.state.mode === "normal"}>
+        <PromptResponseAnnotations
+          annotations={props.controller.responseAnnotations.items}
+          onUpdate={props.controller.responseAnnotations.update}
+          onRemove={props.controller.responseAnnotations.remove}
+        />
+      </Show>
       <PromptInputV2
         controller={props.controller}
         borderUnderlay={props.borderUnderlay}
@@ -118,7 +140,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   )
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
-    return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+    return prompt.context.items().filter((item) => item.type === "file" && !!item.comment?.trim()).length
   })
   const blank = createMemo(() => {
     const text = prompt
@@ -145,6 +167,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
     return prompt.context.items().flatMap((item) => {
+      if (item.type !== "file") return []
       const comment = item.comment?.trim()
       if (!comment) return []
       const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
@@ -206,7 +229,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     editor: () => editor,
     queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
     promptLength,
-    addToHistory: (value, mode) => controller.addHistory(value, mode),
+    addToHistory: (value, mode, annotations) => history.add(value, mode, mode === "shell" ? [] : historyComments(), annotations),
     resetHistoryNavigation: () => controller.resetHistory(),
     setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
     setPopover: (popover) => {
@@ -320,18 +343,31 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   )
   const variants = createMemo(() => ["default", ...props.controls.model.selection.variant.list()])
   const controller = createPromptInputV2Controller({
-    store: () => prompt.capture().store,
+    store: promptInputV2Store(prompt),
     state: interaction,
     identity: () => prompt.capture(),
     history: {
       entries: (mode) =>
         history.entries(mode).map((value) => {
           const entry = normalizePromptHistoryEntry(value)
-          return { prompt: entry.prompt, metadata: entry.comments }
+          return {
+            prompt: entry.prompt,
+            metadata: promptHistoryMetadata(entry.comments, entry.responseAnnotations),
+          }
         }),
-      add: (value, mode) => history.add(value, mode, mode === "shell" ? [] : historyComments()),
-      capture: historyComments,
-      restore: (metadata) => restoreHistoryComments(metadata as PromptHistoryComment[]),
+      add: (value, mode) =>
+        history.add(
+          value,
+          mode,
+          mode === "shell" ? [] : historyComments(),
+          mode === "shell" ? [] : prompt.context.responseAnnotations(),
+        ),
+      capture: () => promptHistoryMetadata(historyComments(), prompt.context.responseAnnotations()),
+      restore: (metadata) => {
+        const entry = normalizePromptHistoryMetadata(metadata)
+        restoreHistoryComments(entry.comments as PromptHistoryComment[])
+        prompt.context.replaceResponseAnnotations(entry.responseAnnotations)
+      },
     },
     commands,
     context,
@@ -409,6 +445,13 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
   })
   Object.defineProperty(controller, "model", { get: () => props.controls.model })
+  Object.defineProperty(controller, "responseAnnotations", {
+    value: {
+      items: prompt.context.responseAnnotations,
+      update: (id: string, comment: string) => prompt.context.updateResponseAnnotation(id, { comment }),
+      remove: prompt.context.removeResponseAnnotation,
+    },
+  })
 
   command.register("prompt-input", () => [
     {
@@ -444,7 +487,8 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
         const edit = props.edit
         if (!id || !edit) return
         prompt.context.items().forEach((item) => prompt.context.remove(item.key))
-        edit.context.forEach((item) =>
+        edit.context.forEach((item) => {
+          if (item.type !== "file") return
           prompt.context.add({
             type: item.type,
             path: item.path,
@@ -453,8 +497,8 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
             commentID: item.commentID,
             commentOrigin: item.commentOrigin,
             preview: item.preview,
-          }),
-        )
+          })
+        })
         controller.dispatch({ type: "mode.normal" })
         controller.resetHistory()
         prompt.set(edit.prompt, promptLength(edit.prompt))
@@ -466,6 +510,34 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
   )
 
   return controller as PromptInputV2ComposerController
+}
+
+function promptInputV2Store(prompt: ReturnType<typeof usePrompt>) {
+  return (): PromptInputV2StoreTuple => {
+    const [read, write] = prompt.capture().store
+    const state = () => {
+      const value = read()
+      return {
+        ...value,
+        context: { items: value.context.items.filter((item) => item.type === "file") },
+      } satisfies PromptInputV2PersistedState
+    }
+    const set = ((...args: unknown[]) => {
+      if (args[0] === "context" && args[1] === "items") {
+        const update = args[2]
+        write("context", "items", (items) => {
+          const annotations = items.filter((item) => item.type === "response-annotation")
+          const files = items.filter((item) => item.type === "file")
+          const next = typeof update === "function" ? update(files) : update
+          if (!Array.isArray(next)) return items
+          return [...annotations, ...next]
+        })
+        return
+      }
+      ;(write as unknown as (...values: unknown[]) => void)(...args)
+    }) as SetStoreFunction<PromptInputV2PersistedState>
+    return [state, set]
+  }
 }
 
 function PromptInputV2ModelControl(props: {

@@ -17,6 +17,7 @@ import {
   type PromptModel,
   type PromptScope,
   type PromptSession,
+  type ResponseAnnotationDraft,
 } from "./prompt-state"
 
 export {
@@ -39,6 +40,8 @@ export type {
   PromptStore,
   PromptScope,
   PromptSession,
+  ResponseAnnotationDraft,
+  ResponseAnnotationContextItem,
   TextPart,
 } from "./prompt-state"
 
@@ -162,6 +165,13 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
           session().context.updateComment(path, commentID, next),
         replaceComments: (items: FileContextItem[]) => session().context.replaceComments(items),
+        responseAnnotations: withSuspense(() => session().context.responseAnnotations()),
+        addResponseAnnotation: (draft: ResponseAnnotationDraft) => session().context.addResponseAnnotation(draft),
+        updateResponseAnnotation: (id: string, patch: Partial<Omit<ResponseAnnotationDraft, "id" | "createdAt">>) =>
+          session().context.updateResponseAnnotation(id, patch),
+        removeResponseAnnotation: (id: string) => session().context.removeResponseAnnotation(id),
+        replaceResponseAnnotations: (drafts: ResponseAnnotationDraft[]) =>
+          session().context.replaceResponseAnnotations(drafts),
       },
       set: (prompt: Prompt, cursorPosition?: number, scope?: PromptScope) => pick(scope).set(prompt, cursorPosition),
       reset: (scope?: PromptScope) => pick(scope).reset(),

@@ -24,6 +24,7 @@ import {
   ImageAttachmentPart,
   AgentPart,
   FileAttachmentPart,
+  type ResponseAnnotationDraft,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -79,6 +80,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { createPromptInputTransientState } from "./prompt-input/transient-state"
+import { PromptResponseAnnotations } from "./response-annotation-prompt"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
@@ -274,7 +276,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
-    return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+    return prompt.context.items().filter((item) => item.type === "file" && !!item.comment?.trim()).length
   })
   const blank = createMemo(() => {
     const text = prompt
@@ -304,8 +306,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const contextItems = createMemo(() => {
     const items = prompt.context.items()
-    if (store.mode !== "shell") return items
-    return items.filter((item) => !item.comment?.trim())
+    const files = items.filter((item) => item.type === "file")
+    if (store.mode !== "shell") return files
+    return files.filter((item) => !item.comment?.trim())
   })
 
   const hasUserPrompt = createMemo(() => {
@@ -390,6 +393,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const length = position === "start" ? 0 : promptLength(p)
     setStore("applyingHistory", true)
     applyHistoryComments(entry.comments)
+    prompt.context.replaceResponseAnnotations(entry.responseAnnotations)
     prompt.set(p, length)
     requestAnimationFrame(() => {
       editorRef.focus()
@@ -1101,8 +1105,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
-    history.add(prompt, mode, mode === "shell" ? [] : historyComments())
+  const addToHistory = (prompt: Prompt, mode: "normal" | "shell", annotations: ResponseAnnotationDraft[]) => {
+    history.add(prompt, mode, mode === "shell" ? [] : historyComments(), annotations)
   }
 
   createEffect(
@@ -1117,6 +1121,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }
 
         for (const item of edit.context) {
+          if (item.type !== "file") continue
           prompt.context.add({
             type: item.type,
             path: item.path,
@@ -1151,6 +1156,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       historyIndex: store.historyIndex,
       currentPrompt: prompt.current(),
       currentComments: historyComments(),
+      currentResponseAnnotations: prompt.context.responseAnnotations(),
       savedPrompt: store.savedPrompt,
     })
     if (!result.handled) return false
@@ -1472,6 +1478,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           type={store.draggingType}
           label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
         />
+        <Show when={store.mode === "normal"}>
+          <PromptResponseAnnotations
+            annotations={prompt.context.responseAnnotations}
+            onUpdate={(id, comment) => prompt.context.updateResponseAnnotation(id, { comment })}
+            onRemove={prompt.context.removeResponseAnnotation}
+          />
+        </Show>
         <PromptContextItems
           items={contextItems()}
           active={(item) => {

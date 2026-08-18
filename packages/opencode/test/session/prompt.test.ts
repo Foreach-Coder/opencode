@@ -57,6 +57,10 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
+import { ANNOTATION_METADATA_KEY, digestProjection } from "@opencode-ai/core/session/response-annotation"
+import { LLMEvent } from "@opencode-ai/llm"
+import { ResponseAnnotation } from "../../src/session/response-annotation"
+import * as Stream from "effect/Stream"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -208,12 +212,17 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  llm?: Layer.Layer<LLM.Service>
+}) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
     [RuntimeFlags.node, runtimeFlags],
+    ...(input?.llm ? ([[LLM.node, input.llm]] as const) : []),
   ] as const
   if (input?.processor === "blocking") {
     return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
@@ -235,13 +244,19 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
   return LayerNode.compile(root, replacements)
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  llm?: Layer.Layer<LLM.Service>
+}) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const noRetry = noRetryLLM()
+const noRetryServer = testEffect(makeHttpNoLLMServer({ llm: noRetry.layer }))
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -255,6 +270,28 @@ const withMcpInstructions = testEffect(
 )
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
+
+function noRetryLLM() {
+  let calls = 0
+  return {
+    calls: () => calls,
+    layer: Layer.succeed(
+      LLM.Service,
+      LLM.Service.of({
+        stream: () => {
+          calls++
+          return Stream.make(
+            LLMEvent.textStart({ id: "text_1" }),
+            LLMEvent.textDelta({ id: "text_1", text: "A response without annotation directives." }),
+            LLMEvent.textEnd({ id: "text_1" }),
+            LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+            LLMEvent.finish({ reason: "stop" }),
+          )
+        },
+      }),
+    ),
+  }
+}
 
 // Config that registers a custom "test" provider with a "test-model" model
 // so provider model lookup succeeds inside the loop.
@@ -407,15 +444,42 @@ const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { fi
     ...(opts?.finish ? { finish: opts.finish } : {}),
   }
   yield* session.updateMessage(assistant)
-  yield* session.updatePart({
+  const part = yield* session.updatePart({
     id: PartID.ascending(),
     messageID: assistant.id,
     sessionID,
     type: "text",
     text: "hi there",
   })
-  return { user: msg, assistant }
+  return { user: msg, assistant, part }
 })
+
+function annotationCarrier(source: SessionV1.Assistant, partID: PartID, digest = digestProjection("hi there")) {
+  return {
+    type: "text" as const,
+    text: "Revise this",
+    metadata: {
+      [ANNOTATION_METADATA_KEY]: {
+        version: 1,
+        annotations: [
+          {
+            index: 42,
+            source: {
+              sessionID: source.sessionID,
+              messageID: source.id,
+              partID,
+              start: 0,
+              end: 2,
+              digest,
+            },
+            context: { before: "forged", selected: "forged", after: "forged" },
+            comment: "clarify",
+          },
+        ],
+      },
+    },
+  }
+}
 
 const addSubtask = (sessionID: SessionID, messageID: MessageID, model = ref) =>
   Effect.gen(function* () {
@@ -551,6 +615,119 @@ it.instance("loop calls LLM and returns assistant message", () =>
     const parts = result.parts.filter((p) => p.type === "text")
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
+  }),
+)
+
+noLLMServer.instance("prompt canonicalizes response annotations before persistence", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    const source = {
+      ...seeded.assistant,
+      time: { ...seeded.assistant.time, completed: seeded.assistant.time.created },
+    }
+    yield* sessions.updateMessage(source)
+
+    const result = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [annotationCarrier(source, seeded.part.id)],
+    })
+    const carrier = result.parts.find((part) => part.type === "text")
+    expect(carrier?.metadata?.[ANNOTATION_METADATA_KEY]).toEqual({
+      version: 1,
+      annotations: [
+        {
+          index: 1,
+          source: {
+            sessionID: chat.id,
+            messageID: source.id,
+            partID: seeded.part.id,
+            start: 0,
+            end: 2,
+            digest: digestProjection("hi there"),
+          },
+          context: { before: "", selected: "hi", after: " there" },
+          comment: "clarify",
+        },
+      ],
+    })
+  }),
+)
+
+noRetryServer.instance(
+  "annotated prompts do not retry a successful provider response that omits annotation directives",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const seeded = yield* seed(chat.id, { finish: "stop" })
+      const source = {
+        ...seeded.assistant,
+        time: { ...seeded.assistant.time, completed: seeded.assistant.time.created },
+      }
+      yield* sessions.updateMessage(source)
+
+      const result = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        parts: [annotationCarrier(source, seeded.part.id)],
+      })
+
+      expect(result.info.role).toBe("assistant")
+      expect(result.parts.some((part) => part.type === "text" && part.text.includes("without annotation directives"))).toBe(
+        true,
+      )
+      expect(noRetry.calls()).toBe(1)
+    }),
+  { config: cfg },
+)
+
+it.instance("invalid and ignored response annotations persist no user message and start no provider", () =>
+  Effect.gen(function* () {
+    const llm = yield* TestLLMServer
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    const source = {
+      ...seeded.assistant,
+      time: { ...seeded.assistant.time, completed: seeded.assistant.time.created },
+    }
+    yield* sessions.updateMessage(source)
+    const before = yield* sessions.messages({ sessionID: chat.id })
+
+    const cases = [
+      {
+        part: annotationCarrier(source, seeded.part.id, "sha256:changed"),
+        reason: "digest_changed",
+      },
+      {
+        part: { ...annotationCarrier(source, seeded.part.id), ignored: true },
+        reason: "carrier_not_ordinary",
+      },
+    ] as const
+    for (const item of cases) {
+      const error = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [item.part],
+        })
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ResponseAnnotation.ResponseAnnotationError)
+      if (error instanceof ResponseAnnotation.ResponseAnnotationError) expect(error.reason).toBe(item.reason)
+      expect(yield* sessions.messages({ sessionID: chat.id })).toEqual(before)
+    }
+    expect(yield* llm.hits).toHaveLength(0)
   }),
 )
 

@@ -1,4 +1,4 @@
-import type { Prompt } from "@/context/prompt"
+import type { Prompt, ResponseAnnotationDraft } from "@/context/prompt"
 import type { SelectedLineRange } from "@/context/file"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
@@ -18,7 +18,10 @@ export type PromptHistoryComment = {
 export type PromptHistoryEntry = {
   prompt: Prompt
   comments: PromptHistoryComment[]
+  responseAnnotations: PromptHistoryResponseAnnotation[]
 }
+
+export type PromptHistoryResponseAnnotation = ResponseAnnotationDraft
 
 export type PromptHistoryStoredEntry = Prompt | PromptHistoryEntry
 
@@ -59,16 +62,46 @@ export function clonePromptHistoryComments(comments: PromptHistoryComment[]) {
   }))
 }
 
+export function clonePromptHistoryResponseAnnotations(annotations: PromptHistoryResponseAnnotation[]) {
+  return annotations.map((annotation) => ({
+    ...annotation,
+    source: { ...annotation.source },
+    context: { ...annotation.context },
+  }))
+}
+
+export function promptHistoryMetadata(
+  comments: PromptHistoryComment[],
+  responseAnnotations: PromptHistoryResponseAnnotation[],
+) {
+  return {
+    comments: clonePromptHistoryComments(comments),
+    responseAnnotations: clonePromptHistoryResponseAnnotations(responseAnnotations),
+  }
+}
+
+export function normalizePromptHistoryMetadata(value: unknown) {
+  if (Array.isArray(value)) return promptHistoryMetadata(value as PromptHistoryComment[], [])
+  if (!value || typeof value !== "object") return promptHistoryMetadata([], [])
+  const metadata = value as Partial<ReturnType<typeof promptHistoryMetadata>>
+  return promptHistoryMetadata(
+    Array.isArray(metadata.comments) ? metadata.comments : [],
+    Array.isArray(metadata.responseAnnotations) ? metadata.responseAnnotations : [],
+  )
+}
+
 export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): PromptHistoryEntry {
   if (Array.isArray(entry)) {
     return {
       prompt: clonePromptParts(entry),
       comments: [],
+      responseAnnotations: [],
     }
   }
   return {
     prompt: clonePromptParts(entry.prompt),
     comments: clonePromptHistoryComments(entry.comments),
+    responseAnnotations: clonePromptHistoryResponseAnnotations(entry.responseAnnotations ?? []),
   }
 }
 
@@ -80,6 +113,7 @@ export function prependHistoryEntry(
   entries: PromptHistoryStoredEntry[],
   prompt: Prompt,
   comments: PromptHistoryComment[] = [],
+  responseAnnotations: PromptHistoryResponseAnnotation[] = [],
   max = MAX_HISTORY,
 ) {
   const text = prompt
@@ -88,11 +122,12 @@ export function prependHistoryEntry(
     .trim()
   const hasImages = prompt.some((part) => part.type === "image")
   const hasComments = comments.some((comment) => !!comment.comment.trim())
-  if (!text && !hasImages && !hasComments) return entries
+  if (!text && !hasImages && !hasComments && responseAnnotations.length === 0) return entries
 
   const entry = {
     prompt: clonePromptParts(prompt),
     comments: clonePromptHistoryComments(comments),
+    responseAnnotations: clonePromptHistoryResponseAnnotations(responseAnnotations),
   } satisfies PromptHistoryEntry
   const last = entries[0]
   if (last && isPromptEqual(last, entry)) return entries
@@ -144,6 +179,10 @@ function isPromptEqual(promptA: PromptHistoryStoredEntry, promptB: PromptHistory
     const commentB = entryB.comments[i]
     if (!commentA || !commentB || !isCommentEqual(commentA, commentB)) return false
   }
+  if (entryA.responseAnnotations.length !== entryB.responseAnnotations.length) return false
+  for (let i = 0; i < entryA.responseAnnotations.length; i++) {
+    if (JSON.stringify(entryA.responseAnnotations[i]) !== JSON.stringify(entryB.responseAnnotations[i])) return false
+  }
   return true
 }
 
@@ -153,6 +192,7 @@ type HistoryNavInput = {
   historyIndex: number
   currentPrompt: Prompt
   currentComments: PromptHistoryComment[]
+  currentResponseAnnotations?: PromptHistoryResponseAnnotation[]
   savedPrompt: PromptHistoryEntry | null
 }
 
@@ -188,6 +228,7 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
         savedPrompt: {
           prompt: clonePromptParts(input.currentPrompt),
           comments: clonePromptHistoryComments(input.currentComments),
+          responseAnnotations: clonePromptHistoryResponseAnnotations(input.currentResponseAnnotations ?? []),
         },
         entry,
         cursor: "start",
@@ -243,6 +284,7 @@ export function navigatePromptHistory(input: HistoryNavInput): HistoryNavResult 
       entry: {
         prompt: DEFAULT_PROMPT,
         comments: [],
+        responseAnnotations: [],
       },
       cursor: "end",
     }

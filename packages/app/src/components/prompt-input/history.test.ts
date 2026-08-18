@@ -4,11 +4,15 @@ import {
   canNavigateHistoryAtCursor,
   clonePromptParts,
   normalizePromptHistoryEntry,
+  normalizePromptHistoryMetadata,
   navigatePromptHistory,
   prependHistoryEntry,
   promptLength,
+  promptHistoryMetadata,
   type PromptHistoryComment,
+  type PromptHistoryResponseAnnotation,
 } from "./history"
+import { createPromptInputHistory } from "./history-store"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
@@ -21,6 +25,14 @@ const comment = (id: string, value = "note"): PromptHistoryComment => ({
   time: 1,
   origin: "review",
   preview: "const a = 1",
+})
+
+const annotation = (id: string): PromptHistoryResponseAnnotation => ({
+  id,
+  source: { sessionID: "ses_1", messageID: "msg_1", partID: "part_1", partDigest: "sha256:abc", start: 0, end: 4 },
+  context: { before: "", selected: "text", after: "" },
+  comment: "note",
+  createdAt: 1,
 })
 
 describe("prompt-input history", () => {
@@ -99,6 +111,30 @@ describe("prompt-input history", () => {
     const entry = normalizePromptHistoryEntry(text("legacy"))
     expect(entry.prompt[0]?.type === "text" ? entry.prompt[0].content : "").toBe("legacy")
     expect(entry.comments).toEqual([])
+  })
+
+  test("preserves response annotation drafts in normal prompt history", () => {
+    const entries = prependHistoryEntry([], text("revise"), [], [annotation("draft_1")])
+    const entry = normalizePromptHistoryEntry(entries[0]!)
+
+    expect(entry.responseAnnotations).toEqual([annotation("draft_1")])
+    entry.responseAnnotations[0]!.comment = "changed"
+    expect(normalizePromptHistoryEntry(entries[0]!).responseAnnotations[0]?.comment).toBe("note")
+  })
+
+  test("round-trips V2 history metadata and keeps legacy comment arrays compatible", () => {
+    const value = promptHistoryMetadata([comment("c1")], [annotation("draft_1")])
+    expect(normalizePromptHistoryMetadata(value)).toEqual(value)
+    expect(normalizePromptHistoryMetadata([comment("legacy")])).toEqual({
+      comments: [comment("legacy")],
+      responseAnnotations: [],
+    })
+  })
+
+  test("does not retain response annotations in shell history", () => {
+    const history = createPromptInputHistory()
+    history.add(text("shell"), "shell", [], [annotation("draft_1")])
+    expect(normalizePromptHistoryEntry(history.entries("shell")[0]!).responseAnnotations).toEqual([])
   })
 
   test("helpers clone prompt and count text content length", () => {

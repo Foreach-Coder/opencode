@@ -2,6 +2,11 @@ import { type ContextItem, type Prompt, type usePrompt } from "@/context/prompt"
 
 type PromptTarget = ReturnType<ReturnType<typeof usePrompt>["capture"]>
 
+export function requestContextForMode(context: (ContextItem & { key: string })[], mode: "normal" | "shell") {
+  if (mode === "normal") return context
+  return context.filter((item) => item.type !== "response-annotation")
+}
+
 export function createPromptSubmissionState(input: {
   target: PromptTarget
   prompt: Prompt

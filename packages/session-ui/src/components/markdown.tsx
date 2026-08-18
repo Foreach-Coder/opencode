@@ -32,6 +32,9 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { annotationDirectiveMarkdown, annotationDirectiveToken } from "./message-annotation"
+import type { ResponseAnnotation } from "@opencode-ai/core/session/response-annotation"
+import { AnnotationReferenceMounts } from "./annotation-reference-mounts"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -366,12 +369,34 @@ export function Markdown(
     text: string
     cacheKey?: string
     streaming?: boolean
+    annotations?: ResponseAnnotation[]
+    onResponseAnnotationSource?: (annotation: ResponseAnnotation) => void
+    responseAnnotationSourceAvailable?: (annotation: ResponseAnnotation) => boolean
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, [
+    "text",
+    "cacheKey",
+    "streaming",
+    "annotations",
+    "onResponseAnnotationSource",
+    "responseAnnotationSourceAvailable",
+    "class",
+    "classList",
+  ])
   const i18n = useI18n()
+  const annotationToken = annotationDirectiveToken()
+  const annotationMounts = new AnnotationReferenceMounts()
+  const renderText = () =>
+    annotationDirectiveMarkdown(
+      local.text,
+      local.annotations ?? [],
+      (index) => i18n.t("ui.responseAnnotation.reference", { index }),
+      local.streaming ?? false,
+      annotationToken,
+    ).markdown
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
   const activeCodeKeys = new Set<string>()
@@ -383,30 +408,30 @@ export function Markdown(
       const live = local.streaming ?? false
       if (live) streamed = true
       if (!live && !streamed) return
-      return { key: owner, text: local.text, live }
+      return { key: owner, text: renderText(), live }
     },
     (src) => projectMarkdown(src.key, src.text, src.live),
     { initialValue: pendingProjection("") },
   )
   const currentProjection = () => {
-    if (!(local.streaming ?? false) && !streamed) return completedProjection(local.text)
+    if (!(local.streaming ?? false) && !streamed) return completedProjection(renderText())
     const value = projection.latest
-    if (value?.text === local.text) return value
+    if (value?.text === renderText()) return value
     if (value?.text) return value
-    return pendingProjection(local.text)
+    return pendingProjection(renderText())
   }
   const [html] = createResource(
     () => {
       if (isServer)
         return {
-          text: local.text,
+          text: renderText(),
           key: local.cacheKey,
-          projection: pendingProjection(local.text),
+          projection: pendingProjection(renderText()),
         }
-      const value = !(local.streaming ?? false) && !streamed ? completedProjection(local.text) : projection.latest
-      if (!value || value.text !== local.text) return
+      const value = !(local.streaming ?? false) && !streamed ? completedProjection(renderText()) : projection.latest
+      if (!value || value.text !== renderText()) return
       return {
-        text: local.text,
+        text: renderText(),
         key: local.cacheKey,
         projection: value,
       }
@@ -482,9 +507,9 @@ export function Markdown(
     },
     {
       initialValue: initialResult(
-        local.text,
+        renderText(),
         local.cacheKey,
-        local.streaming ? pendingProjection(local.text) : completedProjection(local.text),
+        local.streaming ? pendingProjection(renderText()) : completedProjection(renderText()),
         owner,
       ),
     },
@@ -496,11 +521,12 @@ export function Markdown(
     const container = root()
     const result = html.latest ?? html()
     const projected = currentProjection()
-    const content = local.text ? pendingBlocks(result, projected, local.cacheKey, owner) : []
+    const content = renderText() ? pendingBlocks(result, projected, local.cacheKey, owner) : []
     if (!container) return
     if (isServer) return
     if (content.length === 0) {
       disposeCopyButtons(container)
+      annotationMounts.clear(container)
       container.innerHTML = ""
       return
     }
@@ -515,11 +541,24 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
-    content.forEach((block, index) => updateBlock(container, index, block, labels))
+    content.forEach((block, index) =>
+      updateBlock(
+        container,
+        index,
+        block,
+        labels,
+        local.annotations ?? [],
+        annotationToken,
+        annotationMounts,
+        local.onResponseAnnotationSource,
+        local.responseAnnotationSourceAvailable,
+      ),
+    )
     while (container.children.length > content.length) {
       const child = container.lastElementChild
       if (!child) break
       disposeCopyButtons(child)
+      annotationMounts.clear(child)
       child.remove()
     }
     container
@@ -534,6 +573,8 @@ export function Markdown(
 
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
+    const container = root()
+    if (container) annotationMounts.clear(container)
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
@@ -586,9 +627,20 @@ function disposeCode(key: string) {
   disposeStreamingCode(key)
 }
 
-function updateBlock(container: HTMLDivElement, index: number, block: RenderedBlock, labels: CopyLabels) {
+function updateBlock(
+  container: HTMLDivElement,
+  index: number,
+  block: RenderedBlock,
+  labels: CopyLabels,
+  annotations: ResponseAnnotation[],
+  annotationToken: string,
+  annotationMounts: AnnotationReferenceMounts,
+  onResponseAnnotationSource?: (annotation: ResponseAnnotation) => void,
+  responseAnnotationSourceAvailable?: (annotation: ResponseAnnotation) => boolean,
+) {
   const current = container.children[index]
   if (block.mode === "code") {
+    if (current instanceof Element) annotationMounts.clear(current)
     updateCodeBlock(container, current, block, labels)
     return
   }
@@ -609,9 +661,17 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
 
   if (!(current instanceof HTMLDivElement)) {
     container.appendChild(next)
+    annotationMounts.mount(
+      next,
+      annotations,
+      annotationToken,
+      onResponseAnnotationSource,
+      responseAnnotationSourceAvailable,
+    )
     return
   }
 
+  annotationMounts.clear(current)
   morphdom(current, next, {
     onBeforeElUpdated: (fromEl, toEl) => {
       if (
@@ -626,10 +686,19 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
       return true
     },
     onBeforeNodeDiscarded: (node) => {
-      if (node instanceof Element) disposeCopyButtons(node)
+      if (node instanceof Element) {
+        disposeCopyButtons(node)
+      }
       return true
     },
   })
+  annotationMounts.mount(
+    current,
+    annotations,
+    annotationToken,
+    onResponseAnnotationSource,
+    responseAnnotationSourceAvailable,
+  )
 }
 
 function updateCodeBlock(

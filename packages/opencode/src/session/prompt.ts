@@ -56,6 +56,8 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { ANNOTATION_METADATA_KEY } from "@opencode-ai/core/session/response-annotation"
+import { ResponseAnnotation } from "./response-annotation"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -101,10 +103,14 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly prompt: (
+    input: PromptInput,
+  ) => Effect.Effect<SessionV1.WithParts, Image.Error | ResponseAnnotation.ResponseAnnotationError>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
-  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly command: (
+    input: CommandInput,
+  ) => Effect.Effect<SessionV1.WithParts, Image.Error | ResponseAnnotation.ResponseAnnotationError>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -1019,6 +1025,29 @@ const layer = Layer.effect(
           : Effect.succeed(part),
       )
 
+      const annotationCarrier = yield* ResponseAnnotation.normalizeResponseAnnotationCarrier({
+        sessionID: input.sessionID,
+        messageTime: info.time.created,
+        parts,
+        findSource: (messageID) =>
+          sessions
+            .findMessage(input.sessionID, (message) => message.info.id === messageID)
+            .pipe(Effect.map(Option.getOrUndefined), Effect.orDie),
+      })
+      const canonicalParts = annotationCarrier
+        ? parts.map((part) =>
+            part.type === "text" && part.id === annotationCarrier.partID
+              ? {
+                  ...part,
+                  metadata: {
+                    ...part.metadata,
+                    [ANNOTATION_METADATA_KEY]: annotationCarrier.metadata,
+                  },
+                }
+              : part,
+          )
+        : parts
+
       const parsed = decodeMessageInfo(info, { errors: "all", propertyOrder: "original" })
       if (Exit.isFailure(parsed)) {
         yield* Effect.logError("invalid user message before save", {
@@ -1029,7 +1058,7 @@ const layer = Layer.effect(
           cause: Cause.pretty(parsed.cause),
         })
       }
-      for (const [index, part] of parts.entries()) {
+      for (const [index, part] of canonicalParts.entries()) {
         const p = decodeMessagePart(part, { errors: "all", propertyOrder: "original" })
         if (Exit.isSuccess(p)) continue
         yield* Effect.logError("invalid user part before save", {
@@ -1044,12 +1073,14 @@ const layer = Layer.effect(
       }
 
       yield* sessions.updateMessage(info)
-      for (const part of parts) yield* sessions.updatePart(part)
+      for (const part of canonicalParts) yield* sessions.updatePart(part)
 
-      return { info, parts }
+      return { info, parts: canonicalParts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+    const prompt: (
+      input: PromptInput,
+    ) => Effect.Effect<SessionV1.WithParts, Image.Error | ResponseAnnotation.ResponseAnnotationError> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -1269,6 +1300,7 @@ const layer = Layer.effect(
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+            system.push(...ResponseAnnotation.responseAnnotationSystemPrompts(lastUserMsg))
             const result = yield* handle.process({
               user: lastUser,
               agent,
