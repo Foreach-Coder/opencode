@@ -138,6 +138,7 @@ export const dict = {
   "command.tab.close": "Κλείσιμο καρτέλας",
   "command.tab.reopenClosed": "Άνοιγμα ξανά κλειστής καρτέλας",
   "command.context.addSelection": "Προσθήκη επιλογής στο πλαίσιο",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Προσθήκη επιλεγμένων γραμμών από το τρέχον αρχείο",
   "command.input.focus": "Εισαγωγή εστίασης",
   "command.terminal.toggle": "Εναλλαγή τερματικού",

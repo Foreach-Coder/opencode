@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "Lat flipan aftur",
   "command.tab.reopenClosed": "Opna aftur stongdan flipan",
   "command.context.addSelection": "Legg val til samanhang",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Legg valdar linjur til frá verandi fílu",
   "command.input.focus": "Fokus inntak",
   "command.terminal.toggle": "Skift terminal",

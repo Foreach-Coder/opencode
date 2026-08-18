@@ -153,6 +153,7 @@ export const dict = {
   "command.tab.close": "關閉分頁",
   "command.tab.reopenClosed": "重新開啟已關閉的分頁",
   "command.context.addSelection": "將選取內容加入上下文",
+  "session.responseAnnotation.addSelection": "新增註解",
   "command.context.addSelection.description": "加入目前檔案中選取的行",
   "command.input.focus": "聚焦輸入框",
   "command.terminal.toggle": "切換終端機",

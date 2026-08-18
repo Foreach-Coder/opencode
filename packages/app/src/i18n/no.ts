@@ -149,6 +149,7 @@ export const dict = {
   "command.file.open": "Åpne fil",
   "command.tab.close": "Lukk fane",
   "command.context.addSelection": "Legg til markering i kontekst",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Legg til valgte linjer fra gjeldende fil",
   "command.input.focus": "Fokuser inndata",
   "command.terminal.toggle": "Veksle terminal",

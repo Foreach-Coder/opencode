@@ -138,6 +138,7 @@ export const dict = {
   "command.tab.close": "Stäng fliken",
   "command.tab.reopenClosed": "Öppna stängd flik igen",
   "command.context.addSelection": "Lägg till markering i kontexten",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Lägg till markerade rader från den aktuella filen",
   "command.input.focus": "Fokusera inmatningsfältet",
   "command.terminal.toggle": "Växla terminal",

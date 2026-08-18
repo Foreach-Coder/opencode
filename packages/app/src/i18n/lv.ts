@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "Aizvērt cilni",
   "command.tab.reopenClosed": "Atvērt aizvērtu cilni",
   "command.context.addSelection": "Pievienot atlasi kontekstam",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Pievienot atlasītās rindas no pašreizējā faila",
   "command.input.focus": "Aktivizēt ievadi",
   "command.terminal.toggle": "Rādīt/paslēpt termināli",

@@ -44,6 +44,7 @@ export const dict = {
   "command.tab.close": "Sulje välilehti",
   "command.tab.reopenClosed": "Avaa suljettu välilehti uudelleen",
   "command.context.addSelection": "Lisää valinta kontekstiin",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Lisää valitut rivit nykyisestä tiedostosta",
   "command.input.focus": "Kohdista syötekenttään",
   "command.terminal.toggle": "Näytä tai piilota terminaali",

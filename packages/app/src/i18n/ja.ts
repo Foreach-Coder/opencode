@@ -143,6 +143,7 @@ export const dict = {
   "command.tab.close": "タブを閉じる",
   "command.tab.reopenClosed": "閉じたタブを再度開く",
   "command.context.addSelection": "選択範囲をコンテキストに追加",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "現在のファイルから選択した行を追加",
   "command.input.focus": "入力欄にフォーカス",
   "command.terminal.toggle": "ターミナルの切り替え",

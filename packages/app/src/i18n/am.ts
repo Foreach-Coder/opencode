@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "ትርፉን ዝጋ",
   "command.tab.reopenClosed": "የተዘጋውን ትር እንደገና ክፈት",
   "command.context.addSelection": "ምርጫ ወደ አውድ አክል",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "የተመረጡትን መስመሮች ከአሁኑ ፋይል ያክሉ",
   "command.input.focus": "የትኩረት ግቤት",
   "command.terminal.toggle": "ተርሚናል ቀይር",

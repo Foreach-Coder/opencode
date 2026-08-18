@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "Sule vahekaart",
   "command.tab.reopenClosed": "Ava suletud vaheleht uuesti",
   "command.context.addSelection": "Lisage valik konteksti",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Lisa valitud read aktiivsest failist",
   "command.input.focus": "Fookuse sisend",
   "command.terminal.toggle": "Lülita terminali sisse",

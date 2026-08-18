@@ -151,6 +151,7 @@ export const dict = {
   "command.tab.close": "Tutup tab",
   "command.tab.reopenClosed": "Buka kembali tab yang ditutup",
   "command.context.addSelection": "Tambahkan pilihan ke konteks",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Tambahkan baris yang dipilih dari berkas saat ini",
   "command.input.focus": "Fokuskan masukan",
   "command.terminal.toggle": "Alihkan terminal",

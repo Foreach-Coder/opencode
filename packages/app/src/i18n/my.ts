@@ -139,6 +139,7 @@ export const dict = {
   "command.tab.close": "တဘ်ကို ပိတ်ပါ။",
   "command.tab.reopenClosed": "ပိတ်ထားသော တက်ဘ်ကို ပြန်ဖွင့်ပါ။",
   "command.context.addSelection": "ရွေးချယ်ထားသည်ကို ဆက်စပ်အကြောင်းအရာထဲ ထည့်ပါ။",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "လက်ရှိဖိုင်မှ ရွေးချယ်ထားသော လိုင်းများကို ထည့်ပါ။",
   "command.input.focus": "အာရုံစူးစိုက်မှု ထည့်သွင်းမှု",
   "command.terminal.toggle": "Terminal ကို ပြောင်းပါ",

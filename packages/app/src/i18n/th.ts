@@ -149,6 +149,7 @@ export const dict = {
   "command.tab.close": "ปิดแท็บ",
   "command.tab.reopenClosed": "เปิดแท็บที่ปิดไปอีกครั้ง",
   "command.context.addSelection": "เพิ่มส่วนที่เลือกไปยังบริบท",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "เพิ่มบรรทัดที่เลือกจากไฟล์ปัจจุบัน",
   "command.input.focus": "โฟกัสช่องป้อนข้อมูล",
   "command.terminal.toggle": "สลับเทอร์มินัล",

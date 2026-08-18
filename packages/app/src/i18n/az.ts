@@ -139,6 +139,7 @@ export const dict = {
   "command.tab.close": "Tabı bağla",
   "command.tab.reopenClosed": "Bağlanmış tabı yenidən aç",
   "command.context.addSelection": "Seçimi kontekstə əlavə et",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Cari fayldan seçilmiş sətirləri əlavə et",
   "command.input.focus": "Giriş sahəsinə fokusla",
   "command.terminal.toggle": "Terminalı aç/bağla",

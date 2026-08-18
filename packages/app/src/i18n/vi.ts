@@ -144,6 +144,7 @@ export const dict = {
   "command.tab.close": "Đóng tab",
   "command.tab.reopenClosed": "Mở lại tab đã đóng",
   "command.context.addSelection": "Thêm lựa chọn vào ngữ cảnh",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Thêm các dòng đã chọn từ tệp hiện tại",
   "command.input.focus": "Tập trung vào ô nhập",
   "command.terminal.toggle": "Bật/tắt terminal",

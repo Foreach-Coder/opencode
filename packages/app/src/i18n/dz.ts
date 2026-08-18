@@ -140,6 +140,7 @@ export const dict: Record<string, string> = {
   "command.tab.close": "མཆོང་ལྡེ་ཁ་བསྡམས།",
   "command.tab.reopenClosed": "ཁ་བསྡམས་ཡོད་པའི་མཆོང་ལྡེ་ལོག་ཁ་ཕྱེ།",
   "command.context.addSelection": "སྐབས་དོན་ལུ་སེལ་འཐུ་ཁ་སྐོང་རྐྱབས།",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "ད་ལྟོའི་ཡིག་སྣོད་ལས་སེལ་འཐུ་འབད་ཡོད་པའི་གྲལ་ཐིག་ཚུ་ཁ་སྐོང་རྐྱབས།",
   "command.input.focus": "ཆེད་དམིགས་ཨིན་པུཊི།",
   "command.terminal.toggle": "ཊར་མི་ནཱལ་སོར་བསྒྱུར་འབད།",

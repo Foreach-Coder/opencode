@@ -151,6 +151,7 @@ export const dict = {
   "command.tab.close": "Закрити вкладку",
   "command.tab.reopenClosed": "Повторно відкрити закриту вкладку",
   "command.context.addSelection": "Додати виділення до контексту",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Додати вибрані рядки з поточного файлу",
   "command.input.focus": "Фокус на полі введення",
   "command.terminal.toggle": "Перемкнути термінал",

@@ -161,6 +161,7 @@ export const dict = {
   "command.tab.reopenClosed": "重新打开已关闭的标签页",
 
   "command.context.addSelection": "将所选内容添加到上下文",
+  "session.responseAnnotation.addSelection": "添加注释",
   "command.context.addSelection.description": "添加当前文件中选中的行",
 
   "command.input.focus": "聚焦输入框",

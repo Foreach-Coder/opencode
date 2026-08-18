@@ -139,6 +139,7 @@ export const dict = {
   "command.tab.close": "Tanca la pestanya",
   "command.tab.reopenClosed": "Torneu a obrir la pestanya tancada",
   "command.context.addSelection": "Afegeix la selecció al context",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Afegeix les línies seleccionades del fitxer actual",
   "command.input.focus": "Entrada de focus",
   "command.terminal.toggle": "Canvia el terminal",

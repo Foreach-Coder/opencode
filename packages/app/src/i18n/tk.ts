@@ -138,6 +138,7 @@ export const dict = {
   "command.tab.close": "Salgy ýapyň",
   "command.tab.reopenClosed": "Closedapyk goýmany açyň",
   "command.context.addSelection": "Kontekste saýlama goşuň",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Häzirki faýldan saýlanan setirleri goşuň",
   "command.input.focus": "Giriş fokus",
   "command.terminal.toggle": "Terminaly açyň",

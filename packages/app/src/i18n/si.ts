@@ -137,6 +137,7 @@ export const dict: Record<string, string> = {
   "command.tab.close": "ටැබ් එක වසන්න",
   "command.tab.reopenClosed": "වසා දැමූ ටැබය නැවත විවෘත කරන්න",
   "command.context.addSelection": "සන්දර්භයට තේරීම එක් කරන්න",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "වත්මන් ගොනුවෙන් තෝරාගත් රේඛා එක් කරන්න",
   "command.input.focus": "අවධානය යොමු කරන්න",
   "command.terminal.toggle": "පර්යන්තය ටොගල් කරන්න",

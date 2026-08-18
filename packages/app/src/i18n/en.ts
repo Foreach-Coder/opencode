@@ -54,6 +54,7 @@ export const dict = {
   "command.tab.close": "Close tab",
   "command.tab.reopenClosed": "Reopen closed tab",
   "command.context.addSelection": "Add selection to context",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Add selected lines from the current file",
   "command.input.focus": "Focus input",
   "command.terminal.toggle": "Toggle terminal",

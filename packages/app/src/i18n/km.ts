@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "បិទផ្ទាំង",
   "command.tab.reopenClosed": "បើកផ្ទាំងបិទឡើងវិញ",
   "command.context.addSelection": "បន្ថែមការជ្រើសរើសទៅបរិបទ",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "បន្ថែមបន្ទាត់ដែលបានជ្រើសរើសពីឯកសារបច្ចុប្បន្ន",
   "command.input.focus": "ការបញ្ចូលការផ្តោតអារម្មណ៍",
   "command.terminal.toggle": "បិទ/បើកស្ថានីយ",

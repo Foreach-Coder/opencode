@@ -141,6 +141,7 @@ export const dict = {
   "command.tab.close": "Loka flipa",
   "command.tab.reopenClosed": "Opnaðu aftur lokaðan flipa",
   "command.context.addSelection": "Bættu vali við samhengi",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Bættu við völdum línum úr núverandi skrá",
   "command.input.focus": "Færa fókus í innslátt",
   "command.terminal.toggle": "Víxla skjáhermi",

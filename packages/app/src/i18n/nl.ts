@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "Tabblad sluiten",
   "command.tab.reopenClosed": "Gesloten tabblad opnieuw openen",
   "command.context.addSelection": "Voeg selectie toe aan context",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Voeg geselecteerde regels uit het huidige bestand toe",
   "command.input.focus": "Invoerveld activeren",
   "command.terminal.toggle": "Terminal tonen of verbergen",

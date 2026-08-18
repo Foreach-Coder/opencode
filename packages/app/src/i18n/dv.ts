@@ -140,6 +140,7 @@ export const dict = {
   "command.tab.close": "ޓެބް ބަންދުކުރުން",
   "command.tab.reopenClosed": "ބަންދުކޮށްފައިވާ ޓެބް އަލުން ހުޅުވާލާށެވެ",
   "command.context.addSelection": "ކޮންޓެކްސްޓަށް ސެލެކްޝަން އިތުރުކުރުން",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "މިހާރު ހުރި ފައިލް އިން ހޮވާފައިވާ ލައިންތައް އިތުރުކުރުން",
   "command.input.focus": "ފޯކަސް އިންޕުޓް",
   "command.terminal.toggle": "ޓޮގްލް ޓާމިނަލް",

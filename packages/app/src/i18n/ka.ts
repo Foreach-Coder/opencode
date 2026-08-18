@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "ჩანართის დახურვა",
   "command.tab.reopenClosed": "დახურული ჩანართის ხელახლა გახსნა",
   "command.context.addSelection": "მონიშვნის დამატება კონტექსტში",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "მორჩეული ხაზების დამატება მიმდინარე ფაილიდან",
   "command.input.focus": "ფოკუსის შეყვანა",
   "command.terminal.toggle": "ტერმინალის გადართვა",

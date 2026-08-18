@@ -138,6 +138,7 @@ export const dict = {
   "command.tab.close": "Mbyll skedën",
   "command.tab.reopenClosed": "Rihap skedën e mbyllur",
   "command.context.addSelection": "Shtoni përzgjedhjen në kontekst",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Shtoni linjat e zgjedhura nga skedari aktual",
   "command.input.focus": "Fokusoni hyrjen",
   "command.terminal.toggle": "Ndrysho terminalin",

@@ -45,6 +45,7 @@ export const dict = {
   "command.tab.close": "Chiudi scheda",
   "command.tab.reopenClosed": "Riapri la scheda chiusa",
   "command.context.addSelection": "Aggiungi la selezione al contesto",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Aggiungi le righe selezionate dal file corrente",
   "command.input.focus": "Attiva il campo di inserimento",
   "command.terminal.toggle": "Mostra o nascondi il terminale",

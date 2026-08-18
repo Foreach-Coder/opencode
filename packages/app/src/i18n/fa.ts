@@ -138,6 +138,7 @@ export const dict = {
   "command.tab.close": "بستن برگه",
   "command.tab.reopenClosed": "برگه بسته را دوباره باز کنید",
   "command.context.addSelection": "انتخاب را به متن اضافه کنید",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "خطوط انتخاب شده را از فایل فعلی اضافه کنید",
   "command.input.focus": "فوکوس ورودی",
   "command.terminal.toggle": "ترمینال را تغییر دهید",

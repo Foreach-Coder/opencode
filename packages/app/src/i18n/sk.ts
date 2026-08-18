@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "Zavrieť kartu",
   "command.tab.reopenClosed": "Obnoviť zatvorenú kartu",
   "command.context.addSelection": "Pridať výber do kontextu",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Pridať vybrané riadky z aktuálneho súboru",
   "command.input.focus": "Zamerať vstup",
   "command.terminal.toggle": "Prepnúť terminál",

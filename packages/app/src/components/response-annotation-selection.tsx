@@ -121,7 +121,7 @@ export function ResponseAnnotationSelection(props: {
       <button
         type="button"
         data-component="response-annotation-selection-action"
-        class="fixed z-50 -translate-x-1/2 -translate-y-full rounded-md bg-background-strong px-2.5 py-1.5 text-12-medium text-text-strong shadow-md"
+        class="fixed z-[9999] -translate-x-1/2 -translate-y-full rounded-md border border-border-subtle bg-background-strong px-3 py-2 text-12-medium text-text-strong shadow-lg"
         style={{ left: `${state.position!.x}px`, top: `${state.position!.y - 8}px` }}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {

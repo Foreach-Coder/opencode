@@ -151,6 +151,7 @@ export const dict = {
   "command.tab.close": "Zatvori karticu",
   "command.tab.reopenClosed": "Ponovo otvori zatvorenu karticu",
   "command.context.addSelection": "Dodaj odabir u kontekst",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Dodaj odabrane linije iz trenutne datoteke",
   "command.input.focus": "Fokusiraj polje za unos",
   "command.terminal.toggle": "Prikaži/sakrij terminal",

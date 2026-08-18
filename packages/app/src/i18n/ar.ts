@@ -143,6 +143,7 @@ export const dict = {
   "command.tab.close": "إغلاق علامة التبويب",
   "command.tab.reopenClosed": "إعادة فتح علامة التبويب المغلقة",
   "command.context.addSelection": "إضافة التحديد إلى السياق",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "إضافة الأسطر المحددة من الملف الحالي",
   "command.input.focus": "التركيز على حقل الإدخال",
   "command.terminal.toggle": "تبديل المحطة الطرفية",

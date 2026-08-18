@@ -48,6 +48,7 @@ export const dict = {
   "command.tab.close": "Tab schließen",
   "command.tab.reopenClosed": "Geschlossenen Tab wieder öffnen",
   "command.context.addSelection": "Auswahl zum Kontext hinzufügen",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Ausgewählte Zeilen aus der aktuellen Datei hinzufügen",
   "command.input.focus": "Eingabefeld fokussieren",
   "command.terminal.toggle": "Terminal umschalten",

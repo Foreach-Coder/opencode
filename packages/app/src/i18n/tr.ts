@@ -155,6 +155,7 @@ export const dict = {
   "command.tab.close": "Sekmeyi kapat",
   "command.tab.reopenClosed": "Kapatılan sekmeyi yeniden aç",
   "command.context.addSelection": "Seçimi bağlama ekle",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Mevcut dosyadan seçili satırları ekle",
   "command.input.focus": "Girişi odakla",
   "command.terminal.toggle": "Terminali aç/kapat",

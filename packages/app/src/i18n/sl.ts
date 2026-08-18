@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "Zapri zavihek",
   "command.tab.reopenClosed": "Ponovno odpri zaprt zavihek",
   "command.context.addSelection": "Dodaj izbor v kontekst",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Dodaj izbrane vrstice iz trenutne datoteke",
   "command.input.focus": "Vnos fokusa",
   "command.terminal.toggle": "Preklop terminala",

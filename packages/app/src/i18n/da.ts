@@ -50,6 +50,7 @@ export const dict = {
   "command.tab.close": "Luk fane",
   "command.tab.reopenClosed": "Åbn lukket fane igen",
   "command.context.addSelection": "Tilføj markering til kontekst",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Tilføj markerede linjer fra den aktuelle fil",
   "command.input.focus": "Fokuser inputfelt",
   "command.terminal.toggle": "Skift terminal",

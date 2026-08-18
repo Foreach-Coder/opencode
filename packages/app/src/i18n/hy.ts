@@ -139,6 +139,7 @@ export const dict = {
   "command.tab.close": "Փակել ներդիրը",
   "command.tab.reopenClosed": "Վերաբացել փակ ներդիրը",
   "command.context.addSelection": "Ավելացնել ընտրությունը համատեքստում",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Ավելացնել ընտրված տողերը ընթացիկ ֆայլից",
   "command.input.focus": "Կիզակետային մուտքագրում",
   "command.terminal.toggle": "Փոխարկել տերմինալը",

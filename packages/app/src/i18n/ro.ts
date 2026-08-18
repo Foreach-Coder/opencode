@@ -137,6 +137,7 @@ export const dict = {
   "command.tab.close": "Închide fila",
   "command.tab.reopenClosed": "Redeschide fila închisă",
   "command.context.addSelection": "Adaugă selecția în context",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Adaugă liniile selectate din fișierul curent",
   "command.input.focus": "Focalizează pe câmpul de introducere",
   "command.terminal.toggle": "Comută terminalul",

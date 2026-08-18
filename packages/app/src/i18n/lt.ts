@@ -141,6 +141,7 @@ export const dict = {
   "command.tab.close": "Uždaryti skirtuką",
   "command.tab.reopenClosed": "Iš naujo atidaryti uždarytą skirtuką",
   "command.context.addSelection": "Pridėkite pasirinkimą prie konteksto",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Pridėkite pasirinktas eilutes iš dabartinio failo",
   "command.input.focus": "Fokusuoti įvesties lauką",
   "command.terminal.toggle": "Perjungti terminalą",

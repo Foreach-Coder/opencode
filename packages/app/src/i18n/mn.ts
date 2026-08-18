@@ -139,6 +139,7 @@ export const dict = {
   "command.tab.close": "Табыг хаах",
   "command.tab.reopenClosed": "Хаагдсан табыг дахин нээнэ үү",
   "command.context.addSelection": "Контекст сонголт нэмэх",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Одоогийн файлаас сонгосон мөрүүдийг нэмнэ үү",
   "command.input.focus": "Фокус оруулах",
   "command.terminal.toggle": "Терминал сэлгэх",

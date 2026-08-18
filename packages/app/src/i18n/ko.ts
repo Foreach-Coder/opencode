@@ -40,6 +40,7 @@ export const dict = {
   "command.file.open": "파일 열기",
   "command.tab.close": "탭 닫기",
   "command.context.addSelection": "선택 영역을 컨텍스트에 추가",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "현재 파일에서 선택한 줄을 추가",
   "command.input.focus": "입력창 포커스",
   "command.terminal.toggle": "터미널 표시/숨기기",

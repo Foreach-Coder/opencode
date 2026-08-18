@@ -144,6 +144,7 @@ export const dict = {
   "command.tab.close": "Zamknij kartę",
   "command.tab.reopenClosed": "Otwórz ponownie zamkniętą kartę",
   "command.context.addSelection": "Dodaj zaznaczenie do kontekstu",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Dodaj zaznaczone linie z bieżącego pliku",
   "command.input.focus": "Przejdź do pola wprowadzania",
   "command.terminal.toggle": "Przełącz terminal",

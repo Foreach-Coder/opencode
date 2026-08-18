@@ -139,6 +139,7 @@ export const dict = {
   "command.tab.close": "Затваряне на раздела",
   "command.tab.reopenClosed": "Повторно отваряне на затворен раздел",
   "command.context.addSelection": "Добавете селекция към контекста",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Добавяне на избрани редове от текущия файл",
   "command.input.focus": "Въвеждане на фокус",
   "command.terminal.toggle": "Превключване на терминала",

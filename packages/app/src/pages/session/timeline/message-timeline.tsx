@@ -1461,7 +1461,7 @@ export function MessageTimeline(props: {
           <ResponseAnnotationSelection
             root={listRoot}
             sessionID={id()}
-            label={language.t("command.context.addSelection")}
+            label={language.t("session.responseAnnotation.addSelection")}
             getPart={(messageID, partID) => {
               const part = getMsgPart(messageID, partID)
               if (part?.type !== "text") return

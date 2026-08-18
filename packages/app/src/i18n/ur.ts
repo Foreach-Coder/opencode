@@ -145,6 +145,7 @@ export const dict = {
   "command.tab.close": "ٹیب بند کریں۔",
   "command.tab.reopenClosed": "بند ٹیب کو دوبارہ کھولیں۔",
   "command.context.addSelection": "سیاق و سباق میں انتخاب شامل کریں۔",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "موجودہ فائل سے منتخب لائنیں شامل کریں۔",
   "command.input.focus": "ان پٹ پر توجہ دیں",
   "command.terminal.toggle": "ٹرمینل دکھائیں یا چھپائیں",

@@ -145,6 +145,7 @@ export const dict = {
   "command.tab.close": "Fechar aba",
   "command.tab.reopenClosed": "Reabrir aba fechada",
   "command.context.addSelection": "Adicionar seleção ao contexto",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Adicionar as linhas selecionadas do arquivo atual",
   "command.input.focus": "Focar entrada",
   "command.terminal.toggle": "Alternar terminal",

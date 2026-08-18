@@ -141,6 +141,7 @@ export const dict = {
   "command.tab.close": "Lap bezárása",
   "command.tab.reopenClosed": "Nyissa meg újra a bezárt lapot",
   "command.context.addSelection": "Kijelölés hozzáadása a kontextushoz",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Kijelölt sorok hozzáadása az aktuális fájlból",
   "command.input.focus": "Beviteli mező fókuszálása",
   "command.terminal.toggle": "Kapcsolja be a terminált",

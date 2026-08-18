@@ -144,6 +144,7 @@ export const dict = {
   "command.tab.close": "टैब बंद करें",
   "command.tab.reopenClosed": "बंद टैब पुनः खोलें",
   "command.context.addSelection": "कॉन्टेक्स्ट में चयन जोड़ें",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "वर्तमान फ़ाइल से चयनित पंक्तियाँ जोड़ें",
   "command.input.focus": "इनपुट पर फ़ोकस करें",
   "command.terminal.toggle": "टर्मिनल टॉगल करें",

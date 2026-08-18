@@ -138,6 +138,7 @@ export const dict: Record<string, string> = {
   "command.tab.close": "ट्याब बन्द गर्नुहोस्",
   "command.tab.reopenClosed": "बन्द ट्याब पुन: खोल्नुहोस्",
   "command.context.addSelection": "सन्दर्भमा चयन थप्नुहोस्",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "हालको फाइलबाट चयन गरिएका रेखाहरू थप्नुहोस्",
   "command.input.focus": "फोकस इनपुट",
   "command.terminal.toggle": "टर्मिनल टगल गर्नुहोस्",

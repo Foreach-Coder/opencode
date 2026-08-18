@@ -138,6 +138,7 @@ export const dict = {
   "command.tab.close": "Варақаро пӯшед",
   "command.tab.reopenClosed": "Варақаи пӯшидаро аз нав кушоед",
   "command.context.addSelection": "Интихобро ба контекст илова кунед",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "Аз файли ҷорӣ сатрҳои интихобшударо илова кунед",
   "command.input.focus": "Вуруди фокус",
   "command.terminal.toggle": "Терминалро иваз кунед",

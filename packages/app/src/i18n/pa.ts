@@ -143,6 +143,7 @@ export const dict = {
   "command.tab.close": "ٹیب بند کرو",
   "command.tab.reopenClosed": "بند ٹیب دوبارہ کھولو",
   "command.context.addSelection": "سیاق و سباق وچ انتخاب شامل کرو",
+  "session.responseAnnotation.addSelection": "Add annotation",
   "command.context.addSelection.description": "موجودہ فائل چوں منتخب کردہ لائناں شامل کرو",
   "command.input.focus": "ان پٹ تے فوکس کرو",
   "command.terminal.toggle": "ٹرمینل نوں ٹوگل کرو",
