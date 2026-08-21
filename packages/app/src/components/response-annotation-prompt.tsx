@@ -1,10 +1,12 @@
-import { createStore } from "solid-js/store"
 import { Show, type Accessor } from "solid-js"
 import type { ResponseAnnotationDraft } from "@/context/prompt"
 import {
-  ResponseAnnotationComposerButton,
+  ResponseAnnotationComposerPopover,
   ResponseAnnotationDraftList,
 } from "@opencode-ai/session-ui/response-annotation"
+import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
+import { annotationSourceMatches } from "@opencode-ai/core/session/response-annotation"
 
 export function PromptResponseAnnotations(props: {
   annotations: Accessor<ResponseAnnotationDraft[]>
@@ -12,34 +14,46 @@ export function PromptResponseAnnotations(props: {
   onRemove: (id: string) => void
   onBackToSource?: (draft: ResponseAnnotationDraft) => void
 }) {
-  const [state, setState] = createStore({ open: false })
+  const sync = useSync()
+  const language = useLanguage()
+  const valid = (draft: ResponseAnnotationDraft) => {
+    const parts = sync()?.data?.part
+    if (!parts) return true
+    const part = parts[draft.source.messageID]?.find((item) => item.id === draft.source.partID)
+    if (!part || part.type !== "text") return false
+    return annotationSourceMatches(
+      { source: { ...draft.source, digest: draft.source.partDigest }, context: draft.context },
+      part.text,
+    )
+  }
   const annotations = () =>
     props.annotations().map((draft, index) => ({
       ...draft,
       index: index + 1,
+      invalid: !valid(draft),
+      invalidLabel: language.t("common.requestFailed"),
     }))
 
   return (
     <Show when={annotations().length > 0}>
       <div data-component="prompt-response-annotations" class="px-3 pt-2">
-        <ResponseAnnotationComposerButton count={annotations().length} onClick={() => setState("open", !state.open)} />
-        <Show when={state.open}>
-          <div class="mt-2 max-h-48 overflow-y-auto rounded-md border border-border-weak-base bg-background-base p-2">
-            <ResponseAnnotationDraftList
-              annotations={annotations()}
-              onSave={(id, comment) => props.onUpdate(id, comment.slice(0, 2_000))}
-              onDelete={props.onRemove}
-              onBackToSource={
-                props.onBackToSource
-                  ? (annotation) => {
-                      const draft = props.annotations().find((item) => item.id === annotation.id)
-                      if (draft) props.onBackToSource?.(draft)
-                    }
-                  : undefined
-              }
-            />
-          </div>
-        </Show>
+        <ResponseAnnotationComposerPopover count={annotations().length}>
+          <ResponseAnnotationDraftList
+            annotations={annotations()}
+            onSave={(id, comment) => {
+              if (Array.from(comment).length <= 2_000) props.onUpdate(id, comment)
+            }}
+            onDelete={props.onRemove}
+            onBackToSource={
+              props.onBackToSource
+                ? (annotation) => {
+                    const draft = props.annotations().find((item) => item.id === annotation.id)
+                    if (draft) props.onBackToSource?.(draft)
+                  }
+                : undefined
+            }
+          />
+        </ResponseAnnotationComposerPopover>
       </div>
     </Show>
   )

@@ -278,12 +278,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.mode === "shell") return 0
     return prompt.context.items().filter((item) => item.type === "file" && !!item.comment?.trim()).length
   })
+  const responseAnnotationCount = createMemo(() => {
+    if (store.mode === "shell") return 0
+    return prompt.context.responseAnnotations().length
+  })
   const blank = createMemo(() => {
     const text = prompt
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
-    return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
+    return (
+      text.trim().length === 0 &&
+      imageAttachments().length === 0 &&
+      commentCount() === 0 &&
+      responseAnnotationCount() === 0
+    )
   })
   const stopping = createMemo(() => working() && blank())
   const tip = () => {
@@ -319,7 +328,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return messages.some((m) => m.role === "user")
   })
 
-  const history = props.history ?? createPersistedPromptInputHistory()
+  const history =
+    props.history ??
+    createPersistedPromptInputHistory(
+      props.controls.session.id
+        ? { server: sdk().scope, directory: sdk().directory, sessionID: props.controls.session.id }
+        : undefined,
+    )
 
   const suggest = createMemo(() => !hasUserPrompt())
 
@@ -1392,7 +1407,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           .join("")
           .trim().length === 0 &&
         imageAttachments().length === 0 &&
-        commentCount() === 0
+        commentCount() === 0 &&
+        responseAnnotationCount() === 0
       ) {
         return
       }

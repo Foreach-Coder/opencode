@@ -10,6 +10,10 @@ export type GitSourceState = {
   trackedContentSha256: string
 }
 
+export type GitSourceCertificationOptions = {
+  allowDirty?: boolean
+}
+
 export function parseBuildArgs(argv: string[]): BuildRequest {
   let channel: BuildRequest["channel"] | undefined
   let release: string | undefined
@@ -113,8 +117,11 @@ async function assertCleanTrackedStatus(git: Git) {
   if (hasDirtyBuildInputs(status)) throw new Error("Git 工作区不干净：存在 tracked 或 untracked 变更")
 }
 
-export async function captureGitSourceState(git: Git): Promise<GitSourceState> {
-  await assertCleanTrackedStatus(git)
+export async function captureGitSourceState(
+  git: Git,
+  options: GitSourceCertificationOptions = {},
+): Promise<GitSourceState> {
+  if (!options.allowDirty) await assertCleanTrackedStatus(git)
   const [headOutput, branchOutput] = await Promise.all([
     requireGit(git.run(["rev-parse", "HEAD"]), "无法认证 Git HEAD"),
     requireGit(git.run(["rev-parse", "--abbrev-ref", "HEAD"]), "无法认证 Git branch"),
@@ -129,7 +136,7 @@ export async function captureGitSourceState(git: Git): Promise<GitSourceState> {
     requireGit(git.run(["ls-files", "--stage", "-z"]), "无法认证 tracked index"),
     requireGit(git.run(["ls-tree", "-r", "-z", "--full-tree", head]), "无法认证 tracked content"),
   ])
-  await assertCleanTrackedStatus(git)
+  if (!options.allowDirty) await assertCleanTrackedStatus(git)
   const [headAfter, branchAfter] = await Promise.all([
     requireGit(git.run(["rev-parse", "HEAD"]), "无法复核 Git HEAD"),
     requireGit(git.run(["rev-parse", "--abbrev-ref", "HEAD"]), "无法复核 Git branch"),
@@ -152,8 +159,12 @@ export function assertGitSourceUnchanged(before: GitSourceState, after: GitSourc
     throw new Error("构建期间 tracked content 内容摘要变化")
 }
 
-export async function recertifyGitSource(git: Git, before: GitSourceState) {
-  const after = await captureGitSourceState(git)
+export async function recertifyGitSource(
+  git: Git,
+  before: GitSourceState,
+  options: GitSourceCertificationOptions = {},
+) {
+  const after = await captureGitSourceState(git, options)
   assertGitSourceUnchanged(before, after)
   return after
 }
@@ -162,8 +173,9 @@ export async function withCertifiedGitSource<Result>(
   git: Git,
   before: GitSourceState,
   action: (after: GitSourceState) => Promise<Result>,
+  options: GitSourceCertificationOptions = {},
 ) {
-  return action(await recertifyGitSource(git, before))
+  return action(await recertifyGitSource(git, before, options))
 }
 
 async function requireGit(result: Promise<GitResult>, message: string) {

@@ -351,6 +351,383 @@ test.describe("smoke: session timeline", () => {
     await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
     await expect(shellSubtitle).toHaveCount(0)
   })
+
+  test("collapses historical response annotations and reveals their details on hover", async ({ page }) => {
+    const messages = fixture.messages[fixture.targetID]
+    const source = messages.findLast((message) => message.info.role === "assistant")!
+    const sourcePart = source.parts.find((part) => part.type === "text")!
+    const longSelection = `alpha ${"完整所选文本 ".repeat(40)}`.trim()
+    const longComment = `first note ${"完整用户评论 ".repeat(40)}`.trim()
+    const annotations = [
+      {
+        index: 1,
+        source: { messageID: source.info.id, partID: sourcePart.id, start: 0, end: 5, digest: "sha256:first" },
+        context: { before: "", selected: longSelection, after: "" },
+        comment: longComment,
+      },
+      {
+        index: 2,
+        source: { messageID: source.info.id, partID: sourcePart.id, start: 6, end: 11, digest: "sha256:second" },
+        context: { before: "", selected: "bravo", after: "" },
+        comment: "second note",
+      },
+    ]
+    const template = messages.findLast((message) => message.info.role === "user")!
+    const carrier = {
+      info: {
+        ...template.info,
+        id: "msg_response_annotation_history",
+        time: { created: 1700009999999 },
+      },
+      parts: [
+        {
+          ...template.parts[0]!,
+          id: "prt_response_annotation_history",
+          messageID: "msg_response_annotation_history",
+          text: "Please apply these annotations.",
+          metadata: { bluedcodeResponseAnnotations: { version: 1, annotations } },
+        },
+      ],
+    }
+    const response = {
+      info: {
+        ...source.info,
+        id: "msg_response_annotation_answer",
+        parentID: carrier.info.id,
+        time: { created: 1700010000000, completed: 1700010000001 },
+      },
+      parts: [
+        {
+          ...sourcePart,
+          id: "prt_response_annotation_answer",
+          messageID: "msg_response_annotation_answer",
+          text: ':bluedcode-annotation{index="1"}\nThe answer for the first annotation.',
+        },
+      ],
+    }
+
+    await mockOpenCodeServer(page, {
+      sessions: fixture.sessions,
+      provider: fixture.provider,
+      directory: fixture.directory,
+      project: fixture.project,
+      pageMessages: (sessionID, limit, before) => {
+        const result = pageMessages(sessionID, limit, before)
+        return {
+          ...result,
+          items: sessionID === fixture.targetID && !before ? [...result.items, carrier, response] : result.items,
+        }
+      },
+    })
+    await configureSmokePage(page, fixture.directory)
+    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+
+    const trigger = page.locator('[data-component="response-annotation-history-trigger"]')
+    const details = page.locator('[data-component="response-annotation-history-details"]')
+    await expect(trigger).toHaveCount(1)
+    await expect(trigger).toContainText("2 annotations")
+    await expect(details).toHaveCount(0)
+    const triggerSurface = await trigger.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { backgroundColor: style.backgroundColor, borderTopWidth: style.borderTopWidth }
+    })
+    expect(triggerSurface.borderTopWidth).toBe("0px")
+    expect(triggerSurface.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+    expect(triggerSurface.backgroundColor).not.toBe("rgb(0, 0, 0)")
+
+    await trigger.hover()
+    await expect(details).toBeVisible()
+    await expect(details).toContainText(longSelection)
+    await expect(details).toContainText(longComment)
+    await expect(details).toContainText("bravo")
+    await expect(details).toContainText("second note")
+    await expect(details.getByRole("button")).toHaveCount(0)
+    const detailsSurface = await details.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { backgroundColor: style.backgroundColor, borderTopWidth: style.borderTopWidth }
+    })
+    expect(detailsSurface.borderTopWidth).toBe("0px")
+    expect(detailsSurface.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+    expect(detailsSurface.backgroundColor).not.toBe("rgb(0, 0, 0)")
+    const historyDetailStyle = await details
+      .locator('[data-component="response-annotation-detail"]')
+      .first()
+      .evaluate((element) => {
+        const style = getComputedStyle(element)
+        return {
+          className: element.className,
+          display: style.display,
+          gridTemplateColumns: style.gridTemplateColumns,
+          columnGap: style.columnGap,
+          paddingTop: style.paddingTop,
+          paddingBottom: style.paddingBottom,
+        }
+      })
+    const detailsBox = await details.boundingBox()
+    const detailsViewport = page.viewportSize()!
+    expect(detailsBox!.x).toBeGreaterThanOrEqual(0)
+    expect(detailsBox!.y).toBeGreaterThanOrEqual(0)
+    expect(detailsBox!.x + detailsBox!.width).toBeLessThanOrEqual(detailsViewport.width)
+    expect(detailsBox!.y + detailsBox!.height).toBeLessThanOrEqual(detailsViewport.height)
+
+    await page.mouse.move(0, 0)
+    await expect(details).toHaveCount(0)
+
+    const reference = page.locator(
+      '[data-component="response-annotation-reference"] [data-slot="response-annotation-hover-trigger"]',
+    )
+    await expect(reference).toHaveText("Annotation 1")
+    await expect(reference).toHaveJSProperty("tagName", "SPAN")
+    const referenceStyle = await reference.evaluate((element) => {
+      const style = getComputedStyle(element)
+      const [red = 0, green = 0, blue = 0] = style.color.match(/\d+(?:\.\d+)?/g)?.map(Number) ?? []
+      return { blueDominant: blue > red && blue > green, textDecoration: style.textDecorationLine }
+    })
+    expect(referenceStyle.blueDominant).toBe(true)
+    expect(referenceStyle.textDecoration).toContain("underline")
+
+    await reference.hover()
+    const referenceDetails = page.locator('[data-slot="response-annotation-hover-details"]')
+    await expect(referenceDetails).toBeVisible()
+    await expect(referenceDetails).toContainText(longSelection)
+    await expect(referenceDetails).toContainText(longComment)
+    const referenceDetailStyle = await referenceDetails
+      .locator('[data-component="response-annotation-detail"]')
+      .evaluate((element) => {
+        const style = getComputedStyle(element)
+        return {
+          className: element.className,
+          display: style.display,
+          gridTemplateColumns: style.gridTemplateColumns,
+          columnGap: style.columnGap,
+          paddingTop: style.paddingTop,
+          paddingBottom: style.paddingBottom,
+        }
+      })
+    expect(referenceDetailStyle).toEqual(historyDetailStyle)
+    expect(await referenceDetails.evaluate((element) => !element.closest("[data-timeline-message-id]"))).toBe(true)
+    const referenceDetailsBox = await referenceDetails.boundingBox()
+    const viewport = page.viewportSize()!
+    expect(referenceDetailsBox!.x).toBeGreaterThanOrEqual(0)
+    expect(referenceDetailsBox!.y).toBeGreaterThanOrEqual(0)
+    expect(referenceDetailsBox!.x + referenceDetailsBox!.width).toBeLessThanOrEqual(viewport.width)
+    expect(referenceDetailsBox!.y + referenceDetailsBox!.height).toBeLessThanOrEqual(viewport.height)
+
+    await reference.click()
+    await expect(page.getByRole("dialog", { name: "Annotation 1 details" })).toHaveCount(0)
+  })
+
+  test("keeps response text selection isolated from file-reference drag", async ({ page }) => {
+    await mockOpenCodeServer(page, {
+      sessions: fixture.sessions,
+      provider: fixture.provider,
+      directory: fixture.directory,
+      project: fixture.project,
+      pageMessages,
+    })
+    await configureSmokePage(page, fixture.directory)
+    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+
+    const plainText = await page.evaluateHandle(() => {
+      const transfer = new DataTransfer()
+      transfer.setData("text/plain", "selected assistant response")
+      return transfer
+    })
+    await page.locator("body").dispatchEvent("dragover", { dataTransfer: plainText })
+    await expect(page.getByText("Drop to @mention file", { exact: true })).toHaveCount(0)
+
+    const fileReference = await page.evaluateHandle(() => {
+      const transfer = new DataTransfer()
+      transfer.setData("application/x-opencode-file-reference", "src/index.ts")
+      return transfer
+    })
+    await page.locator("body").dispatchEvent("dragover", { dataTransfer: fileReference })
+    await expect(page.getByText("Drop to @mention file", { exact: true })).toBeVisible()
+  })
+
+  test("creates and reopens a response annotation from a real browser text selection", async ({ page }) => {
+    const source = fixture.messages[fixture.targetID].findLast((message) => message.info.role === "assistant")!
+    const sourcePart = source.parts.find((part) => part.type === "text")!
+    await mockOpenCodeServer(page, {
+      sessions: fixture.sessions,
+      provider: fixture.provider,
+      directory: fixture.directory,
+      project: fixture.project,
+      pageMessages,
+    })
+    await configureSmokePage(page, fixture.directory)
+    await navigateToSession(page, fixture.directory, fixture.targetID, fixture.expected.targetTitle)
+    await expect(page.locator("style[data-response-annotation-highlight-style]")).toHaveCount(1)
+
+    const part = page.locator(`[data-timeline-part-id="${sourcePart.id}"]`)
+    const markdown = part.locator('[data-component="markdown"]').first()
+    await markdown.scrollIntoViewIfNeeded()
+    const points = await markdown.evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      const nodes: Text[] = []
+      while (walker.nextNode()) {
+        const candidate = walker.currentNode as Text
+        if (candidate.data.trim().length < 8) continue
+        nodes.push(candidate)
+        if (nodes.length === 2) break
+      }
+      const node = nodes[0]
+      if (!node) throw new Error("Assistant Markdown has no selectable text node")
+      const endNode = nodes[1] ?? node
+      const start = node.data.search(/\S/)
+      const endStart = endNode.data.search(/\S/)
+      const end = Math.min(endNode.data.length, endStart + 7)
+      const startRange = document.createRange()
+      startRange.setStart(node, start)
+      startRange.setEnd(node, start + 1)
+      const endRange = document.createRange()
+      endRange.setStart(node, start)
+      endRange.setEnd(endNode, end)
+      const first = startRange.getBoundingClientRect()
+      const selected = endRange.getBoundingClientRect()
+      return {
+        start: { x: first.left + 1, y: first.top + first.height / 2 },
+        end: { x: selected.right - 1, y: selected.top + selected.height / 2 },
+        crossNode: endNode !== node,
+      }
+    })
+    expect(points.crossNode).toBe(true)
+    await page.mouse.move(points.start.x, points.start.y)
+    await page.mouse.down()
+    await page.mouse.move(points.end.x, points.end.y, { steps: 8 })
+    await page.mouse.up()
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString().trim().length ?? 0))
+      .toBeGreaterThan(0)
+    const selected = await page.evaluate(() => {
+      const selection = window.getSelection()
+      const range = selection?.rangeCount === 1 ? selection.getRangeAt(0) : undefined
+      const part = (node: Node | undefined) =>
+        (node instanceof Element ? node : node?.parentElement)?.closest<HTMLElement>(
+          "[data-timeline-message-id][data-timeline-part-id][data-timeline-part-role][data-timeline-part-type]",
+        )
+      return {
+        text: selection?.toString(),
+        start: part(range?.startContainer)?.dataset.timelinePartId,
+        end: part(range?.endContainer)?.dataset.timelinePartId,
+        role: part(range?.startContainer)?.dataset.timelinePartRole,
+        type: part(range?.startContainer)?.dataset.timelinePartType,
+        completed: part(range?.startContainer)?.dataset.timelinePartCompleted,
+      }
+    })
+    const projectedDraft = await page.evaluate(
+      async ({ sessionID, markdown }) => {
+        const module = await import("/src/components/response-annotation-selection.tsx")
+        const selection = window.getSelection()
+        const range = selection?.rangeCount === 1 ? selection.getRangeAt(0) : undefined
+        const element = (
+          range?.startContainer instanceof Element ? range.startContainer : range?.startContainer.parentElement
+        )?.closest<HTMLElement>("[data-timeline-message-id][data-timeline-part-id]")
+        if (!selection || !element) return
+        return module.responseAnnotationDraftFromSelection({
+          root: document.body,
+          selection,
+          sessionID,
+          id: "draft_playwright",
+          createdAt: 1,
+          getPart: () => ({ markdown }),
+        })
+      },
+      { sessionID: fixture.targetID, markdown: sourcePart.text },
+    )
+    expect(projectedDraft?.context.selected).toBe(selected.text)
+    expect(projectedDraft).toBeDefined()
+    expect(selected).toMatchObject({
+      start: sourcePart.id,
+      end: sourcePart.id,
+      role: "assistant",
+      type: "text",
+      completed: "true",
+    })
+    const action = page.locator('[data-component="response-annotation-selection-action"]')
+    await expect(action).toBeVisible()
+    const actionSurface = await action.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { backgroundColor: style.backgroundColor, borderTopWidth: style.borderTopWidth }
+    })
+    expect(actionSurface.borderTopWidth).toBe("0px")
+    expect(actionSurface.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
+    expect(actionSurface.backgroundColor).not.toBe("rgb(0, 0, 0)")
+    await action.click()
+    expect(
+      await page
+        .locator(`[data-timeline-message-id="${source.info.id}"][data-timeline-part-id="${sourcePart.id}"]`)
+        .evaluate(
+          async (element, input) => {
+            const module = await import("/src/components/response-annotation-selection.tsx")
+            return !!module.responseAnnotationRangeFromSource(
+              element as HTMLElement,
+              input.markdown,
+              input.start,
+              input.end,
+            )
+          },
+          { markdown: sourcePart.text, start: projectedDraft!.source.start, end: projectedDraft!.source.end },
+        ),
+    ).toBe(true)
+    const editor = page.locator('[data-component="response-annotation-editor"]')
+    await expect(editor).toBeVisible()
+    const selectionEditor = page.locator('[data-component="response-annotation-selection-editor"]')
+    await expect(selectionEditor).toHaveCSS("width", "320px")
+    await expect(editor).toHaveCSS("border-radius", "20px")
+    await expect(editor).toHaveCSS("border-top-width", "0px")
+    const editorBackground = await editor.evaluate((element) => getComputedStyle(element).backgroundColor)
+    expect(editorBackground).not.toBe("rgba(0, 0, 0, 0)")
+    expect(editorBackground).not.toBe("rgb(0, 0, 0)")
+    await expect(editor.locator("textarea")).toHaveAttribute("placeholder", "Add annotation…")
+    const editorActions = editor.locator('[data-slot="response-annotation-editor-actions"]')
+    await expect(editorActions.getByRole("button")).toHaveCount(2)
+    await expect(editorActions.getByRole("button", { name: "Cancel" })).toBeVisible()
+    await expect(editorActions.getByRole("button", { name: "Save" })).toBeEnabled()
+    await expect(editorActions.locator('[aria-label*="voice" i]')).toHaveCount(0)
+    await expect(page.locator('[data-component="line-comment"]')).toHaveCount(0)
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const css = CSS as typeof CSS & { highlights?: { size: number } }
+          return css.highlights?.size ?? 0
+        }),
+      )
+      .toBeGreaterThan(0)
+
+    await editor.getByRole("button", { name: "Save" }).click()
+    await expect(page.locator('[data-component="response-annotation-composer-button"]')).toContainText("1 annotation")
+
+    const badge = page.locator('[data-component="response-annotation-source-badge"]')
+    await expect(badge).toHaveCount(1)
+    await expect(badge).toHaveCSS("border-top-width", "0px")
+    await badge.click()
+    await expect(editor).toBeVisible()
+    await expect(editor.locator("textarea")).toHaveValue("")
+    await expect(editorActions.getByRole("button", { name: "Delete" })).toBeVisible()
+    await expect(editorActions.getByRole("button")).toHaveCount(3)
+    await editorActions.getByRole("button", { name: "Cancel" }).click()
+
+    const requests: import("@playwright/test").Request[] = []
+    page.on("request", (request) => {
+      if (request.method() === "POST") requests.push(request)
+    })
+    const submit = page.locator('[data-action="prompt-submit"]')
+    await expect(submit).toBeEnabled()
+    await submit.evaluate((button: HTMLButtonElement) => button.click())
+    await expect
+      .poll(() => requests.map((request) => new URL(request.url()).pathname).join(","), { timeout: 10_000 })
+      .toMatch(/\/prompt(?:_async)?$/)
+    const request = requests.find((candidate) => /\/prompt(?:_async)?$/.test(new URL(candidate.url()).pathname))!
+    const body = request.postDataJSON() as {
+      parts?: Array<{ type?: string; text?: string; metadata?: Record<string, unknown> }>
+    }
+    const carrier = body.parts?.find((candidate) => candidate.type === "text" && candidate.text === "")
+    expect(carrier?.metadata?.bluedcodeResponseAnnotations).toMatchObject({
+      version: 1,
+      annotations: [{ index: 1, comment: "", context: { selected: projectedDraft!.context.selected } }],
+    })
+  })
 })
 
 async function configureSmokePage(page: Page, directory: string) {

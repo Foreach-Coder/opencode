@@ -1,5 +1,6 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { FILE_REFERENCE_DRAG_TYPE, hasFileReferenceDrag } from "@opencode-ai/session-ui/file-drag"
 import { showToast } from "@/utils/toast"
 import { type ContentPart, type ImageAttachmentPart, type usePrompt } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
@@ -165,12 +166,17 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   const handleGlobalDragOver = (event: DragEvent) => {
     if (input.isDialogActive()) return
 
+    const types = event.dataTransfer?.types ?? []
+    const hasFiles = types.includes("Files")
+    const hasReference = hasFileReferenceDrag(types)
+    if (!hasFiles && !hasReference) {
+      input.setDraggingType(null)
+      return
+    }
     event.preventDefault()
-    const hasFiles = event.dataTransfer?.types.includes("Files")
-    const hasText = event.dataTransfer?.types.includes("text/plain")
     if (hasFiles) {
       input.setDraggingType("image")
-    } else if (hasText) {
+    } else {
       input.setDraggingType("@mention")
     }
   }
@@ -185,13 +191,15 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
   const handleGlobalDrop = async (event: DragEvent) => {
     if (input.isDialogActive()) return
 
+    const types = event.dataTransfer?.types ?? []
+    const hasFiles = types.includes("Files")
+    const hasReference = hasFileReferenceDrag(types)
+    if (!hasFiles && !hasReference) return
     event.preventDefault()
     input.setDraggingType(null)
 
-    const plainText = event.dataTransfer?.getData("text/plain")
-    const filePrefix = "file:"
-    if (plainText?.startsWith(filePrefix)) {
-      const filePath = plainText.slice(filePrefix.length)
+    const filePath = event.dataTransfer?.getData(FILE_REFERENCE_DRAG_TYPE)
+    if (filePath) {
       input.focusEditor()
       input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
       return

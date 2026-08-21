@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { responseAnnotationDraftFromSelection } from "./response-annotation-selection"
+import {
+  responseAnnotationCommentLength,
+  responseAnnotationDraftFromSelection,
+  responseAnnotationRangeFromSource,
+} from "./response-annotation-selection"
 
 const source = {
   sessionID: "ses_1",
@@ -47,6 +51,10 @@ function draft(root: HTMLElement, selection: Selection) {
 }
 
 describe("response annotation selection", () => {
+  test("counts comment capacity by Unicode code point", () => {
+    expect(responseAnnotationCommentLength("a😀b")).toBe(3)
+    expect(responseAnnotationCommentLength("😀".repeat(2_000))).toBe(2_000)
+  })
   test("maps a same-part cross-node selection through the shared Markdown projection", () => {
     const root = fixture()
     const alpha = root.querySelector("p")!.firstChild!
@@ -60,6 +68,14 @@ describe("response annotation selection", () => {
       comment: "",
       createdAt: 123,
     })
+  })
+
+  test("restores a cross-paragraph range when rendered paragraphs retain source indentation", () => {
+    document.body.innerHTML = `<div data-component="markdown"><p>first paragraph</p>\n<p> second paragraph</p></div>`
+    const root = document.querySelector<HTMLElement>('[data-component="markdown"]')!
+    const range = responseAnnotationRangeFromSource(root, "first paragraph\n\n second paragraph", 0, 22)
+
+    expect(range?.toString()).toBe("first paragraph\n secon")
   })
 
   test("maps inline-code and fenced-code text nodes", () => {
@@ -103,6 +119,30 @@ describe("response annotation selection", () => {
 
     expect(result?.source).toMatchObject({ start: 7, end: 13 })
     expect(result?.context.selected).toBe("repeat")
+  })
+
+  test("falls back to the browser selected text when rendered decoration text breaks exact projection mapping", () => {
+    const markdown = "prefix selected suffix"
+    document.body.innerHTML = `
+      <div id="timeline">
+        <div data-timeline-message-id="msg_assistant" data-timeline-part-id="part_text"
+          data-timeline-part-role="assistant" data-timeline-part-type="text" data-timeline-part-completed="true">
+          <div data-component="markdown"><p>prefix \u200bselected suffix</p></div>
+        </div>
+      </div>`
+    const root = document.querySelector<HTMLElement>("#timeline")!
+    const text = root.querySelector("p")!.firstChild!
+    const result = responseAnnotationDraftFromSelection({
+      root,
+      selection: select(text, 8, text, 16),
+      sessionID: "ses_1",
+      id: "draft_fallback",
+      createdAt: 1,
+      getPart: () => ({ markdown }),
+    })
+
+    expect(result?.source).toMatchObject({ start: 7, end: 15 })
+    expect(result?.context.selected).toBe("selected")
   })
 
   test("rejects cross-part selections", () => {

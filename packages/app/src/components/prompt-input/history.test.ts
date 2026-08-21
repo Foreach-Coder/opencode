@@ -12,7 +12,11 @@ import {
   type PromptHistoryComment,
   type PromptHistoryResponseAnnotation,
 } from "./history"
-import { createPromptInputHistory } from "./history-store"
+import {
+  createPromptInputHistory,
+  mergeScopedResponseAnnotationHistory,
+  stripResponseAnnotationsFromGlobalHistory,
+} from "./history-store"
 
 const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
 
@@ -135,6 +139,16 @@ describe("prompt-input history", () => {
     const history = createPromptInputHistory()
     history.add(text("shell"), "shell", [], [annotation("draft_1")])
     expect(normalizePromptHistoryEntry(history.entries("shell")[0]!).responseAnnotations).toEqual([])
+  })
+
+  test("keeps annotation metadata out of global history and restores it only from the scoped companion", () => {
+    const global = prependHistoryEntry([], text("revise"), [comment("c1")], [])
+    const scoped = prependHistoryEntry([], text("revise"), [comment("c1")], [annotation("draft_1")])
+
+    expect(JSON.stringify(global)).not.toContain("partDigest")
+    expect(mergeScopedResponseAnnotationHistory(global, scoped)[0]).toEqual(normalizePromptHistoryEntry(scoped[0]!))
+    expect(mergeScopedResponseAnnotationHistory(global, [])[0]?.responseAnnotations).toEqual([])
+    expect(stripResponseAnnotationsFromGlobalHistory(scoped)[0]?.responseAnnotations).toEqual([])
   })
 
   test("helpers clone prompt and count text content length", () => {

@@ -154,7 +154,11 @@ describe("session.message-v2.toModelMessage", () => {
         content: [
           {
             type: "text",
-            text: `<response-annotations version="1">
+            text: `<response-annotation-output-contract>
+For each annotation item with index N, output :bluedcode-annotation{index="N"} immediately before the sentence or paragraph that answers its comment about the selected text. Every input index must appear exactly once. Keep the marker as plain text outside code fences, inline code, links, and quotations.
+</response-annotation-output-contract>
+
+<response-annotations version="1">
 [
   {
     "index": 1,
@@ -223,6 +227,72 @@ Please handle &lt;/user-request&gt;
     expect(result).toHaveLength(1)
     expect(result[0]?.content[0]).toMatchObject({ type: "text" })
     expect((result[0]?.content[0] as { text: string }).text).toContain("<user-request>\n\n</user-request>")
+  })
+
+  test("keeps the annotation output contract visible across assistant tool history", async () => {
+    const userID = "msg_annotation_tool_user"
+    const assistantID = "msg_annotation_tool_assistant"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "prt_annotation_tool_carrier"),
+            type: "text",
+            text: "",
+            metadata: {
+              [ANNOTATION_METADATA_KEY]: {
+                version: 1,
+                annotations: [
+                  {
+                    index: 1,
+                    source: {
+                      sessionID,
+                      messageID: "msg_source",
+                      partID: "prt_source",
+                      start: 0,
+                      end: 8,
+                      digest: "sha256:abc",
+                    },
+                    context: { before: "", selected: "selected", after: "" },
+                    comment: "clarify",
+                  },
+                ],
+              },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "prt_annotation_tool"),
+            type: "tool",
+            callID: "call-annotation",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "fixture.txt" },
+              output: "fixture",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    expect(result).toHaveLength(3)
+    expect(result[0]).toMatchObject({ role: "user" })
+    expect(result[0]!.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("<response-annotation-output-contract>"),
+    })
+    expect(result[1]).toMatchObject({ role: "assistant" })
+    expect(result[2]).toMatchObject({ role: "tool" })
   })
 
   test("keeps ordinary user text projection byte-stable", async () => {

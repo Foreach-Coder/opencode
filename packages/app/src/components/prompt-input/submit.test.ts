@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import type { Prompt, PromptStore, ResponseAnnotationDraft } from "@/context/prompt"
 import type { ModelSelection } from "@/context/local"
+import { digestProjection } from "@opencode-ai/core/session/response-annotation"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 let requestContextForMode: typeof import("./submission-state").requestContextForMode
@@ -43,6 +44,7 @@ let permissionServer = "server-a"
 let createSessionGate: Promise<void> | undefined
 let failPromptRequest = false
 let resetPromptState = false
+let sourceText = "text"
 
 let promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
 let contextItems: PromptStore["context"]["items"] = []
@@ -86,7 +88,14 @@ const prompt = {
 function responseAnnotation(id: string): ResponseAnnotationDraft {
   return {
     id,
-    source: { sessionID: "session-1", messageID: "msg_source", partID: "part_source", partDigest: "sha256:abc", start: 0, end: 4 },
+    source: {
+      sessionID: "session-1",
+      messageID: "msg_source",
+      partID: "part_source",
+      partDigest: digestProjection(sourceText),
+      start: 0,
+      end: 4,
+    },
     context: { before: "", selected: "text", after: "" },
     comment: "note",
     createdAt: 1,
@@ -238,7 +247,10 @@ beforeAll(async () => {
 
   mock.module("@/context/sync", () => ({
     useSync: () => () => ({
-      data: { command: commands },
+      data: {
+        command: commands,
+        part: { msg_source: [{ id: "part_source", type: "text", text: sourceText }] },
+      },
       session: {
         optimistic: {
           add: (value: {
@@ -332,6 +344,7 @@ beforeEach(() => {
   createSessionGate = undefined
   failPromptRequest = false
   resetPromptState = false
+  sourceText = "text"
   serverSessionSyncs = 0
   for (const key of Object.keys(storedSessions)) delete storedSessions[key]
 })
@@ -400,9 +413,39 @@ describe("prompt submit worktree selection", () => {
     await Bun.sleep(0)
 
     expect(sentPrompts).toEqual(["/repo/main"])
-    expect((promptInputs[0] as { legacyParts?: Array<{ metadata?: Record<string, unknown>; text?: string }> }).legacyParts).toEqual([
-      expect.objectContaining({ text: "", metadata: { bluedcodeResponseAnnotations: expect.any(Object) } }),
-    ])
+    expect(
+      (promptInputs[0] as { legacyParts?: Array<{ metadata?: Record<string, unknown>; text?: string }> }).legacyParts,
+    ).toEqual([expect.objectContaining({ text: "", metadata: { bluedcodeResponseAnnotations: expect.any(Object) } })])
+  })
+
+  test("rejects a stale annotation before any request is sent", async () => {
+    params = { id: "session-1" }
+    promptValue = [{ type: "text", content: "", start: 0, end: 0 }]
+    const draft = responseAnnotation("draft_stale")
+    sourceText = "changed"
+    contextItems = [{ key: "annotation:draft_stale", type: "response-annotation", draft }]
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: () => 0,
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(sentPrompts).toEqual([])
+    expect(promptInputs).toEqual([])
   })
 
   test("clears annotations after a successful normal submission and restores them after a failed one", async () => {

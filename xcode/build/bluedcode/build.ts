@@ -70,7 +70,9 @@ export async function preflightBuild(argv: string[], options: PreflightOptions =
   if (!desktopVersion) throw new Error("构建身份缺少 Desktop version")
   const adapter = selectVersionAdapter({ tag: baseline.tag, commit: baseline.commit, desktopVersion })
   await assertBaselineTagCommit(git, adapter)
-  const sourceBefore = request.auditOnly ? undefined : await captureGitSourceState(git)
+  const sourceBefore = request.auditOnly
+    ? undefined
+    : await captureGitSourceState(git, { allowDirty: request.channel === "dev" })
   if (sourceBefore && sourceBefore.head !== identity.commit)
     throw new Error("Git source certification HEAD 与构建身份不一致")
   const paths = createBuildPaths(identity, repositoryRoot)
@@ -208,45 +210,50 @@ export async function runBuild(argv = Bun.argv.slice(2), options: PreflightOptio
       home: runtimeHome,
       visibleVersion: context.identity.version,
     })
-    const finalized = await withCertifiedGitSource(context.git, context.sourceBefore!, async (sourceAfter) => {
-      const manifest = createReleaseManifest({
-        identity: context.identity,
-        baseline: {
-          tag: context.adapter.tag,
-          commit: context.adapter.commit,
-          desktopVersion: context.adapter.desktopVersion,
-        },
-        resourceEditorTool: context.adapter.resourceEditorTool,
-        builtAtUtc: new Date().toISOString(),
-        source: { before: context.sourceBefore!, after: sourceAfter },
-        tools,
-        digests: { ...digests, assets: assetDigest.digest },
-        cache: {
-          server: server.cacheHit,
-          electronVite: false,
-          distributionZip: false,
-        },
-        release,
-        artifact,
-        transformation: transformLedger,
-        enterprise: { audit: outputAudit },
-        audit: {
-          output: outputAudit,
-          package: packageAudit,
-          pe: peAudit,
-          distributionZip: distributionAudit,
-          runtime,
-        },
-      })
-      const published = await publishRelease({
-        artifactsRoot: context.paths.artifactsDir,
-        artifactFile,
-        manifest,
-        outputRoot: context.paths.outputRoot,
-        repositoryRoot: context.paths.repositoryRoot,
-      })
-      return { manifest, published }
-    })
+    const finalized = await withCertifiedGitSource(
+      context.git,
+      context.sourceBefore!,
+      async (sourceAfter) => {
+        const manifest = createReleaseManifest({
+          identity: context.identity,
+          baseline: {
+            tag: context.adapter.tag,
+            commit: context.adapter.commit,
+            desktopVersion: context.adapter.desktopVersion,
+          },
+          resourceEditorTool: context.adapter.resourceEditorTool,
+          builtAtUtc: new Date().toISOString(),
+          source: { before: context.sourceBefore!, after: sourceAfter },
+          tools,
+          digests: { ...digests, assets: assetDigest.digest },
+          cache: {
+            server: server.cacheHit,
+            electronVite: false,
+            distributionZip: false,
+          },
+          release,
+          artifact,
+          transformation: transformLedger,
+          enterprise: { audit: outputAudit },
+          audit: {
+            output: outputAudit,
+            package: packageAudit,
+            pe: peAudit,
+            distributionZip: distributionAudit,
+            runtime,
+          },
+        })
+        const published = await publishRelease({
+          artifactsRoot: context.paths.artifactsDir,
+          artifactFile,
+          manifest,
+          outputRoot: context.paths.outputRoot,
+          repositoryRoot: context.paths.repositoryRoot,
+        })
+        return { manifest, published }
+      },
+      { allowDirty: context.request.channel === "dev" },
+    )
     const manifest = finalized.manifest
     const published = finalized.published
     console.log(`产物：${published.artifact}`)

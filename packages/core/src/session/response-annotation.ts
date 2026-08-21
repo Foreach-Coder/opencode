@@ -1,5 +1,7 @@
 export const ANNOTATION_METADATA_KEY = "bluedcodeResponseAnnotations"
 
+export const RESPONSE_ANNOTATION_OUTPUT_CONTRACT = `For each annotation item with index N, output :bluedcode-annotation{index="N"} immediately before the sentence or paragraph that answers its comment about the selected text. Every input index must appear exactly once. Keep the marker as plain text outside code fences, inline code, links, and quotations.`
+
 export type AnnotationSegment = {
   projectionStart: number
   projectionEnd: number
@@ -43,116 +45,89 @@ export type DirectiveParseResult = {
   pending: string | undefined
 }
 
-type ProjectionBuilder = {
-  text: string
-  segments: AnnotationSegment[]
-  append: (text: string, sourceStart: number, sourceEnd: number) => void
-}
-
-/**
- * Produces the readable subset of the Markdown used by response annotations.
- * This deliberately small token walk covers the CommonMark structures emitted
- * by the conversation renderer: headings, paragraphs, code, lists, links,
- * emphasis, and GitHub-style tables.
- */
 export function projectAnnotationText(markdown: string): AnnotationProjection {
   const source = markdown.replace(/\r\n?/g, "\n")
-  const lines = source.split("\n")
-  const offsets = lines.reduce<number[]>((result, line, index) => {
-    result.push(index === 0 ? 0 : result[index - 1]! + Array.from(lines[index - 1]!).length + 1)
-    return result
-  }, [])
-  const builder = projectionBuilder()
-  const blocks: Array<{ text: string; sourceStart: number; sourceEnd: number }> = []
-
-  for (let index = 0; index < lines.length; ) {
-    const line = lines[index]!
-    if (!line.trim()) {
-      index++
-      continue
-    }
-
-    if (/^[ \t]{0,3}(`{3,}|~{3,})/.test(line)) {
-      const start = offsets[index]!
-      const fence = line.match(/^[ \t]{0,3}(`{3,}|~{3,})/)![1]!
-      const content: string[] = []
-      index++
-      while (index < lines.length && !new RegExp(`^[ \\t]{0,3}${fence[0]}{${fence.length},}[ \\t]*$`).test(lines[index]!)) {
-        content.push(lines[index]!)
-        index++
-      }
-      const end = offsets[Math.min(index, lines.length - 1)]! + Array.from(lines[Math.min(index, lines.length - 1)]!).length
-      if (index < lines.length) index++
-      blocks.push({ text: content.join("\n"), sourceStart: start, sourceEnd: end })
-      continue
-    }
-
-    if (tableDelimiter(lines[index + 1])) {
-      const start = offsets[index]!
-      const rows = [tableCells(line)]
-      index += 2
-      while (index < lines.length && lines[index]!.includes("|") && lines[index]!.trim()) {
-        rows.push(tableCells(lines[index]!))
-        index++
-      }
-      const endLine = Math.max(index - 1, 0)
-      blocks.push({
-        text: rows.map((row) => row.join("\t")).join("\n"),
-        sourceStart: start,
-        sourceEnd: offsets[endLine]! + Array.from(lines[endLine]!).length,
-      })
-      continue
-    }
-
-    const list = line.match(/^[ \t]*(?:[-+*]|\d+[.)])[ \t]+(.*)$/)
-    if (list) {
-      const start = offsets[index]! + Array.from(line).length - Array.from(list[1]!).length
-      const items: string[] = []
-      let end = start
-      while (index < lines.length) {
-        const item = lines[index]!.match(/^[ \t]*(?:[-+*]|\d+[.)])[ \t]+(.*)$/)
-        if (!item) break
-        items.push(inlineText(item[1]!))
-        end = offsets[index]! + Array.from(lines[index]!).length
-        index++
-      }
-      blocks.push({ text: items.join("\n"), sourceStart: start, sourceEnd: end })
-      continue
-    }
-
-    const start = offsets[index]!
-    const paragraph: string[] = []
-    let end = start
-    while (index < lines.length && lines[index]!.trim()) {
-      const current = lines[index]!
-      if (paragraph.length && (/^[ \t]{0,3}(`{3,}|~{3,})/.test(current) || tableDelimiter(lines[index + 1]))) break
-      paragraph.push(inlineText(current.replace(/^[ \t]{0,3}#{1,6}[ \t]+/, "").replace(/^[ \t]{0,3}>[ \t]?/, "")))
-      end = offsets[index]! + Array.from(current).length
-      index++
-    }
-    blocks.push({ text: paragraph.join(" "), sourceStart: start, sourceEnd: end })
+  const text = projectBlocks(marked.lexer(source))
+  return {
+    text,
+    segments: text
+      ? [
+          {
+            projectionStart: 0,
+            projectionEnd: Array.from(text).length,
+            sourceStart: 0,
+            sourceEnd: Array.from(source).length,
+          },
+        ]
+      : [],
   }
+}
 
-  blocks.forEach((block, index) => {
-    if (index) builder.append("\n\n", block.sourceStart, block.sourceStart)
-    builder.append(block.text, block.sourceStart, block.sourceEnd)
-  })
-  return { text: builder.text, segments: builder.segments }
+function projectBlocks(tokens: Token[]): string {
+  return tokens
+    .flatMap((token) => {
+      if (token.type === "space" || token.type === "hr" || token.type === "def") return []
+      if (token.type === "code") return [(token as Tokens.Code).text]
+      if (token.type === "list") {
+        return [
+          (token as Tokens.List).items.map((item) => projectBlocks(item.tokens).replace(/\n{2,}/g, "\n")).join("\n"),
+        ]
+      }
+      if (token.type === "table") {
+        const table = token as Tokens.Table
+        return [
+          [table.header, ...table.rows].map((row) => row.map((cell) => inlineVisible(cell.text)).join("\t")).join("\n"),
+        ]
+      }
+      if (token.type === "blockquote") return [projectBlocks((token as Tokens.Blockquote).tokens)]
+      if (token.type === "html") return [DomUtils.textContent(parseDocument((token as Tokens.HTML).text))]
+      if ("text" in token && typeof token.text === "string") return [inlineVisible(token.text)]
+      if ("tokens" in token && Array.isArray(token.tokens)) return [projectBlocks(token.tokens)]
+      return []
+    })
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join("\n\n")
+}
+
+function inlineVisible(value: string) {
+  const html = marked.parseInline(value, { async: false })
+  if (typeof html !== "string") throw new Error("Markdown inline projection must be synchronous")
+  return DomUtils.textContent(parseDocument(html)).replace(/[ \t]*\n[ \t]*/g, " ")
 }
 
 export function digestProjection(markdown: string) {
-  const hash = new Bun.CryptoHasher("sha256")
-  hash.update(projectAnnotationText(markdown).text)
-  return `sha256:${hash.digest("hex")}`
+  return `sha256:${sha256Hex(projectAnnotationText(markdown).text)}`
 }
 
-export function sliceAnnotationContext(projection: AnnotationProjection, start: number, end: number): AnnotationContext {
+export function sliceAnnotationContext(
+  projection: AnnotationProjection,
+  start: number,
+  end: number,
+): AnnotationContext {
   const text = Array.from(projection.text)
   return {
     before: text.slice(Math.max(0, start - 160), start).join(""),
     selected: text.slice(start, end).join(""),
     after: text.slice(end, end + 160).join(""),
   }
+}
+
+export function annotationSourceMatches(
+  annotation: Pick<ResponseAnnotation, "source" | "context"> & {
+    source: ResponseAnnotation["source"] & { digest?: string }
+  },
+  markdown: string,
+) {
+  if (annotation.source.digest && digestProjection(markdown) !== annotation.source.digest) return false
+  const projection = projectAnnotationText(markdown)
+  const size = Array.from(projection.text).length
+  if (annotation.source.start < 0 || annotation.source.end <= annotation.source.start || annotation.source.end > size)
+    return false
+  return (
+    sliceAnnotationContext(projection, annotation.source.start, annotation.source.end).selected ===
+    annotation.context.selected
+  )
 }
 
 export function serializeResponseAnnotations(input: { annotations: ResponseAnnotation[]; userRequest: string }) {
@@ -173,154 +148,159 @@ export function serializeResponseAnnotations(input: { annotations: ResponseAnnot
     },
     comment: annotation.comment,
   }))
-  return `<response-annotations version="1">\n${JSON.stringify(annotations, undefined, 2)}\n</response-annotations>\n\n<user-request>\n${escapeText(input.userRequest)}\n</user-request>`
+  const payload = JSON.stringify(annotations, undefined, 2).replace(/[<>&]/g, (value) => {
+    if (value === "<") return "\\u003c"
+    if (value === ">") return "\\u003e"
+    return "\\u0026"
+  })
+  return `<response-annotation-output-contract>\n${RESPONSE_ANNOTATION_OUTPUT_CONTRACT}\n</response-annotation-output-contract>\n\n<response-annotations version="1">\n${payload}\n</response-annotations>\n\n<user-request>\n${escapeText(input.userRequest)}\n</user-request>`
 }
 
-export function parseAnnotationDirectives(markdown: string, availableIndexes: ReadonlySet<number>): DirectiveParseResult {
+export function parseAnnotationDirectives(
+  markdown: string,
+  availableIndexes: ReadonlySet<number>,
+): DirectiveParseResult {
   const references: DirectiveReference[] = []
   const seen = new Set<number>()
-  let fence: { marker: string } | undefined
-  let inlineFence = ""
-  let offset = 0
-  let pending: string | undefined
-
-  for (const line of markdown.split(/(?<=\n)/)) {
-    const body = line.endsWith("\n") ? line.slice(0, -1) : line
-    const marker = fenceMarker(body)
-    if (!fence && marker) {
-      fence = { marker }
-    } else if (fence && closesFence(body, fence.marker)) {
-      fence = undefined
-    } else if (!fence) {
-      const parsed = parseDirectiveLine(body, offset, availableIndexes, seen, references, inlineFence)
-      inlineFence = parsed.inlineFence
-      pending = parsed.pending ?? pending
-    }
-    offset += Array.from(line).length
+  const protectedRanges = markdownProtectedRanges(markdown)
+  const expression = /:bluedcode-annotation\{index="(\d+)"\}/g
+  let cursor = 0
+  let projectionOffset = 0
+  for (const match of markdown.matchAll(expression)) {
+    const start = match.index
+    const end = start + match[0].length
+    const startOffset = projectionOffset + Array.from(markdown.slice(cursor, start)).length
+    projectionOffset = startOffset + Array.from(match[0]).length
+    cursor = end
+    if (protectedRanges.some((range) => start >= range.start && start < range.end)) continue
+    const index = Number(match[1])
+    if (!availableIndexes.has(index) || seen.has(index)) continue
+    references.push({ index, start: startOffset, end: projectionOffset })
+    seen.add(index)
   }
-
+  const candidate = markdown.slice(Math.max(0, markdown.lastIndexOf(":bluedcode-annotation")))
+  const candidateStart = markdown.length - candidate.length
+  const pending =
+    directivePrefix(candidate) &&
+    !protectedRanges.some((range) => candidateStart >= range.start && candidateStart < range.end)
+      ? candidate
+      : undefined
   return { text: markdown, references, pending }
-}
-
-function fenceMarker(line: string) {
-  return line.match(/^[ \t]{0,3}(`{3,}|~{3,})[^\n]*$/)?.[1]
-}
-
-function closesFence(line: string, marker: string) {
-  return new RegExp(`^[ \\t]{0,3}${marker[0]}{${marker.length},}[ \\t]*$`).test(line.trimEnd())
-}
-
-function parseDirectiveLine(
-  line: string,
-  offset: number,
-  availableIndexes: ReadonlySet<number>,
-  seen: Set<number>,
-  references: DirectiveReference[],
-  initialInlineFence: string,
-) {
-  const chars = Array.from(line)
-  let inlineFence = initialInlineFence
-  for (let index = 0; index < chars.length; ) {
-    if (chars[index] === "`") {
-      let size = 1
-      while (chars[index + size] === "`") size++
-      const marker = "`".repeat(size)
-      inlineFence = inlineFence === marker ? "" : inlineFence || marker
-      index += size
-      continue
-    }
-    const candidate = chars.slice(index).join("")
-    const match = !inlineFence ? candidate.match(/^:bluedcode-annotation\{index="(\d+)"\}/) : undefined
-    if (match) {
-      const indexValue = Number(match[1])
-      const length = Array.from(match[0]).length
-      if (availableIndexes.has(indexValue) && !seen.has(indexValue)) {
-        references.push({ index: indexValue, start: offset + index, end: offset + index + length })
-        seen.add(indexValue)
-      }
-      index += length
-      continue
-    }
-    if (!inlineFence && directivePrefix(candidate)) return { inlineFence, pending: candidate }
-    index++
-  }
-  return { inlineFence, pending: undefined }
 }
 
 function directivePrefix(value: string) {
   return /^:bluedcode-annotation(?:\{(?:index(?:=(?:"?\d*)?)?)?)?$/.test(value)
 }
 
-function projectionBuilder(): ProjectionBuilder {
-  const builder: ProjectionBuilder = {
-    text: "",
-    segments: [],
-    append(text, sourceStart, sourceEnd) {
-      if (!text) return
-      const projectionStart = Array.from(builder.text).length
-      builder.text += text
-      builder.segments.push({ projectionStart, projectionEnd: projectionStart + Array.from(text).length, sourceStart, sourceEnd })
-    },
-  }
-  return builder
-}
+type ProtectedRange = { start: number; end: number }
 
-function tableDelimiter(line: string | undefined) {
-  return !!line && /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
-}
-
-function tableCells(line: string) {
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split("|")
-    .map((cell) => inlineText(cell.trim()))
-}
-
-function inlineText(line: string) {
-  let result = ""
-  const emphasis = new Set<string>()
-  for (let index = 0; index < line.length; ) {
-    if (line[index] === "\\" && index + 1 < line.length) {
-      result += line[index + 1]
-      index += 2
-      continue
-    }
-    if (line[index] === "`") {
-      const marker = line.slice(index).match(/^`+/)![0]!
-      const close = line.indexOf(marker, index + marker.length)
-      if (close >= 0) {
-        result += line.slice(index + marker.length, close)
-        index = close + marker.length
-        continue
-      }
-    }
-    const link = line.slice(index).match(/^!?\[([^\]]*)\]\([^)]*\)/)
-    if (link) {
-      result += inlineText(link[1]!)
-      index += link[0].length
-      continue
-    }
-    const marker = line.slice(index).match(/^(\*\*|__|~~|\*|_)/)?.[0]
-    if (marker) {
-      if (emphasis.has(marker)) {
-        emphasis.delete(marker)
-        index += marker.length
-        continue
-      }
-      if (line.indexOf(marker, index + marker.length) >= 0) {
-        emphasis.add(marker)
-        index += marker.length
-        continue
-      }
-    }
-    result += line[index]
-    index++
-  }
+function markdownProtectedRanges(markdown: string) {
+  const result: ProtectedRange[] = []
+  collectProtected(marked.lexer(markdown), markdown, 0, result)
   return result
+}
+
+function collectProtected(tokens: Token[], source: string, base: number, result: ProtectedRange[]) {
+  let cursor = 0
+  tokens.forEach((token) => {
+    const start = source.indexOf(token.raw, cursor)
+    if (start < 0) return
+    cursor = start + token.raw.length
+    const absolute = base + start
+    if (["code", "codespan", "link", "image", "blockquote", "html", "def"].includes(token.type)) {
+      result.push({ start: absolute, end: absolute + token.raw.length })
+      return
+    }
+    nestedTokenArrays(token).forEach((children) => collectProtected(children, token.raw, absolute, result))
+  })
+}
+
+function nestedTokenArrays(token: Token): Token[][] {
+  if (token.type === "list") return (token as Tokens.List).items.map((item) => item.tokens)
+  if (token.type === "table") {
+    const table = token as Tokens.Table
+    return [...table.header, ...table.rows.flat()].map((cell) => cell.tokens)
+  }
+  if ("tokens" in token && Array.isArray(token.tokens)) return [token.tokens]
+  return []
 }
 
 function escapeText(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
+
+const SHA256_ROUND = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98,
+  0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+  0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8,
+  0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819,
+  0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+  0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+  0xc67178f2,
+])
+
+function sha256Hex(value: string) {
+  const bytes = new TextEncoder().encode(value)
+  const padded = new Uint8Array(Math.ceil((bytes.length + 9) / 64) * 64)
+  padded.set(bytes)
+  padded[bytes.length] = 0x80
+  const view = new DataView(padded.buffer)
+  view.setUint32(padded.length - 8, Math.floor(bytes.length / 0x20000000), false)
+  view.setUint32(padded.length - 4, (bytes.length * 8) >>> 0, false)
+
+  const state = new Uint32Array([
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ])
+  const words = new Uint32Array(64)
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let index = 0; index < 16; index++) words[index] = view.getUint32(offset + index * 4, false)
+    for (let index = 16; index < 64; index++) {
+      const left = words[index - 15]!
+      const right = words[index - 2]!
+      const small0 = rotateRight(left, 7) ^ rotateRight(left, 18) ^ (left >>> 3)
+      const small1 = rotateRight(right, 17) ^ rotateRight(right, 19) ^ (right >>> 10)
+      words[index] = (words[index - 16]! + small0 + words[index - 7]! + small1) >>> 0
+    }
+
+    let a = state[0]!
+    let b = state[1]!
+    let c = state[2]!
+    let d = state[3]!
+    let e = state[4]!
+    let f = state[5]!
+    let g = state[6]!
+    let h = state[7]!
+    for (let index = 0; index < 64; index++) {
+      const big1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25)
+      const choose = (e & f) ^ (~e & g)
+      const first = (h + big1 + choose + SHA256_ROUND[index]! + words[index]!) >>> 0
+      const big0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22)
+      const majority = (a & b) ^ (a & c) ^ (b & c)
+      const second = (big0 + majority) >>> 0
+      h = g
+      g = f
+      f = e
+      e = (d + first) >>> 0
+      d = c
+      c = b
+      b = a
+      a = (first + second) >>> 0
+    }
+    state[0] = (state[0]! + a) >>> 0
+    state[1] = (state[1]! + b) >>> 0
+    state[2] = (state[2]! + c) >>> 0
+    state[3] = (state[3]! + d) >>> 0
+    state[4] = (state[4]! + e) >>> 0
+    state[5] = (state[5]! + f) >>> 0
+    state[6] = (state[6]! + g) >>> 0
+    state[7] = (state[7]! + h) >>> 0
+  }
+  return Array.from(state, (word) => word.toString(16).padStart(8, "0")).join("")
+}
+
+function rotateRight(value: number, bits: number) {
+  return (value >>> bits) | (value << (32 - bits))
+}
+import { DomUtils, parseDocument } from "htmlparser2"
+import { marked, type Token, type Tokens } from "marked"

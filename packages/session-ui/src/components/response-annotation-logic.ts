@@ -7,6 +7,8 @@ export type ResponseAnnotationView = {
     selected: string
   }
   comment: string
+  invalid?: boolean
+  invalidLabel?: string
 }
 
 type Translate = (key: UiI18nKey, params?: UiI18nParams) => string
@@ -43,11 +45,7 @@ export function responseAnnotationDraftActions(
   }
 }
 
-export function responseAnnotationEditorKeyDown(
-  event: KeyboardEvent,
-  onSave: VoidFunction,
-  onCancel: VoidFunction,
-) {
+export function responseAnnotationEditorKeyDown(event: KeyboardEvent, onSave: VoidFunction, onCancel: VoidFunction) {
   if (event.isComposing || event.keyCode === 229) return
   event.stopPropagation()
   if (event.key === "Escape") {

@@ -1100,9 +1100,7 @@ export function MessageTimeline(props: {
                 data-timeline-part-id={part().id}
                 data-timeline-part-role={message().role}
                 data-timeline-part-type={part().type}
-                data-timeline-part-completed={
-                  messageCompleted(message()) ? "true" : "false"
-                }
+                data-timeline-part-completed={messageCompleted(message()) ? "true" : "false"}
               >
                 <MessagePart
                   part={part()}
@@ -1223,6 +1221,11 @@ export function MessageTimeline(props: {
               {(message) => (
                 <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
                   <div data-slot="session-turn-message-content" aria-live="off">
+                    <Show when={responseAnnotations().length > 0}>
+                      <div class="mb-2 ms-auto flex max-w-[82%] justify-end">
+                        <ResponseAnnotationHistoryList annotations={responseAnnotations()} />
+                      </div>
+                    </Show>
                     <Message
                       message={message()}
                       parts={getMsgParts(userMessageRow().userMessageID)}
@@ -1230,22 +1233,6 @@ export function MessageTimeline(props: {
                       useV2Actions={settings.general.newLayoutDesigns()}
                       comments={messageComments()}
                     />
-                    <Show when={responseAnnotations().length > 0}>
-                      <div class="mt-2 ms-auto max-w-[82%] rounded-md border border-border-weak-base bg-background-base p-2">
-                        <For each={responseAnnotations()}>
-                          {(annotation) => (
-                            <ResponseAnnotationHistoryList
-                              annotations={[annotation]}
-                              onBackToSource={
-                                annotationNavigator.available(annotation.source)
-                                  ? () => annotationNavigator.go(annotation.source)
-                                  : undefined
-                              }
-                            />
-                          )}
-                        </For>
-                      </div>
-                    </Show>
                   </div>
                 </div>
               )}
@@ -1462,11 +1449,15 @@ export function MessageTimeline(props: {
             root={listRoot}
             sessionID={id()}
             label={language.t("session.responseAnnotation.addSelection")}
+            cancelLabel={language.t("common.cancel")}
+            saveLabel={language.t("common.save")}
+            deleteLabel={language.t("common.delete")}
             getPart={(messageID, partID) => {
               const part = getMsgPart(messageID, partID)
               if (part?.type !== "text") return
               return { markdown: part.text }
             }}
+            annotations={prompt.context.responseAnnotations}
             onAdd={(draft) => {
               if (prompt.context.responseAnnotations().length >= 20) {
                 showToast({ variant: "error", title: language.t("common.requestFailed") })
@@ -1474,6 +1465,8 @@ export function MessageTimeline(props: {
               }
               prompt.context.addResponseAnnotation(draft)
             }}
+            onUpdate={(id, comment) => prompt.context.updateResponseAnnotation(id, { comment })}
+            onRemove={prompt.context.removeResponseAnnotation}
           />
         )}
       </Show>

@@ -34,7 +34,10 @@ export async function promptIntegrationCheck() {
   const controls = {
     agents: { available: [], options: [], current: "", loading: false, visible: false, select: () => undefined },
     model: {
-      selection: { current: () => undefined, variant: { current: () => undefined, list: () => [], set: () => undefined } },
+      selection: {
+        current: () => undefined,
+        variant: { current: () => undefined, list: () => [], set: () => undefined },
+      },
       paid: true,
       loading: false,
     },
@@ -106,25 +109,64 @@ export async function promptIntegrationCheck() {
   )
   const disposeV2 = render(() => <PromptInputV2Composer controller={controller} />, root.querySelector("#v2")!)
   try {
+    const submitButtons = root.querySelectorAll<HTMLButtonElement>('[data-action="prompt-submit"]')
+    check(submitButtons.length === 2, "both prompt layouts must render a submit button")
+    check(
+      [...submitButtons].every((button) => !button.disabled),
+      "response annotations must enable both submit buttons without prompt text",
+    )
+
     const buttons = root.querySelectorAll<HTMLButtonElement>('[data-component="response-annotation-composer-button"]')
     check(buttons.length === 2, "both prompt layouts must show the annotation count")
-    check([...buttons].every((button) => button.textContent === "1 annotation"), "both layouts must show the same count")
+    check(
+      [...buttons].every((button) => button.textContent === "1 annotation"),
+      "both layouts must show the same count",
+    )
+    check(
+      [...buttons].every((button) => button.querySelector('[data-component="icon"]')),
+      "both prompt layouts must show the annotation glyph",
+    )
+    check(
+      [...buttons].every(
+        (button) => button.classList.contains("bg-surface-raised-base") && !button.classList.contains("border"),
+      ),
+      "both prompt layouts must use filled annotation count pills instead of persistent borders",
+    )
     buttons.forEach((button) => button.click())
-    check(root.querySelectorAll('[data-component="response-annotation-draft-list"]').length === 2, "both layouts must show details")
+    const dialogs = document.querySelectorAll<HTMLElement>(
+      '[data-component="response-annotation-composer-popover"][role="dialog"]',
+    )
+    check(dialogs.length === 2, "both prompt layouts must show anchored annotation dialogs")
+    check(
+      [...dialogs].every((dialog) => !root.contains(dialog)),
+      "annotation dialogs must escape composer clipping",
+    )
+    check(
+      document.querySelectorAll('[data-component="response-annotation-draft-list"]').length === 2,
+      "both layouts must show details",
+    )
 
-    const v1 = root.querySelector("#v1")!
-    const v2 = root.querySelector("#v2")!
-    v1.querySelectorAll<HTMLButtonElement>('[data-slot="response-annotation-actions"] button')[0]!.click()
-    const editor = v1.querySelector<HTMLTextAreaElement>("textarea")!
+    dialogs[0]!.querySelectorAll<HTMLButtonElement>('[data-slot="response-annotation-actions"] button')[0]!.click()
+    const editor = dialogs[0]!.querySelector<HTMLTextAreaElement>("textarea")!
+    check(
+      editor.parentElement?.classList.contains("bg-surface-base") && !editor.parentElement.classList.contains("border"),
+      "prompt annotation editor must use an inset surface instead of a persistent border",
+    )
     editor.value = "updated"
     editor.dispatchEvent(new InputEvent("input", { bubbles: true }))
     editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))
     await tick()
-    check(v2.querySelector('[data-slot="response-annotation-comment"]')?.textContent === "updated", "edits must update both layouts")
+    check(
+      dialogs[1]!.querySelector('[data-slot="response-annotation-comment"]')?.textContent === "updated",
+      "edits must update both layouts",
+    )
 
-    v2.querySelectorAll<HTMLButtonElement>('[data-slot="response-annotation-actions"] button')[1]!.click()
+    dialogs[1]!.querySelectorAll<HTMLButtonElement>('[data-slot="response-annotation-actions"] button')[1]!.click()
     await tick()
-    check(root.querySelectorAll('[data-component="response-annotation-composer-button"]').length === 0, "deletes must update both layouts")
+    check(
+      root.querySelectorAll('[data-component="response-annotation-composer-button"]').length === 0,
+      "deletes must update both layouts",
+    )
   } finally {
     disposeV1()
     disposeV2()

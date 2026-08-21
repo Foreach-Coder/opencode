@@ -75,6 +75,10 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
       </Show>
       <PromptInputV2
         controller={props.controller}
+        canSubmit={() =>
+          props.controller.canSubmit() ||
+          (props.controller.state.mode === "normal" && props.controller.responseAnnotations.items().length > 0)
+        }
         borderUnderlay={props.borderUnderlay}
         class={props.class}
         variantControlVisible={!props.controller.model.loading}
@@ -116,7 +120,13 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
 
   const interaction = createPromptInputV2State()
   const mode = () => interaction[0].mode
-  const history = props.history ?? createPersistedPromptInputHistory()
+  const history =
+    props.history ??
+    createPersistedPromptInputHistory(
+      props.controls.session.id
+        ? { server: sdk().scope, directory: sdk().directory, sessionID: props.controls.session.id }
+        : undefined,
+    )
   const tabs = () => props.controls.session.tabs
   const activeFileTab = createSessionTabs({
     tabs,
@@ -142,12 +152,18 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     if (mode() === "shell") return 0
     return prompt.context.items().filter((item) => item.type === "file" && !!item.comment?.trim()).length
   })
+  const responseAnnotationCount = createMemo(() => {
+    if (mode() === "shell") return 0
+    return prompt.context.responseAnnotations().length
+  })
   const blank = createMemo(() => {
     const text = prompt
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
-    return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
+    return (
+      text.trim().length === 0 && attachments().length === 0 && commentCount() === 0 && responseAnnotationCount() === 0
+    )
   })
   const stopping = createMemo(() => working() && blank())
   const placeholder = createMemo(() =>
@@ -229,7 +245,8 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     editor: () => editor,
     queueScroll: () => requestAnimationFrame(() => editor?.scrollIntoView({ block: "nearest" })),
     promptLength,
-    addToHistory: (value, mode, annotations) => history.add(value, mode, mode === "shell" ? [] : historyComments(), annotations),
+    addToHistory: (value, mode, annotations) =>
+      history.add(value, mode, mode === "shell" ? [] : historyComments(), annotations),
     resetHistoryNavigation: () => controller.resetHistory(),
     setMode: (next) => controller.dispatch({ type: next === "shell" ? "mode.shell" : "mode.normal" }),
     setPopover: (popover) => {

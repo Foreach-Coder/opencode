@@ -105,6 +105,11 @@ export function normalizePromptHistoryEntry(entry: PromptHistoryStoredEntry): Pr
   }
 }
 
+export function promptHistoryEntryKey(entry: PromptHistoryStoredEntry) {
+  const value = normalizePromptHistoryEntry(entry)
+  return JSON.stringify({ prompt: value.prompt, comments: value.comments })
+}
+
 export function promptLength(prompt: Prompt) {
   return prompt.reduce((len, part) => len + ("content" in part ? part.content.length : 0), 0)
 }

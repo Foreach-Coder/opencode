@@ -244,6 +244,34 @@ describe("Git source certification", () => {
     await expectFailure(captureGitSourceState(dirty), /不干净/)
   })
 
+  test("dev 本地试包允许 dirty source certification 但仍认证 HEAD、index 和 content", async () => {
+    const dirty = gitFixture({
+      "status --porcelain=v1 -z --untracked-files=all": {
+        exitCode: 0,
+        stdout: " M packages/app/src/components/response-annotation-selection.tsx\0",
+        stderr: "",
+      },
+      "rev-parse --abbrev-ref HEAD": { exitCode: 0, stdout: "task-annotations\n", stderr: "" },
+      "ls-files --stage -z": { exitCode: 0, stdout: "100644 abc 0\ttracked.ts\0", stderr: "" },
+      [`ls-tree -r -z --full-tree ${commit}`]: {
+        exitCode: 0,
+        stdout: "100644 blob abc\ttracked.ts\0",
+        stderr: "",
+      },
+    })
+
+    await expect(captureGitSourceState(dirty, { allowDirty: true })).resolves.toMatchObject({
+      branch: "task-annotations",
+      head: commit,
+    })
+
+    for (const changed of ["head", "index", "content"] as const) {
+      const git = sourceSequenceGit(changed)
+      const before = await captureGitSourceState(git, { allowDirty: true })
+      await expectFailure(recertifyGitSource(git, before, { allowDirty: true }), /HEAD|index|content|内容/)
+    }
+  })
+
   test("注入 Git fixture 时 post-build recertification 拒绝 checkout、tracked 改写与 dirty", async () => {
     for (const changed of ["head", "index", "content", "dirty"] as const) {
       const git = sourceSequenceGit(changed)

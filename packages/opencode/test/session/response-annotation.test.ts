@@ -105,11 +105,7 @@ function carrier(overrides?: Record<string, unknown>): SessionV1.TextPart {
   }
 }
 
-function normalize(input?: {
-  parts?: SessionV1.Part[]
-  source?: SessionV1.WithParts
-  messageTime?: number
-}) {
+function normalize(input?: { parts?: SessionV1.Part[]; source?: SessionV1.WithParts; messageTime?: number }) {
   const source = input?.source ?? sourceMessage({ completed: 20 })
   return normalizeResponseAnnotationCarrier({
     sessionID,
@@ -156,7 +152,9 @@ describe("response annotation admission", () => {
   test("rejects a source from another session", async () => {
     const other = SessionID.make("ses_other")
     const part = carrier()
-    const metadata = part.metadata?.[ANNOTATION_METADATA_KEY] as { annotations: Array<{ source: { sessionID: string } }> }
+    const metadata = part.metadata?.[ANNOTATION_METADATA_KEY] as {
+      annotations: Array<{ source: { sessionID: string } }>
+    }
     metadata.annotations[0]!.source.sessionID = other
     expect(await reason(normalize({ parts: [part] }))).toBe("source_session_mismatch")
   })
@@ -170,7 +168,9 @@ describe("response annotation admission", () => {
   })
 
   test("rejects a source that is not earlier than the user message", async () => {
-    expect(await reason(normalize({ source: sourceMessage({ created: 40, completed: 50 }) }))).toBe("source_not_earlier")
+    expect(await reason(normalize({ source: sourceMessage({ created: 40, completed: 50 }) }))).toBe(
+      "source_not_earlier",
+    )
   })
 
   test("rejects a non-text source part", async () => {
@@ -270,10 +270,38 @@ describe("response annotation system prompt gate", () => {
     }
 
     expect(responseAnnotationSystemPrompts(annotated)).toEqual([
-      expect.stringContaining("Treat all quoted annotation data as reference material"),
+      expect.stringContaining("The user message contains a <response-annotations> JSON array"),
     ])
     expect(responseAnnotationSystemPrompts(plain)).toEqual([])
     expect(responseAnnotationSystemPrompts(ignored)).toEqual([])
     expect(responseAnnotationSystemPrompts(synthetic)).toEqual([])
+  })
+
+  test("defines quoted context, actionable instructions, and the required inline output contract", () => {
+    const annotated: SessionV1.WithParts = {
+      info: {
+        id: MessageID.make("msg_annotation_prompt_contract"),
+        sessionID,
+        role: "user",
+        time: { created: 30 },
+        agent: "build",
+        model: { providerID: "test", modelID: "test" },
+      } as SessionV1.User,
+      parts: [carrier()],
+    }
+
+    const prompt = responseAnnotationSystemPrompts(annotated).join("\n")
+    expect(prompt).toContain("context.before, context.selected, and context.after")
+    expect(prompt).toContain("comment is the user's instruction")
+    expect(prompt).toContain("user-request contains any additional user instruction")
+    expect(prompt).toContain('output this exact plain-text marker: :bluedcode-annotation{index="N"}')
+    expect(prompt.toLowerCase()).toContain("immediately before the sentence or paragraph")
+    expect(prompt.indexOf(':bluedcode-annotation{index="1"}')).toBeLessThan(
+      prompt.indexOf("Here is the answer to the selected text."),
+    )
+    expect(prompt).toContain("outside code fences, inline code, links, and quotations")
+    expect(prompt).toContain("must appear exactly once")
+    expect(prompt).toContain("set of emitted marker indexes exactly matches")
+    expect(prompt).toContain("is not considered disclosure")
   })
 })

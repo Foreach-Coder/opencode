@@ -36,6 +36,7 @@ export type PromptInputV2Mode = "normal" | "shell"
 
 export type PromptInputV2Props = {
   controller: PromptInputV2Interaction
+  canSubmit?: () => boolean
   disabled?: boolean
   readOnly?: boolean
   borderUnderlay?: boolean
@@ -257,7 +258,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
           <PromptInputV2SubmitButton
             mode={state.mode}
             stopping={view.submit.stopping()}
-            disabled={!props.controller.canSubmit()}
+            disabled={!(props.canSubmit?.() ?? props.controller.canSubmit())}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
             onSubmit={props.controller.submit}

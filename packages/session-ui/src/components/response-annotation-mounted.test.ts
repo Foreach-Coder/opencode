@@ -39,33 +39,47 @@ afterAll(async () => {
 })
 
 describe("response annotation mounted behavior", () => {
+  const expectNoMountedUi = () => {
+    expect([...document.body.children].filter((element) => element.id !== "opencode-icon-sprite")).toEqual([])
+  }
+
   test("focuses the editor on edit", async () => {
     await checks.editorFocusCheck()
-    expect(document.body.childElementCount).toBe(0)
+    expectNoMountedUi()
   })
 
   test("opens and closes hover details without stealing focus", async () => {
     await checks.hoverInteractionCheck()
-    expect(document.body.childElementCount).toBe(0)
+    expectNoMountedUi()
   })
 
-  test("opens from an activated trigger and restores focus on Escape", async () => {
+  test("renders a link-like reference and portals complete hover details", async () => {
+    await checks.referencePresentationCheck()
+    expectNoMountedUi()
+  })
+
+  test("shows details on keyboard focus without button activation", async () => {
     await checks.keyboardInteractionCheck()
-    expect(document.body.childElementCount).toBe(0)
+    expectNoMountedUi()
+  })
+
+  test("collapses historical annotations into one count trigger", async () => {
+    await checks.historySummaryCheck()
+    expectNoMountedUi()
+  })
+
+  test("shows historical annotation details only while focused", async () => {
+    await checks.historyFocusCheck()
+    expectNoMountedUi()
   })
 
   test("does not mount ordinary fragment links or raw anchors", () => {
     checks.provenanceCheck()
-    expect(document.body.childElementCount).toBe(0)
+    expectNoMountedUi()
   })
 
-  test("forwards a reference source action to the App timeline", () => {
-    checks.sourceNavigationCheck()
-    expect(document.body.childElementCount).toBe(0)
-  })
-
-  test("hides a reference source action when the Assistant source is unavailable", () => {
-    checks.unavailableSourceNavigationCheck()
-    expect(document.body.childElementCount).toBe(0)
+  test("does not expose a click dialog or source action", () => {
+    checks.noClickActionCheck()
+    expectNoMountedUi()
   })
 })

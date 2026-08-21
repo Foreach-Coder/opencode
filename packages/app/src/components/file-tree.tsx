@@ -1,5 +1,6 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
+import { FILE_REFERENCE_DRAG_TYPE } from "@opencode-ai/session-ui/file-drag"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -156,6 +157,7 @@ const FileTreeNode = (
       draggable={local.draggable}
       onDragStart={(event: DragEvent) => {
         if (!local.draggable) return
+        event.dataTransfer?.setData(FILE_REFERENCE_DRAG_TYPE, local.node.path)
         event.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
         event.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
         if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"

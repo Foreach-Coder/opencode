@@ -10,7 +10,13 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal, type ModelSelection } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { type ContextItem, type ImageAttachmentPart, type Prompt, type ResponseAnnotationDraft, type usePrompt } from "@/context/prompt"
+import {
+  type ContextItem,
+  type ImageAttachmentPart,
+  type Prompt,
+  type ResponseAnnotationDraft,
+  type usePrompt,
+} from "@/context/prompt"
 import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
@@ -23,6 +29,7 @@ import { createPromptSubmissionState, requestContextForMode } from "./submission
 import { normalizeSessionInfo } from "@/utils/session"
 import { Event } from "@opencode-ai/schema/event"
 import { blobDataUrl } from "@/utils/draft-store"
+import { annotationSourceMatches } from "@opencode-ai/core/session/response-annotation"
 
 type PendingPrompt = {
   abort: AbortController
@@ -341,6 +348,23 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const mode = input.mode()
     const context = requestContextForMode(submission.context, mode)
     const annotations = context.flatMap((item) => (item.type === "response-annotation" ? [item.draft] : []))
+
+    const invalidAnnotation = annotations.some((annotation) => {
+      if (annotation.source.sessionID !== params.id) return true
+      const part = sync().data.part[annotation.source.messageID]?.find((item) => item.id === annotation.source.partID)
+      if (!part || part.type !== "text") return true
+      return !annotationSourceMatches(
+        {
+          source: { ...annotation.source, digest: annotation.source.partDigest },
+          context: annotation.context,
+        },
+        part.text,
+      )
+    })
+    if (invalidAnnotation) {
+      showToast({ variant: "error", title: language.t("common.requestFailed") })
+      return
+    }
 
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0 && annotations.length === 0) {
       if (input.working()) void abort()

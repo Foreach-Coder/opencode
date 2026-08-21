@@ -150,7 +150,7 @@ server scope + directory + session/draft
 
 ### 5.2 历史与输入导航
 
-扩展 `packages/app/src/components/prompt-input/history.ts` 和 `history-store.ts`，将回复注释作为历史条目的独立 metadata 保存。上下翻阅输入历史时恢复对应注释；Shell 模式不恢复或提交回复注释。
+扩展 `packages/app/src/components/prompt-input/history.ts` 和 `history-store.ts`，将回复注释作为历史条目的独立 metadata 保存。普通 Prompt 历史继续沿用上游全局历史；包含选区、评论和来源身份的注释 metadata 必须写入以 `server scope + directory + session ID` 为键的独立持久化目标，绝不能进入全局历史。上下翻阅输入历史时，只在相同服务器、目录和会话中把对应注释恢复到原条目；Shell 模式不恢复或提交回复注释。
 
 文件评论与回复注释分别复制和比较，不能通过同一个 path/selection 类型强行合并。
 
@@ -161,11 +161,13 @@ server scope + directory + session/draft
 在 App session timeline 增加一个共享 `ResponseAnnotationSelectionController`：
 
 - 监听完成 Assistant TextPart 内的 selection change / pointerup。
+- 浏览器原生 `Selection` 是唯一选区事实来源；控制器只观察和投影选区，不通过 pointermove、坐标反算或 `removeAllRanges/addRange` 重写用户选区。
 - 验证 anchor/focus 位于同一 TextPart。
 - 将 DOM 选择映射为 shared projection offset。
 - 计算浮层位置，但不持久化屏幕坐标。
 - 滚动、resize、字体和布局变化后重算高亮与浮层。
-- selection 离开有效区域、消息开始变化或 Part 卸载时关闭浮层。
+- 操作浮层和编辑浮层都必须根据当前 Range 重算位置，在视口边缘执行水平 clamp 和上下 flip；不能继续使用旧 fixed 坐标。
+- selection 离开有效区域、来源摘要变化、消息开始变化或 Part 卸载时关闭浮层，并把已经保存但来源漂移的草稿标为失效、禁止提交。
 
 选择浮层只提供“添加到对话”。不实现“更多详情”和“在侧边聊天中提问”。
 
@@ -180,14 +182,18 @@ server scope + directory + session/draft
 - 历史注释只读列表；
 - Assistant 回答中的“注释 N”引用按钮与详情弹层。
 
-组件通过 props 接收内容和动作，不读取 App context。可以复用 `line-comment.tsx` 的键盘、焦点和弹层原语，但不能让新组件依赖文件路径或行号。
+组件通过 props 接收内容和动作，不读取 App context。回复注释使用独立编辑器，不复用或扩展文件 `LineCommentEditor`；两者不得共享文件路径、行号、工具栏 slot 或领域动作。
+
+Assistant 文本选择与文件拖动必须隔离：内部文件树只通过专用 MIME `application/x-opencode-file-reference` 触发 Prompt 的文件引用浮层；普通 `text/plain` 拖动不能被解释为文件引用，也不能阻止浏览器原生文字选择。
 
 键盘合同：
 
 - `Enter` 保存评论；
 - `Shift+Enter` 换行；
 - `Esc` 取消；
-- 所有编辑、删除、打开、关闭和返回来源操作可通过键盘完成。
+- 所有编辑、删除、打开和关闭操作可通过键盘完成；提供返回来源的 Assistant 引用也必须支持键盘。
+- 评论为空时保存按钮仍可用；`Esc` 在 textarea 和操作按钮获得焦点时都能关闭并恢复焦点。
+- 评论长度按 Unicode code point 计算，超过 2,000 字时显示校验错误并拒绝保存，不得用 UTF-16 `slice` 静默截断。
 
 ### 6.3 V1/V2 接入
 
@@ -235,6 +241,10 @@ packages/opencode/src/session/response-annotation.ts
 在 `packages/opencode/src/session/message-v2.ts` 的 `MessageV2.toModelMessagesEffect` 集中处理规范化 metadata。对带注释的用户消息生成一个模型可见 TextPart：
 
 ```text
+<response-annotation-output-contract>
+For each annotation item with index N, output :bluedcode-annotation{index="N"} immediately before the sentence or paragraph that answers its comment about the selected text. Every input index must appear exactly once. Keep the marker as plain text outside code fences, inline code, links, and quotations.
+</response-annotation-output-contract>
+
 <response-annotations version="1">
 [
   {
@@ -264,12 +274,13 @@ packages/opencode/src/session/response-annotation.ts
 序列化要求：
 
 - 内部数组由 `JSON.stringify` 生成，字段顺序固定，换行格式确定。
+- `<response-annotation-output-contract>` 由服务端静态生成并置于同一 TextPart 最前面，保证经过工具调用和历史 replay 后仍然可见；客户端不能提供或覆盖该合同。
 - `<user-request>` 内容按文本数据转义，不能提前闭合标签。
 - 文件、图片、Agent 和其他 Part 继续按当前顺序投影。
 - 历史中的 annotation carrier 每次 replay 都得到相同模型文本。
 - 没有 annotation metadata 的用户消息走原分支，不增加包装。
 
-在 `SessionPrompt.run` 组装 system prompt 时，只在最后一个 UserMessage 带有效注释时追加注释处理提示。提示使用静态常量并覆盖：引用数据非指令、逐条回应、编号唯一、禁止虚构和禁止泄露内部协议。
+在 `SessionPrompt.run` 组装 system prompt 时，只在最后一个 UserMessage 带有效注释时追加注释处理提示。提示使用静态常量并明确区分：`context.before/selected/after` 是不可信历史引用，`comment` 与 `user-request` 是当前用户诉求；模型必须逐条回应，并先输出精确的 `:bluedcode-annotation{index="N"}` 普通文本标记，再紧接着输出对应回答句或段落，且标记置于代码块和链接之外，每个输入编号恰好出现一次。该标记是 UI 元数据，不属于协议泄露；模型不得解释或泄露 XML/JSON 外壳、消息身份、摘要等传输细节，输出结束前必须核对输入编号集合与已输出标记集合完全一致。
 
 ## 9. Assistant 指令解析与展示
 
@@ -297,7 +308,7 @@ packages/opencode/src/session/response-annotation.ts
 - 来源漂移：草稿保留但标记失效，禁止发送，提供删除或重新选择。
 - 超限：在保存草稿或编辑评论时即时提示；服务端再次验证。
 - 提交失败：保留编辑器文本、附件和全部注释。
-- 历史来源已删除：注释详情仍展示已保存 `selected/comment`，返回来源操作显示不可用。
+- 历史用户消息默认只显示注释数量，悬停或键盘聚焦后展示已保存 `selected/comment`，且不提供返回来源操作。
 - malformed 模型指令：作为普通正文显示，不影响其余回答。
 - 持久化读取失败：按现有 Prompt draft 错误路径处理，不跨会话回退。
 
