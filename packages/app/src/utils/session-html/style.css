@@ -216,10 +216,132 @@ h1 {
   font-size: 12px;
 }
 .question-answer {
-  background: var(--background-secondary);
+  background: var(--background-primary);
+  color: var(--font-primary);
   padding: 12px;
   border-radius: 8px;
   margin-top: 14px;
+}
+.question-answer p {
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+.user.question-message .message-body {
+  padding: 0;
+  background: var(--background-primary);
+  color: var(--font-primary);
+  border: 1px solid var(--brand);
+}
+.question-message .question-tool {
+  border: 0;
+}
+.question-message .question-answer {
+  background: var(--background-secondary);
+}
+.subagent-card {
+  min-width: 0;
+}
+.subagent-trigger {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+.subagent-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.subagent-heading > strong {
+  color: var(--brand);
+}
+.subagent-title {
+  display: block;
+  margin: 8px 0 4px;
+  font-size: 16px;
+  white-space: pre-wrap;
+}
+.subagent-dialog h4 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--font-secondary);
+}
+.subagent-type {
+  display: inline-block;
+  margin: 0;
+  color: var(--font-secondary);
+  font-size: 12px;
+}
+.subagent-hint {
+  float: right;
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--brand);
+}
+.subagent-trigger::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+.modal-open {
+  overflow: hidden;
+}
+.subagent-dialog {
+  width: min(800px, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--font-primary);
+  background: var(--background-primary);
+  overflow: hidden;
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.16);
+}
+.subagent-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.subagent-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.36);
+}
+.subagent-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.subagent-dialog-header h2 {
+  font-size: 18px;
+  line-height: 26px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.subagent-dialog-header button {
+  flex-shrink: 0;
+}
+.subagent-dialog-body {
+  padding: 4px 20px 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  overflow-wrap: anywhere;
+}
+.subagent-prompt,
+.subagent-result {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 16px;
+}
+.subagent-dialog-body > .process {
+  margin-top: 16px;
 }
 .user .muted,
 .user .process summary {

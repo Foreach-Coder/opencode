@@ -69,7 +69,6 @@ async function open(data: SessionExportData, width = 1280) {
     },
     labels: sessionHtmlLabels((key) => sessionExportChinese[key]),
     language: "zh-CN",
-    product: "BluedCode",
   })
   const file = path.join(directory, `${crypto.randomUUID()}.html`)
   await writeFile(file, html)
@@ -89,6 +88,7 @@ test("offline file renders messages, Markdown, collapsed processes and attachmen
   const { page, context, requests, errors, file } = await open(fixture)
   try {
     await expect(page.getByRole("heading", { name: "会话导出示例", exact: true })).toBeVisible()
+    await expect(page.getByText("CodeAgent / 会话记录", { exact: true })).toBeVisible()
     await expect(page.getByRole("heading", { name: "实现方案", exact: true })).toBeVisible()
     await expect(page.getByRole("table")).toContainText("内嵌 JSON")
     await expect(page.getByRole("img", { name: "设计.png" })).toBeVisible()
@@ -364,6 +364,15 @@ test("question tools show questions, options and recorded answers without openin
     await expect(page.getByRole("heading", { name: "接下来需要完成什么？", exact: true })).toBeVisible()
     await expect(page.getByText("接入工具管理器。", { exact: true })).toBeVisible()
     await expect(page.getByText("请保留 <script> 示例，支持中文。", { exact: true })).toBeVisible()
+    const answer = page
+      .getByRole("article")
+      .filter({ has: page.getByText("请保留 <script> 示例，支持中文。", { exact: true }) })
+    await expect(answer.locator(".message-meta > span")).toHaveText("用户")
+    await expect(answer.getByRole("heading", { name: "接下来需要完成什么？", exact: true })).toBeVisible()
+    await expect(answer.locator(".question-option")).toHaveCount(3)
+    await expect(page.locator(".assistant .question-tool")).toHaveCount(0)
+    await expect(answer.locator(".question-answer")).toContainText(["修复工具挂载", "请保留 <script> 示例，支持中文。"])
+    await expect(page.getByRole("article")).toHaveCount(2)
     await expect(page.locator(".question-option.selected")).toHaveCount(2)
     await expect(page.locator(".question-option.selected")).toContainText(["修复工具挂载", "补全群组实现"])
     await expect(page.getByText("完整原始工具返回值", { exact: true })).toBeHidden()
@@ -430,11 +439,344 @@ test("question snapshots distinguish waiting, empty answers, missing records and
     const card = (question: string) =>
       page.locator(".question-card").filter({ has: page.getByRole("heading", { name: question, exact: true }) })
     await expect(card("等待回答的问题")).toContainText("导出时尚未回答")
-    await expect(card("用户未填写的问题")).toContainText("（无答案）")
+    const emptyAnswer = page.getByRole("article").filter({ has: page.getByText("（无答案）", { exact: true }) })
+    await expect(emptyAnswer.locator(".message-meta > span")).toHaveText("用户")
+    await expect(emptyAnswer).toContainText("用户未填写的问题")
     await expect(card("没有答案记录的问题")).toContainText("未记录答案")
     await expect(page.getByText("用户取消了提问", { exact: true }).filter({ visible: true })).toBeVisible()
     await expect(page.getByText("保留原始异常数据", { exact: true })).toBeAttached()
     await expect(page.locator(".question-card input, .question-card button")).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("recorded question answers split assistant continuations within a message and across batches", async () => {
+  const data = structuredClone(fixture)
+  const question = (text: string, answer: string) => ({
+    type: "tool",
+    tool: "question",
+    state: {
+      status: "completed",
+      input: { questions: [{ question: text, options: [] }] },
+      metadata: { answers: [[answer]] },
+      output: "raw answer",
+      time: { start: 1789000001500, end: 1789000002000 },
+    },
+  })
+  data.messages = [
+    data.messages[0],
+    {
+      info: data.messages[1].info,
+      parts: [
+        { type: "text", text: "提问前的说明" },
+        question("先选方向？", "先修复"),
+        { type: "text", text: "按选择开始处理" },
+      ],
+    },
+    ...Array.from({ length: 39 }, (_, index) => ({
+      info: { ...data.messages[1].info, id: `continued_${index}` },
+      parts: [{ type: "text", text: `继续处理 ${index}` }],
+    })),
+    { info: { ...data.messages[1].info, id: "ask_again" }, parts: [question("是否补充文档？", "需要文档")] },
+    { info: { ...data.messages[0].info, id: "other_user" }, parts: [{ type: "text", text: "另一轮提问" }] },
+    {
+      info: { ...data.messages[1].info, id: "other_reply", parentID: "other_user" },
+      parts: [{ type: "text", text: "另一轮答复" }],
+    },
+    { info: { ...data.messages[1].info, id: "final" }, parts: [{ type: "text", text: "文档已补充" }] },
+  ] as SessionExportData["messages"]
+  const { page, context, errors } = await open(data)
+  try {
+    await expect(page.getByText("文档已补充", { exact: true })).toBeVisible()
+    await expect(page.getByRole("article").locator(".message-meta > span")).toHaveText([
+      "用户",
+      "助手",
+      "用户",
+      "助手",
+      "用户",
+      "助手",
+      "用户",
+      "助手",
+    ])
+    const before = page.getByRole("article").filter({ has: page.getByText("提问前的说明", { exact: true }) })
+    await expect(before).not.toContainText("先选方向？")
+    await expect(before).not.toContainText("按选择开始处理")
+    const middle = page.getByRole("article").filter({ has: page.getByText("按选择开始处理", { exact: true }) })
+    await expect(middle).toContainText("继续处理 38")
+    await expect(middle).not.toContainText("是否补充文档？")
+    await expect(middle).not.toContainText("文档已补充")
+    await expect(middle.locator("time")).toHaveText(new Date(1789000002000).toLocaleString("zh-CN"))
+    const response = page.getByRole("article").filter({ has: page.getByText("先修复", { exact: true }) })
+    await expect(response).toContainText("先选方向？")
+    await expect(response).toHaveClass(/user/)
+    await expect(response.locator("time")).toHaveText(new Date(1789000002000).toLocaleString("zh-CN"))
+    expect(await page.evaluate(() => JSON.parse(document.getElementById("session-data")!.textContent!))).toEqual(data)
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("subagents have visible task cards with delegation, results and accurate snapshot states", async ({}, testInfo) => {
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    ...fixture.messages[1].parts,
+    {
+      type: "tool",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: {
+          description: "分析智能体模块",
+          subagent_type: "explore",
+          prompt: "检查 singleagent 与 multiagent 模块。",
+        },
+        metadata: { sessionId: "ses_child" },
+        output:
+          '<task id="ses_child" state="completed">\n<task_result>\n## 分析结论\n\n模块分工 **明确**。\n\n```js\nconst ready = true\n```\n</task_result>\n</task>',
+      },
+    },
+    {
+      type: "tool",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: { description: "后台检查", subagent_type: "general", prompt: "检查剩余模块。", background: true },
+        metadata: { background: true },
+        output:
+          '<task id="ses_background" state="running">\n<summary>Background task started</summary>\n<task_result>\nStill working\n</task_result>\n</task>',
+      },
+    },
+    {
+      type: "tool",
+      tool: "task",
+      state: { status: "error", input: { description: "失败任务" }, error: "模型调用失败" },
+    },
+    { type: "tool", tool: "task", state: { status: "pending", input: { description: "等待任务" } } },
+    {
+      type: "tool",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: { description: "恶意文本", subagent_type: "<img onerror=alert(1)>" },
+        output: "<script>alert(1)</script>\n\n![追踪](https://example.com/tracker)",
+      },
+    },
+  ] as SessionExportData["messages"][number]["parts"]
+  const { page, context, errors, requests, file } = await open(data)
+  try {
+    const task = page.getByRole("region", { name: "分析智能体模块", exact: true })
+    await expect(task.getByRole("heading", { name: "分析结论" })).toBeHidden()
+    await expect(task.getByText("检查 singleagent 与 multiagent 模块。", { exact: true })).toBeHidden()
+    await expect(task.getByText("explore", { exact: true })).toBeVisible()
+    await expect(task.locator(".state")).toHaveText("已完成")
+    await expect(page.getByRole("region", { name: "后台检查", exact: true }).locator(".state")).toHaveText(
+      "导出时执行中",
+    )
+    await expect(page.getByRole("region", { name: "失败任务", exact: true }).locator(".state")).toHaveText("失败")
+    await expect(page.getByRole("region", { name: "等待任务", exact: true }).locator(".state")).toHaveText(
+      "导出时待执行",
+    )
+    await expect(page.getByText("# 项目说明", { exact: true })).toBeHidden()
+    await expect(task.locator(".process-body pre").filter({ hasText: '<task id="ses_child"' })).toBeHidden()
+    await expect(page.locator("main script, main [onerror], main img[src^='http']")).toHaveCount(0)
+    await writeFile(testInfo.outputPath("task-conversation.html"), await readFile(file))
+    await page.screenshot({ path: testInfo.outputPath("task-desktop.png"), fullPage: true })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.screenshot({ path: testInfo.outputPath("task-mobile.png"), fullPage: true })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    const trigger = task.getByRole("button", { name: "查看任务详情：分析智能体模块", exact: true })
+    await trigger.click()
+    const dialog = page.getByRole("dialog", { name: "分析智能体模块", exact: true })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole("heading", { name: "分析结论", exact: true })).toBeVisible()
+    await expect(dialog.getByText("检查 singleagent 与 multiagent 模块。", { exact: true })).toBeVisible()
+    await expect(dialog.getByRole("button", { name: "关闭", exact: true })).toBeFocused()
+    // file:// may deny the async clipboard API. Exercise selection-based copying
+    // inside the modal, where the rest of the document is inert.
+    await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true }))
+    await dialog.getByRole("button", { name: "复制代码", exact: true }).click()
+    await expect(dialog.getByRole("status")).toHaveText("已复制")
+    await dialog.getByText("原始输入与输出", { exact: true }).click()
+    await expect(dialog.locator("pre").filter({ hasText: '<task id="ses_child"' })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath("task-dialog-mobile.png") })
+    expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+    await page.keyboard.press("Escape")
+    await expect(dialog).toBeHidden()
+    await expect(trigger).toBeFocused()
+    await page.keyboard.press("Enter")
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click()
+    await expect(dialog).toBeHidden()
+    await trigger.click()
+    await expect(dialog).toBeVisible()
+    await page.mouse.click(2, 2)
+    await expect(dialog).toBeHidden()
+    await page.getByRole("region", { name: "失败任务", exact: true }).getByRole("button").click()
+    const failed = page.getByRole("dialog", { name: "失败任务", exact: true })
+    await expect(failed.getByText("模型调用失败", { exact: true }).filter({ visible: true })).toBeVisible()
+    await failed.getByRole("button", { name: "关闭", exact: true }).click()
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await trigger.click()
+    await expect(dialog).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath("task-dialog-desktop.png") })
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click()
+    expect(await page.evaluate(() => JSON.parse(document.getElementById("session-data")!.textContent!))).toEqual(data)
+    expect(errors).toEqual([])
+    expect(requests).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("long subagent details scroll inside the modal while its close button stays visible", async () => {
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    {
+      type: "tool",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: { description: "长任务结果", subagent_type: "explore", prompt: "检查全部模块" },
+        output: Array.from({ length: 120 }, (_, index) => `检查项 ${index + 1}：已核对。`).join("\n\n"),
+      },
+    },
+  ] as SessionExportData["messages"][number]["parts"]
+  const { page, context, errors } = await open(data, 390)
+  try {
+    const trigger = page.getByRole("button", { name: "查看任务详情：长任务结果", exact: true })
+    await trigger.click()
+    const dialog = page.getByRole("dialog", { name: "长任务结果", exact: true })
+    await expect(dialog).toBeVisible()
+    await dialog.getByText("检查项 120：已核对。", { exact: true }).scrollIntoViewIfNeeded()
+    await expect(dialog.getByRole("button", { name: "关闭", exact: true })).toBeInViewport()
+    expect(
+      await dialog
+        .locator(".subagent-dialog-body")
+        .evaluate((node) => node.scrollHeight > node.clientHeight && node.scrollTop > 0),
+    ).toBe(true)
+    expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+    await page.keyboard.press("Tab")
+    expect(await page.evaluate(() => !!document.activeElement?.closest("dialog"))).toBe(true)
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click()
+    await expect(trigger).toBeFocused()
+    await expect(page.locator("body")).not.toHaveClass(/modal-open/)
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("question boundaries and subagent cards compose into an offline conversation", async ({}, testInfo) => {
+  const data = structuredClone(fixture)
+  data.info.title = "智能体模块分析与修复"
+  data.messages[0].parts = [
+    { type: "text", text: "帮我分析 singleagent / multiagent 和 skills 模块，给出下一步建议。" },
+  ] as SessionExportData["messages"][number]["parts"]
+  data.messages[1].parts = [
+    { type: "text", text: "我会分别检查智能体模块和工具接入，再汇总建议。" },
+    {
+      type: "tool",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: {
+          description: "分析 singleagent / multiagent",
+          subagent_type: "explore",
+          prompt: "梳理单智能体与群组的调用关系，检查事件路由和会话衔接。",
+        },
+        output: "单智能体的调用路径完整。群组子类和事件路由仍需补齐，建议先明确会话交接边界。",
+      },
+    },
+    {
+      type: "tool",
+      tool: "task",
+      state: {
+        status: "completed",
+        input: {
+          description: "检查 skills 工具接入",
+          subagent_type: "explore",
+          prompt: "检查 SkillToolKit 与 AbilityManager 的注册关系。",
+        },
+        output: "SkillToolKit 的 ToolFunction 尚未完整注册到 AbilityManager，建议优先修复工具挂载。",
+      },
+    },
+    {
+      type: "tool",
+      tool: "question",
+      state: {
+        status: "completed",
+        time: { start: 1789000005000, end: 1789000020000 },
+        input: {
+          questions: [
+            {
+              header: "下一步",
+              question: "接下来先做什么？",
+              multiple: true,
+              options: [
+                { label: "修复工具挂载", description: "接通 SkillToolKit 与工具管理器。" },
+                { label: "补全群组实现", description: "完善子类、事件路由与会话交接。" },
+                { label: "补充文档", description: "整理模块职责和接入说明。" },
+              ],
+            },
+          ],
+        },
+        metadata: { answers: [["修复工具挂载", "补充文档"]] },
+        output: "用户选择：修复工具挂载、补充文档。",
+      },
+    },
+    { type: "text", text: "按你的选择，先修复工具挂载，再补充接入文档。" },
+    { type: "reasoning", text: "检查注册入口，确认工具定义与管理器接口匹配。" },
+    { type: "text", text: "### 处理结果\n\n工具挂载和接入文档已补齐，群组实现留待后续处理。" },
+  ] as SessionExportData["messages"][number]["parts"]
+  const { page, context, file, errors, requests } = await open(data)
+  try {
+    await expect(page.getByRole("heading", { name: "处理结果", exact: true })).toBeVisible()
+    await expect(page.getByRole("article").locator(".message-meta > span")).toHaveText(["用户", "助手", "用户", "助手"])
+    await expect(page.getByRole("region", { name: "检查 skills 工具接入", exact: true })).toBeVisible()
+    await expect(page.locator(".question-answer")).toContainText("补充文档")
+    await writeFile(testInfo.outputPath("cards-conversation.html"), await readFile(file))
+    await page.screenshot({ path: testInfo.outputPath("cards-desktop.png"), fullPage: true })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.screenshot({ path: testInfo.outputPath("cards-mobile.png"), fullPage: true })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    expect(errors).toEqual([])
+    expect(requests).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("unrecorded question cards sit on the user side without fabricating an answer", async () => {
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    ...["running", "pending", "completed", "error"].map((status) => ({
+      type: "tool",
+      tool: "question",
+      state: {
+        status,
+        input: { questions: [{ question: `${status} snapshot`, options: [] }] },
+        metadata: { answers: status === "completed" ? [[1]] : [["stale answer"]] },
+      },
+    })),
+    { type: "text", text: "仍在同一段助手输出中" },
+  ] as SessionExportData["messages"][number]["parts"]
+  const { page, context, errors } = await open(data)
+  try {
+    await expect(page.getByText("仍在同一段助手输出中", { exact: true })).toBeVisible()
+    await expect(page.getByRole("article").locator(".message-meta > span")).toHaveText([
+      "用户",
+      "问题",
+      "问题",
+      "问题",
+      "问题",
+      "助手",
+    ])
+    await expect(page.locator(".user .question-tool")).toHaveCount(4)
+    await expect(page.locator(".question-answer")).toHaveCount(0)
+    await expect(page.getByText("stale answer", { exact: true })).toHaveCount(0)
     expect(errors).toEqual([])
   } finally {
     await context.close()

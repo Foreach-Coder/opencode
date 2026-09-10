@@ -1,4 +1,3 @@
-import { Product } from "@foreachcode/product"
 import type { useLanguage } from "../context/language"
 import { downloadSessionBlob, type SessionExportData } from "./session-export"
 import { createSessionHtml } from "./session-html"
@@ -16,7 +15,6 @@ export function downloadSessionHtml(
     assets: { markdown, runtime, css },
     labels: sessionHtmlLabels(language.t),
     language: language.intl(),
-    product: Product.profile.identity.displayName,
   })
   downloadSessionBlob(filename, new Blob([html], { type: "text/html;charset=utf-8" }))
 }

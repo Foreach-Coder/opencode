@@ -131,6 +131,8 @@ function renderSessionExport(marked) {
   }
 
   async function copy(text) {
+    const dialog = document.querySelector("dialog[open]")
+    const feedback = dialog?.querySelector('[role="status"]') || status
     const copied = navigator.clipboard
       ? await navigator.clipboard.writeText(text).then(
           () => true,
@@ -138,17 +140,17 @@ function renderSessionExport(marked) {
         )
       : false
     if (copied) {
-      status.textContent = labels.copied
+      feedback.textContent = labels.copied
       return
     }
     const focused = document.activeElement
     const field = element("textarea", text, "clipboard-field")
-    document.body.append(field)
+    ;(dialog || document.body).append(field)
     field.select()
     try {
-      status.textContent = document.execCommand("copy") ? labels.copied : labels.copyFailed
+      feedback.textContent = document.execCommand("copy") ? labels.copied : labels.copyFailed
     } catch {
-      status.textContent = labels.copyFailed
+      feedback.textContent = labels.copyFailed
     } finally {
       field.remove()
       if (focused instanceof HTMLElement) focused.focus({ preventScroll: true })
@@ -179,7 +181,147 @@ function renderSessionExport(marked) {
     return box
   }
 
-  function partView(part, role, references) {
+  function questionSnapshot(part) {
+    const questions = part.type === "tool" && part.tool === "question" && part.state.input?.questions
+    if (
+      !Array.isArray(questions) ||
+      !questions.length ||
+      !questions.every((question) => question && typeof question.question === "string")
+    )
+      return undefined
+    return questions.map((question, index) => {
+      const recorded = part.state.status === "completed" && part.state.metadata?.answers?.[index]
+      const answer =
+        Array.isArray(recorded) && recorded.every((value) => typeof value === "string") ? recorded : undefined
+      return { question, answer }
+    })
+  }
+
+  function questionView(snapshot, state, content) {
+    const box = element("div", undefined, "question-tool")
+    const heading = element("div", undefined, "question-heading")
+    heading.append(element("strong", labels.questions), element("span", labels[state.status] || state.status, "state"))
+    box.append(heading)
+    for (const { question, answer } of snapshot) {
+      const card = element("section", undefined, "question-card")
+      if (typeof question.header === "string") card.append(element("p", question.header, "muted"))
+      card.append(element("h3", question.question))
+      const options = element("ul", undefined, "question-options")
+      for (const option of Array.isArray(question.options) ? question.options : []) {
+        if (!option || typeof option.label !== "string") continue
+        const selected = answer?.includes(option.label)
+        const item = element("li", undefined, `question-option${selected ? " selected" : ""}`)
+        item.append(element("strong", option.label))
+        if (selected) item.append(element("span", labels.selected, "selected-label"))
+        if (typeof option.description === "string") item.append(element("p", option.description))
+        options.append(item)
+      }
+      if (options.childNodes.length) card.append(options)
+      if (answer) {
+        const response = element("section", undefined, "question-answer")
+        response.append(element("strong", labels.answer))
+        for (const value of answer.length ? answer : [labels.noAnswer]) response.append(element("p", value))
+        card.append(response)
+      }
+      if (!answer)
+        card.append(
+          element(
+            "p",
+            state.status === "pending" || state.status === "running" ? labels.awaitingAnswer : labels.answerUnavailable,
+            "muted",
+          ),
+        )
+      box.append(card)
+    }
+    if (state.error) box.append(element("p", state.error, "error"))
+    box.append(details(labels.rawInputOutput, content))
+    return box
+  }
+
+  function subagentView(state, content) {
+    // Only unwrap the exact envelope produced by task. Preserve all other output
+    // as safe Markdown, and keep the complete source in the raw data disclosure.
+    const output = typeof state.output === "string" ? state.output : ""
+    const envelope = output.match(
+      /^<task id="[^"\r\n]+" state="(running|completed|error)">\r?\n(?:<summary>[^\r\n]*<\/summary>\r?\n)?<(task_result|task_error)>\r?\n([\s\S]*)\r?\n<\/\2>\r?\n<\/task>$/,
+    )
+    const background = state.metadata?.background === true || state.input?.background === true
+    const snapshotStatus =
+      state.status === "completed" ? envelope?.[1] || (background ? "running" : state.status) : state.status
+    const title =
+      typeof state.input?.description === "string" ? state.input.description : state.title || labels.subagent
+    const box = element("section", undefined, "subagent-card")
+    box.setAttribute("aria-label", title)
+    const trigger = element("button", undefined, "subagent-trigger")
+    trigger.type = "button"
+    trigger.setAttribute("aria-label", labels.viewTask.replace("{{title}}", title))
+    trigger.setAttribute("aria-haspopup", "dialog")
+    const heading = element("span", undefined, "subagent-heading")
+    heading.append(
+      element("strong", labels.subagent),
+      element("span", labels[snapshotStatus] || snapshotStatus, `state ${snapshotStatus === "error" ? "error" : ""}`),
+    )
+    if (background) heading.append(element("span", labels.background, "muted"))
+    trigger.append(heading, element("strong", title, "subagent-title"))
+    if (typeof state.input?.subagent_type === "string")
+      trigger.append(element("span", state.input.subagent_type, "subagent-type"))
+    trigger.append(element("span", labels.viewDetails, "subagent-hint"))
+    const dialog = element("dialog", undefined, "subagent-dialog")
+    dialog.setAttribute("aria-label", title)
+    const toolbar = element("div", undefined, "subagent-dialog-header")
+    const close = element("button", labels.close)
+    close.type = "button"
+    close.autofocus = true
+    close.addEventListener("click", () => dialog.close())
+    toolbar.append(element("h2", title), close)
+    const body = element("div", undefined, "subagent-dialog-body")
+    if (typeof state.input?.prompt === "string") {
+      const prompt = element("div", undefined, "subagent-prompt")
+      prompt.append(element("h4", labels.delegation), element("div", state.input.prompt, "user-text"))
+      body.append(prompt)
+    }
+    const result = element("div", undefined, "subagent-result")
+    result.append(element("h4", labels.taskResult))
+    if (output) result.append(markdown(envelope ? envelope[3] : output))
+    if (state.error) result.append(element("p", state.error, "error"))
+    if (!output && !state.error)
+      result.append(
+        element(
+          "p",
+          snapshotStatus === "pending" || snapshotStatus === "running"
+            ? labels.subagentAwaiting
+            : labels.subagentUnavailable,
+          "muted",
+        ),
+      )
+    const feedback = element("p", "", "feedback")
+    feedback.setAttribute("role", "status")
+    body.append(result, details(labels.rawInputOutput, content), feedback)
+    dialog.append(toolbar, body)
+    trigger.addEventListener("click", () => {
+      dialog.showModal()
+      document.body.classList.add("modal-open")
+    })
+    dialog.addEventListener("close", () => {
+      document.body.classList.remove("modal-open")
+      trigger.focus({ preventScroll: true })
+    })
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return
+      const bounds = dialog.getBoundingClientRect()
+      if (
+        event.clientX < bounds.left ||
+        event.clientX > bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY > bounds.bottom
+      )
+        dialog.close()
+    })
+    box.append(trigger, dialog)
+    return box
+  }
+
+  function partView(part, role, references, snapshot) {
     if (part.type === "text") {
       if (part.synthetic || part.ignored) return details(labels.details, element("pre", part.text))
       if (!part.text.trim()) return null
@@ -194,73 +336,19 @@ function renderSessionExport(marked) {
       if (state.output !== undefined) content.append(element("h3", labels.output), element("pre", state.output))
       if (state.error) content.append(element("p", state.error, "error"))
       for (const file of state.attachments || []) content.append(attachment(file))
-      const questions = state.input?.questions
-      if (
-        part.tool === "question" &&
-        Array.isArray(questions) &&
-        questions.length &&
-        questions.every((question) => question && typeof question.question === "string")
-      ) {
-        const box = element("div", undefined, "question-tool")
-        const heading = element("div", undefined, "question-heading")
-        heading.append(
-          element("strong", labels.questions),
-          element("span", labels[state.status] || state.status, "state"),
-        )
-        box.append(heading)
-        questions.forEach((question, index) => {
-          const recorded = state.status === "completed" && state.metadata?.answers?.[index]
-          const answer =
-            Array.isArray(recorded) && recorded.every((value) => typeof value === "string") ? recorded : undefined
-          const card = element("section", undefined, "question-card")
-          if (typeof question.header === "string") card.append(element("p", question.header, "muted"))
-          card.append(element("h3", question.question))
-          const options = element("ul", undefined, "question-options")
-          for (const option of Array.isArray(question.options) ? question.options : []) {
-            if (!option || typeof option.label !== "string") continue
-            const selected = answer?.includes(option.label)
-            const item = element("li", undefined, `question-option${selected ? " selected" : ""}`)
-            item.append(element("strong", option.label))
-            if (selected) item.append(element("span", labels.selected, "selected-label"))
-            if (typeof option.description === "string") item.append(element("p", option.description))
-            options.append(item)
-          }
-          if (options.childNodes.length) card.append(options)
-          const response = element("div", undefined, "question-answer")
-          response.append(element("strong", labels.answer))
-          if (answer?.length) {
-            for (const value of answer) response.append(element("p", value))
-          } else {
-            response.append(
-              element(
-                "p",
-                answer
-                  ? labels.noAnswer
-                  : state.status === "pending" || state.status === "running"
-                    ? labels.awaitingAnswer
-                    : labels.answerUnavailable,
-              ),
-            )
-          }
-          card.append(response)
-          box.append(card)
-        })
-        if (state.error) box.append(element("p", state.error, "error"))
-        box.append(details(labels.rawInputOutput, content))
-        return box
-      }
+      if (snapshot) return questionView(snapshot, state, content)
+      if (part.tool === "task") return subagentView(state, content)
       return details(state.title ? `${part.tool} · ${state.title}` : part.tool, content, state.status)
     }
     if (part.type === "step-start" || part.type === "step-finish") return null
     return details(labels.details, element("pre", JSON.stringify(part, null, 2)))
   }
 
-  function messageView(message) {
-    const role = message.info.role
+  function messageView(role, created, identity) {
     const article = element("article", undefined, `message ${role === "user" ? "user" : "assistant"}`)
     const meta = element("div", undefined, "message-meta")
-    meta.append(element("span", role === "user" ? labels.user : labels.assistant))
-    const time = date(message.info.time?.created)
+    meta.append(element("span", identity || (role === "user" ? labels.user : labels.assistant)))
+    const time = date(created)
     if (time) meta.append(element("time", time))
     article.append(meta)
     const body = element("div", undefined, "message-body")
@@ -297,7 +385,8 @@ function renderSessionExport(marked) {
     root.replaceChildren(header, messages, status)
     if (!data.messages.length) messages.append(element("p", labels.empty, "empty"))
     // A provider continuation is another message, but belongs to the same reply.
-    // Keep this map across batches; missing parent IDs must not merge unrelated records.
+    // Keep each reply's current segment and insertion point across batches.
+    // A whole question card moves to the user side and closes the segment.
     const replies = new Map()
     for (let index = 0; index < data.messages.length; index += 40) {
       const batch = document.createDocumentFragment()
@@ -305,15 +394,38 @@ function renderSessionExport(marked) {
         const message = data.messages[position]
         const presentation = metadata.presentation[position]
         const parentID = message.info.role === "assistant" && message.info.parentID
-        const existing = parentID && replies.get(parentID)
-        const view = existing || messageView(message)
-        if (!existing) {
-          batch.append(view.article)
-          if (parentID) replies.set(parentID, view)
+        const reply = (parentID && replies.get(parentID)) || { view: undefined, tail: undefined }
+        if (parentID) replies.set(parentID, reply)
+        let created = message.info.time?.created
+        function append(content) {
+          if (!reply.view) {
+            reply.view = messageView(message.info.role, created)
+            if (reply.tail) reply.tail.after(reply.view.article)
+            else batch.append(reply.view.article)
+            reply.tail = reply.view.article
+          }
+          reply.view.body.append(content)
         }
         for (const [partIndex, part] of message.parts.entries()) {
-          const content = partView(part, message.info.role, presentation.references[partIndex])
-          if (content) view.body.append(content)
+          const snapshot = questionSnapshot(part)
+          const content = partView(part, message.info.role, presentation.references[partIndex], snapshot)
+          if (snapshot && message.info.role === "assistant") {
+            const answered = snapshot.some(({ answer }) => answer !== undefined)
+            const response = messageView(
+              "user",
+              answered ? part.state.time?.end : part.state.time?.start,
+              answered ? labels.user : labels.questions,
+            )
+            response.article.classList.add("question-message")
+            response.body.append(content)
+            if (reply.tail) reply.tail.after(response.article)
+            if (!reply.tail) batch.append(response.article)
+            reply.tail = response.article
+            reply.view = undefined
+            created = part.state.time?.end
+            continue
+          }
+          if (content) append(content)
         }
         for (const annotation of presentation.annotations) {
           const card = element("section", undefined, "annotation-card")
@@ -323,10 +435,10 @@ function renderSessionExport(marked) {
             element("blockquote", annotation.context.selected),
             element("p", annotation.comment),
           )
-          view.body.append(card)
+          append(card)
         }
         if (message.info.error)
-          view.body.append(element("p", message.info.error.data?.message || message.info.error.name, "error"))
+          append(element("p", message.info.error.data?.message || message.info.error.name, "error"))
       }
       messages.append(batch)
       if (index + 40 < data.messages.length) await new Promise(requestAnimationFrame)

@@ -9,15 +9,14 @@ export function createSessionHtml(
   options: {
     assets: SessionHtmlAssets
     language: string
-    product: string
     labels: Record<string, string>
   },
 ) {
   const metadata = {
     formatVersion: 1,
-    rendererVersion: 4,
+    rendererVersion: 8,
     exportedAt: Date.now(),
-    product: options.product,
+    product: "CodeAgent",
     filename: sessionExportFilename(data.info),
     labels: options.labels,
     presentation: sessionHtmlAnnotations(data),

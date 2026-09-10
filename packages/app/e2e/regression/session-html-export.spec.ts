@@ -46,7 +46,15 @@ for (const layout of ["v1", "v2"] as const) {
       await expect(viewer.getByRole("heading", { name: fixture.expected.targetTitle, exact: true })).toBeVisible()
       const embedded = await viewer.evaluate(() => JSON.parse(document.getElementById("session-data")!.textContent!))
       expect(embedded.messages).toEqual(messages)
-      await expect(viewer.getByRole("article")).toHaveCount(messages.length)
+      // Six answered questions add user inputs. The first also has a following
+      // task call, which starts another assistant segment: seven extra articles.
+      const answers = viewer.getByRole("article").filter({ has: viewer.getByText("Proceed", { exact: true }) })
+      await expect(answers).toHaveCount(6)
+      await expect(answers.locator(".message-meta > span")).toHaveText(Array(6).fill("You"))
+      await expect(answers).toContainText(Array(6).fill("Keep sample output"))
+      await expect(answers.getByRole("heading", { name: "Use generated fixture?", exact: true })).toHaveCount(6)
+      await expect(viewer.locator(".assistant .question-tool")).toHaveCount(0)
+      await expect(viewer.getByRole("article")).toHaveCount(messages.length + 7)
     } finally {
       await offline.close()
     }
