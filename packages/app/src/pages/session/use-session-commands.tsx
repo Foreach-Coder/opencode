@@ -1,4 +1,5 @@
 import { useNavigate } from "@solidjs/router"
+import { createStore } from "solid-js/store"
 import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
@@ -13,7 +14,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { ProductCapabilities } from "@/product/capabilities"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { fetchSessionExport, saveSessionExport } from "@/utils/session-export"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
@@ -234,16 +235,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       )
   }
 
-  const exportSession = async () => {
+  const [exportState, setExportState] = createStore({ busy: false })
+  const exportSession = async (format: "json" | "html" = "json") => {
     const sessionID = params.id
-    if (!sessionID) return
+    if (!sessionID || exportState.busy) return
+    setExportState("busy", true)
     try {
       const data = await fetchSessionExport({
         sessionID,
         client: sdk().client,
       })
-      const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      const filename = await saveSessionExport(data, format, language)
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -256,6 +258,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         title: language.t("toast.session.export.failed.title"),
         description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
       })
+    } finally {
+      setExportState("busy", false)
     }
   }
 
@@ -501,8 +505,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.export"),
       description: language.t("command.session.export.description"),
       slash: "export",
-      disabled: !params.id,
-      onSelect: exportSession,
+      disabled: !params.id || exportState.busy,
+      onSelect: () => exportSession(),
+    }),
+    sessionCommand({
+      id: "session.export.html",
+      title: language.t("command.session.exportHtml"),
+      description: language.t("command.session.exportHtml.description"),
+      slash: "export-html",
+      disabled: !params.id || exportState.busy,
+      onSelect: () => exportSession("html"),
     }),
   ]
 

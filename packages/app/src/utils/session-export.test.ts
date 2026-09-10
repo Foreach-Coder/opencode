@@ -3,6 +3,10 @@ import { fetchSessionExport, sessionExportFilename } from "./session-export"
 import type { Message, Part, Session } from "@opencode-ai/sdk/v2/client"
 
 describe("sessionExportFilename", () => {
+  test("uses the requested HTML extension without changing the JSON default", () => {
+    expect(sessionExportFilename({ id: "ses_123", title: "Test Session" }, "html")).toBe("test-session.html")
+    expect(sessionExportFilename({ id: "ses_123", title: "Test Session" })).toBe("test-session.json")
+  })
   test("generates filename from title", () => {
     expect(sessionExportFilename({ id: "ses_123", title: "Clone PR in worktree from fork" })).toBe(
       "clone-pr-in-worktree-from-fork.json",

@@ -1,0 +1,63 @@
+export const sessionExportEnglish = {
+  "command.session.exportHtml": "Export HTML",
+  "command.session.exportHtml.description": "Export the full session as an offline HTML page",
+  "session.export.html.loading": "Loading conversation…",
+  "session.export.html.failed": "Unable to display this conversation.",
+  "session.export.html.javascript": "Enable JavaScript in your browser to read this conversation.",
+  "session.export.html.subtitle": "Conversation archive",
+  "session.export.html.download": "Download original JSON",
+  "session.export.html.empty": "This conversation has no messages.",
+  "session.export.html.user": "You",
+  "session.export.html.assistant": "Assistant",
+  "session.export.html.annotation": "Annotation {{index}}",
+  "session.export.html.reasoning": "Reasoning",
+  "session.export.html.input": "Input",
+  "session.export.html.output": "Output",
+  "session.export.html.attachment": "Attachment",
+  "session.export.html.unavailable": "Attachment content is not embedded in this file.",
+  "session.export.html.copy": "Copy code",
+  "session.export.html.copied": "Copied",
+  "session.export.html.copyFailed": "Copy failed. Select the text and copy it manually.",
+  "session.export.html.details": "Additional message data",
+  "session.export.html.pending": "Pending at export",
+  "session.export.html.running": "Running at export",
+  "session.export.html.completed": "Completed",
+  "session.export.html.error": "Failed",
+  "session.export.html.created": "Created",
+  "session.export.html.exported": "Exported",
+}
+
+export const sessionExportChinese = {
+  "command.session.exportHtml": "导出 HTML",
+  "command.session.exportHtml.description": "将完整会话导出为可离线阅读的 HTML 页面",
+  "session.export.html.loading": "正在加载会话…",
+  "session.export.html.failed": "无法显示此会话。",
+  "session.export.html.javascript": "请在浏览器中启用 JavaScript 以阅读此会话。",
+  "session.export.html.subtitle": "会话记录",
+  "session.export.html.download": "下载原始 JSON",
+  "session.export.html.empty": "此会话暂无消息。",
+  "session.export.html.user": "用户",
+  "session.export.html.assistant": "助手",
+  "session.export.html.annotation": "注释 {{index}}",
+  "session.export.html.reasoning": "推理记录",
+  "session.export.html.input": "输入",
+  "session.export.html.output": "输出",
+  "session.export.html.attachment": "附件",
+  "session.export.html.unavailable": "此文件未内嵌附件内容。",
+  "session.export.html.copy": "复制代码",
+  "session.export.html.copied": "已复制",
+  "session.export.html.copyFailed": "复制失败，请选中文字后手动复制。",
+  "session.export.html.details": "其他消息数据",
+  "session.export.html.pending": "导出时待执行",
+  "session.export.html.running": "导出时执行中",
+  "session.export.html.completed": "已完成",
+  "session.export.html.error": "失败",
+  "session.export.html.created": "创建时间",
+  "session.export.html.exported": "导出时间",
+} satisfies Record<keyof typeof sessionExportEnglish, string>
+
+// This feature ships in English and Simplified Chinese; other locales use the
+// same explicit English fallback as the shared language context.
+export function sessionExportDictionary(locale: string) {
+  return locale === "zh" ? sessionExportChinese : sessionExportEnglish
+}

@@ -54,7 +54,7 @@ import type {
 } from "@opencode-ai/sdk/v2"
 import { showToast } from "@/utils/toast"
 import { ProductCapabilities } from "@/product/capabilities"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { fetchSessionExport, saveSessionExport } from "@/utils/session-export"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
 import { normalize } from "@opencode-ai/session-ui/session-diff"
@@ -835,14 +835,16 @@ export function MessageTimeline(props: {
     navigate(`/${params.dir}/session`)
   }
 
-  const exportSession = async (sessionID: string) => {
+  const [exportState, setExportState] = createStore({ busy: false })
+  const exportSession = async (sessionID: string, format: "json" | "html" = "json") => {
+    if (exportState.busy) return
+    setExportState("busy", true)
     try {
       const data = await fetchSessionExport({
         sessionID,
         client: sdk().client,
       })
-      const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      const filename = await saveSessionExport(data, format, language)
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -855,6 +857,8 @@ export function MessageTimeline(props: {
         title: language.t("toast.session.export.failed.title"),
         description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
       })
+    } finally {
+      setExportState("busy", false)
     }
   }
 
@@ -1662,8 +1666,16 @@ export function MessageTimeline(props: {
                                     </DropdownMenu.ItemLabel>
                                   </DropdownMenu.Item>
                                 </Show>
-                                <DropdownMenu.Item onSelect={() => exportSession(id)}>
+                                <DropdownMenu.Item disabled={exportState.busy} onSelect={() => exportSession(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.export")}</DropdownMenu.ItemLabel>
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item
+                                  disabled={exportState.busy}
+                                  onSelect={() => exportSession(id, "html")}
+                                >
+                                  <DropdownMenu.ItemLabel>
+                                    {language.t("command.session.exportHtml")}
+                                  </DropdownMenu.ItemLabel>
                                 </DropdownMenu.Item>
                                 <DropdownMenu.Item onSelect={() => void archiveSession(id)}>
                                   <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
@@ -1736,8 +1748,11 @@ export function MessageTimeline(props: {
                                   {language.t("session.share.action.share")}...
                                 </MenuV2.Item>
                               </Show>
-                              <MenuV2.Item onSelect={() => exportSession(id)}>
+                              <MenuV2.Item disabled={exportState.busy} onSelect={() => exportSession(id)}>
                                 {language.t("common.export")}...
+                              </MenuV2.Item>
+                              <MenuV2.Item disabled={exportState.busy} onSelect={() => exportSession(id, "html")}>
+                                {language.t("command.session.exportHtml")}...
                               </MenuV2.Item>
                               <MenuV2.Item onSelect={() => void archiveSession(id)}>
                                 {language.t("common.archive")}

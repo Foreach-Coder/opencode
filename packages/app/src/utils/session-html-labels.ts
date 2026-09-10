@@ -1,0 +1,30 @@
+import type { sessionExportEnglish } from "../i18n/session-export"
+
+export function sessionHtmlLabels(t: (key: keyof typeof sessionExportEnglish) => string) {
+  return {
+    loading: t("session.export.html.loading"),
+    failed: t("session.export.html.failed"),
+    javascript: t("session.export.html.javascript"),
+    subtitle: t("session.export.html.subtitle"),
+    download: t("session.export.html.download"),
+    empty: t("session.export.html.empty"),
+    user: t("session.export.html.user"),
+    assistant: t("session.export.html.assistant"),
+    annotation: t("session.export.html.annotation"),
+    reasoning: t("session.export.html.reasoning"),
+    input: t("session.export.html.input"),
+    output: t("session.export.html.output"),
+    attachment: t("session.export.html.attachment"),
+    unavailable: t("session.export.html.unavailable"),
+    copy: t("session.export.html.copy"),
+    copied: t("session.export.html.copied"),
+    copyFailed: t("session.export.html.copyFailed"),
+    details: t("session.export.html.details"),
+    pending: t("session.export.html.pending"),
+    running: t("session.export.html.running"),
+    completed: t("session.export.html.completed"),
+    error: t("session.export.html.error"),
+    created: t("session.export.html.created"),
+    exported: t("session.export.html.exported"),
+  }
+}

@@ -33,7 +33,7 @@
     "tools/adapter-diff.ts": "238f11fde3a1015bce44d88c703cbf47584c6b8ff7c2beff8c9bbd622235274d",
     "tools/prepare-version.ts": "535a7058874400043131546b085ef55a72198159ae2f4a9949e0259bf2548a5f",
     "tui.json": "555066d8bdbdf2987d1312daff661a9bab1775fd9b5ae34ece9bc9dd2c0df04e",
-    "version/1.18.18/baseline.json": "6b3c2d5867874832860781daa44d3b702b545b830990083adb6822163b271323",
+    "version/1.18.18/baseline.json": "72e767c8d76cf1ca914d4c40952c49db70f64d0169e76c54ffc269415d102798",
     "version/1.18.18/baseline.ts": "5cf286a099095551a35bcc7e12f82ce89fd12cfbbcfa7ad175183cd7e4d75815",
     "version/1.18.18/electron-builder.ts": "6fe12f80e3dc449ebba5442596932ae6f9133480aefb2681452d43983891266c",
     "version/1.18.18/electron-vite.ts": "d9aa86f86eced7d3cb5327e2d5c36593148f9d5a9be7b73f107352d830d360b2",

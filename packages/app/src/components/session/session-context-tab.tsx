@@ -1,5 +1,6 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSync } from "@/context/sync"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { findLast } from "@opencode-ai/core/util/array"
@@ -13,7 +14,7 @@ import { Markdown } from "@opencode-ai/session-ui/markdown"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/utils/session-export"
+import { fetchSessionExport, saveSessionExport } from "@/utils/session-export"
 import { useLanguage } from "@/context/language"
 import { useProviders } from "@/hooks/use-providers"
 import { useSDK } from "@/context/sdk"
@@ -224,16 +225,17 @@ export function SessionContextTab() {
     { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
 
-  const exportSession = async () => {
+  const [exportState, setExportState] = createStore({ busy: false })
+  const exportSession = async (format: "json" | "html" = "json") => {
     const sessionID = params.id
-    if (!sessionID) return
+    if (!sessionID || exportState.busy) return
+    setExportState("busy", true)
     try {
       const data = await fetchSessionExport({
         sessionID,
         client: sdk().client,
       })
-      const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      const filename = await saveSessionExport(data, format, language)
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -246,6 +248,8 @@ export function SessionContextTab() {
         title: language.t("toast.session.export.failed.title"),
         description: err instanceof Error ? err.message : language.t("toast.session.export.failed.description"),
       })
+    } finally {
+      setExportState("busy", false)
     }
   }
 
@@ -357,17 +361,30 @@ export function SessionContextTab() {
         </Show>
 
         <div class="flex flex-col gap-2">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="text-12-regular text-text-weak">{language.t("context.rawMessages.title")}</div>
-            <Button
-              size="small"
-              variant="ghost"
-              class="gap-1.5 px-2 text-text-weak hover:text-text-base"
-              onClick={exportSession}
-            >
-              <Icon name="download" size="small" />
-              <span>{language.t("context.export.session")}</span>
-            </Button>
+            <div class="flex flex-wrap items-center gap-1">
+              <Button
+                size="small"
+                variant="ghost"
+                class="gap-1.5 px-2 text-text-weak hover:text-text-base"
+                disabled={exportState.busy}
+                onClick={() => exportSession()}
+              >
+                <Icon name="download" size="small" />
+                <span>{language.t("context.export.session")}</span>
+              </Button>
+              <Button
+                size="small"
+                variant="ghost"
+                class="gap-1.5 px-2 text-text-weak hover:text-text-base"
+                disabled={exportState.busy}
+                onClick={() => exportSession("html")}
+              >
+                <Icon name="download" size="small" />
+                <span>{language.t("command.session.exportHtml")}</span>
+              </Button>
+            </div>
           </div>
           <Accordion multiple>
             <For each={messages()}>

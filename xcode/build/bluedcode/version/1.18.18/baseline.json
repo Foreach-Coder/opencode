@@ -7,7 +7,7 @@
     "packages/app/src/pages/error.tsx": "2e6f142945ebe5fdd293f104b2c54dbb80b7874695e80797c4fe472546693d5f",
     "packages/app/src/pages/layout.tsx": "3f11fe23d10ddc8df162a00cc0cd6a6fac0197b198cd3af98a4cc19a9966366b",
     "packages/app/src/pages/home/home-projects-controller.tsx": "9d55d5b88cfad581868fed88d1ca5fd93f8ed9691d266c9f0f664597cd81007f",
-    "packages/app/src/pages/session/timeline/message-timeline.tsx": "3df94d1aa6262f9f4d9e6e07764e0280e74c9812b738213b6f3fe83d3ae8db80",
+    "packages/app/src/pages/session/timeline/message-timeline.tsx": "276022a867f4b1969a85c752c192e7b62c98efc746ca095d3305a21b81eaf0d5",
     "packages/app/src/components/windows-app-menu.tsx": "5990395ec7c459e23619b6033d8de1efe20bf9c611f635c42342219b3b02e178",
     "packages/app/src/components/dialog-settings.tsx": "22f9b9a60774d77960b88c092b3901006db6d2e83a21c5fbab5cc41372c20d86",
     "packages/app/src/components/settings-v2/dialog-settings-v2.tsx": "a5c2ea574ddfce129236adefa932300454bda4ec8099d15a3b9e9481fda0b20b",
