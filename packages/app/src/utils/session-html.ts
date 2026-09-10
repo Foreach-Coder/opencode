@@ -15,7 +15,7 @@ export function createSessionHtml(
 ) {
   const metadata = {
     formatVersion: 1,
-    rendererVersion: 3,
+    rendererVersion: 4,
     exportedAt: Date.now(),
     product: options.product,
     filename: sessionExportFilename(data.info),

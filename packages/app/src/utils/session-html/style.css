@@ -166,6 +166,61 @@ h1 {
   font-weight: 600;
   margin-right: 4px;
 }
+.question-tool {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px;
+}
+.question-heading {
+  display: flex;
+  align-items: center;
+  color: var(--brand);
+}
+.question-card {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.question-card h3 {
+  font-size: 15px;
+  line-height: 24px;
+  margin: 6px 0 14px;
+  white-space: pre-wrap;
+}
+.question-card p {
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+.question-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.question-option {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.question-option p {
+  color: var(--font-secondary);
+  font-size: 13px;
+}
+.question-option.selected {
+  border-color: var(--brand);
+  background: var(--brand-container);
+}
+.selected-label {
+  color: var(--brand);
+  margin-left: 10px;
+  font-size: 12px;
+}
+.question-answer {
+  background: var(--background-secondary);
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 14px;
+}
 .user .muted,
 .user .process summary {
   color: inherit;

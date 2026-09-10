@@ -194,6 +194,61 @@ function renderSessionExport(marked) {
       if (state.output !== undefined) content.append(element("h3", labels.output), element("pre", state.output))
       if (state.error) content.append(element("p", state.error, "error"))
       for (const file of state.attachments || []) content.append(attachment(file))
+      const questions = state.input?.questions
+      if (
+        part.tool === "question" &&
+        Array.isArray(questions) &&
+        questions.length &&
+        questions.every((question) => question && typeof question.question === "string")
+      ) {
+        const box = element("div", undefined, "question-tool")
+        const heading = element("div", undefined, "question-heading")
+        heading.append(
+          element("strong", labels.questions),
+          element("span", labels[state.status] || state.status, "state"),
+        )
+        box.append(heading)
+        questions.forEach((question, index) => {
+          const recorded = state.status === "completed" && state.metadata?.answers?.[index]
+          const answer =
+            Array.isArray(recorded) && recorded.every((value) => typeof value === "string") ? recorded : undefined
+          const card = element("section", undefined, "question-card")
+          if (typeof question.header === "string") card.append(element("p", question.header, "muted"))
+          card.append(element("h3", question.question))
+          const options = element("ul", undefined, "question-options")
+          for (const option of Array.isArray(question.options) ? question.options : []) {
+            if (!option || typeof option.label !== "string") continue
+            const selected = answer?.includes(option.label)
+            const item = element("li", undefined, `question-option${selected ? " selected" : ""}`)
+            item.append(element("strong", option.label))
+            if (selected) item.append(element("span", labels.selected, "selected-label"))
+            if (typeof option.description === "string") item.append(element("p", option.description))
+            options.append(item)
+          }
+          if (options.childNodes.length) card.append(options)
+          const response = element("div", undefined, "question-answer")
+          response.append(element("strong", labels.answer))
+          if (answer?.length) {
+            for (const value of answer) response.append(element("p", value))
+          } else {
+            response.append(
+              element(
+                "p",
+                answer
+                  ? labels.noAnswer
+                  : state.status === "pending" || state.status === "running"
+                    ? labels.awaitingAnswer
+                    : labels.answerUnavailable,
+              ),
+            )
+          }
+          card.append(response)
+          box.append(card)
+        })
+        if (state.error) box.append(element("p", state.error, "error"))
+        box.append(details(labels.rawInputOutput, content))
+        return box
+      }
       return details(state.title ? `${part.tool} · ${state.title}` : part.tool, content, state.status)
     }
     if (part.type === "step-start" || part.type === "step-finish") return null

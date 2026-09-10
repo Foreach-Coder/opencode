@@ -330,6 +330,117 @@ test("annotation references respect turn boundaries and keep protected or unknow
   }
 })
 
+test("question tools show questions, options and recorded answers without opening raw data", async ({}, testInfo) => {
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    {
+      type: "tool",
+      tool: "question",
+      state: {
+        status: "completed",
+        title: "Asked 2 questions",
+        input: {
+          questions: [
+            {
+              header: "下一步做什么",
+              question: "接下来需要完成什么？",
+              multiple: true,
+              options: [
+                { label: "修复工具挂载", description: "接入工具管理器。" },
+                { label: "补全群组实现", description: "实现子类和事件路由。" },
+                { label: "补充文档", description: "整理使用说明。" },
+              ],
+            },
+            { header: "补充说明", question: "有什么额外要求？", options: [] },
+          ],
+        },
+        metadata: { answers: [["修复工具挂载", "补全群组实现"], ["请保留 <script> 示例，支持中文。"]] },
+        output: "完整原始工具返回值",
+      },
+    },
+  ] as SessionExportData["messages"][number]["parts"]
+  const { page, context, errors, file } = await open(data)
+  try {
+    await expect(page.getByRole("heading", { name: "接下来需要完成什么？", exact: true })).toBeVisible()
+    await expect(page.getByText("接入工具管理器。", { exact: true })).toBeVisible()
+    await expect(page.getByText("请保留 <script> 示例，支持中文。", { exact: true })).toBeVisible()
+    await expect(page.locator(".question-option.selected")).toHaveCount(2)
+    await expect(page.locator(".question-option.selected")).toContainText(["修复工具挂载", "补全群组实现"])
+    await expect(page.getByText("完整原始工具返回值", { exact: true })).toBeHidden()
+    await writeFile(testInfo.outputPath("question-conversation.html"), await readFile(file))
+    await page.screenshot({ path: testInfo.outputPath("question-desktop.png"), fullPage: true })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.screenshot({ path: testInfo.outputPath("question-mobile.png"), fullPage: true })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await page.getByText("原始输入与输出", { exact: true }).click()
+    await expect(page.getByText("完整原始工具返回值", { exact: true })).toBeVisible()
+    expect(await page.evaluate(() => JSON.parse(document.getElementById("session-data")!.textContent!))).toEqual(data)
+    await expect(page.locator("main script")).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("question snapshots distinguish waiting, empty answers, missing records and errors", async () => {
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    {
+      type: "tool",
+      tool: "question",
+      state: { status: "running", input: { questions: [{ question: "等待回答的问题", options: [] }] } },
+    },
+    {
+      type: "tool",
+      tool: "question",
+      state: {
+        status: "completed",
+        input: { questions: [{ question: "用户未填写的问题", options: [] }] },
+        metadata: { answers: [[]] },
+        output: "Unanswered",
+      },
+    },
+    {
+      type: "tool",
+      tool: "question",
+      state: {
+        status: "completed",
+        input: { questions: [{ question: "没有答案记录的问题", options: [] }] },
+        metadata: {},
+        output: "legacy output",
+      },
+    },
+    {
+      type: "tool",
+      tool: "question",
+      state: {
+        status: "error",
+        input: { questions: [{ question: "已取消的问题", options: [] }] },
+        error: "用户取消了提问",
+      },
+    },
+    {
+      type: "tool",
+      tool: "question",
+      state: { status: "completed", input: { questions: "invalid" }, output: "保留原始异常数据" },
+    },
+  ] as SessionExportData["messages"][number]["parts"]
+  const { page, context, errors } = await open(data)
+  try {
+    const card = (question: string) =>
+      page.locator(".question-card").filter({ has: page.getByRole("heading", { name: question, exact: true }) })
+    await expect(card("等待回答的问题")).toContainText("导出时尚未回答")
+    await expect(card("用户未填写的问题")).toContainText("（无答案）")
+    await expect(card("没有答案记录的问题")).toContainText("未记录答案")
+    await expect(page.getByText("用户取消了提问", { exact: true }).filter({ visible: true })).toBeVisible()
+    await expect(page.getByText("保留原始异常数据", { exact: true })).toBeAttached()
+    await expect(page.locator(".question-card input, .question-card button")).toHaveCount(0)
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
 test("untrusted text cannot execute HTML, navigate dangerous URLs or fetch remote images", async () => {
   const data = structuredClone(fixture)
   data.info.title = "</title><script>globalThis.injected=1</script>"
