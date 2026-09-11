@@ -4,6 +4,7 @@
 - 跨版本 spec：根仓 `docs/origin-specs/10-mermaid-diagram-rendering.md`
 - 目标基线：OpenCode `v1.18.18`
 - 实现分支：`dev-foreachcode-1.18.18`
+- 完成提交：`17f208414328eb26968dfd2afaac28f0f3e4913f`
 - 状态：功能实现及专项验收通过，准备正式发行
 
 ## 当前结构
@@ -141,7 +142,7 @@ Mermaid 生成的局部样式只允许随已知 SVG 输出保留。清理阶段�
 - SVG/CSS 正向合同针对 Mermaid `11.17.2` 的已观测输出；未来升级若新增安全标签、属性、CSS 或 keyframe，会先安全回退为源码，待独立审计后再放行。
 - Happy DOM 对 Mermaid 内部 DOMPurify 的 SVG 首子节点处理存在已记录差异，测试使用局部 compatibility seam；真实应用和导出链路均由无 shim Chromium Playwright 覆盖。
 - 其余 60 个 locale 暂使用明确英文回退；英文和简体中文提供完整本地化文案。
-- 当前状态为“功能实现及专项验收通过，准备正式发行”。完整实现提交将在本轮提交后记录到本 spec 和根仓 `ORIGIN-10` 版本实现矩阵。
+- 当前状态为“功能实现及专项验收通过，准备正式发行”。完整实现由提交 `17f208414328eb26968dfd2afaac28f0f3e4913f` 形成；根仓 `ORIGIN-10` 版本实现矩阵同步记录该提交。
 - `git status --short` 仍包含开始本需求前已存在的 ORIGIN-09 HTML 导出改动；Task 6 没有清理、覆盖或提交这些共享工作区内容。
 
 ## 参考
