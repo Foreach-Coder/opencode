@@ -1,6 +1,8 @@
 import type { SessionExportData } from "./session-export"
 import { sessionExportFilename } from "./session-export"
 import { sessionHtmlAnnotations } from "./session-html-annotations"
+import { mermaidVersion } from "@opencode-ai/session-ui/markdown-mermaid"
+import type { SessionHtmlMermaidSnapshot } from "./session-html-mermaid"
 
 export type SessionHtmlAssets = { css: string; runtime: string; markdown: string }
 
@@ -10,11 +12,12 @@ export function createSessionHtml(
     assets: SessionHtmlAssets
     language: string
     labels: Record<string, string>
+    mermaid: SessionHtmlMermaidSnapshot[]
   },
 ) {
   const metadata = {
     formatVersion: 1,
-    rendererVersion: 8,
+    rendererVersion: 12,
     exportedAt: Date.now(),
     product: "CodeAgent",
     filename: sessionExportFilename(data.info),
@@ -36,6 +39,7 @@ export function createSessionHtml(
 <main id="session-root"><p role="status">${escapeHtml(options.labels.loading)}</p></main>
 <noscript>${escapeHtml(options.labels.javascript)}</noscript>
 <script id="session-data" type="application/json">${embeddedJson(data)}</script>
+<script id="mermaid-snapshots" type="application/json">${embeddedJson({ formatVersion: 1, mermaidVersion, snapshots: options.mermaid })}</script>
 <script id="export-metadata" type="application/json">${embeddedJson(metadata)}</script>
 <script type="module" src="${escapeHtml(moduleUrl(runtime))}"></script>
 </body>

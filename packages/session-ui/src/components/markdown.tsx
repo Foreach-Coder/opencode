@@ -35,6 +35,13 @@ import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { annotationDirectiveMarkdown, annotationDirectiveToken } from "./message-annotation"
 import type { ResponseAnnotation } from "@opencode-ai/core/session/response-annotation"
 import { AnnotationReferenceMounts } from "./annotation-reference-mounts"
+import { useTheme } from "@opencode-ai/ui/theme"
+import {
+  MarkdownMermaidMounts,
+  mountCompletedMarkdownMermaid,
+  mountStreamingMarkdownMermaid,
+  type MermaidLabels,
+} from "./markdown-mermaid-mounts"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -42,9 +49,11 @@ type RenderedBlock =
       key: string
       mode: "code"
       raw: string
+      source: string
       hash: string
       language: string
       complete: boolean
+      fenceClosed?: boolean
       generation: number
       stable: MarkdownToken[]
       unstable: MarkdownToken[]
@@ -387,8 +396,10 @@ export function Markdown(
     "classList",
   ])
   const i18n = useI18n()
+  const theme = useTheme()
   const annotationToken = annotationDirectiveToken()
   const annotationMounts = new AnnotationReferenceMounts()
+  const mermaidMounts = new MarkdownMermaidMounts()
   const renderText = () =>
     annotationDirectiveMarkdown(
       local.text,
@@ -466,8 +477,10 @@ export function Markdown(
               key: blockKey,
               mode: block.mode,
               raw: block.raw,
+              source: block.src,
               hash: String(block.raw.length),
               complete: !!block.complete,
+              fenceClosed: block.fenceClosed,
               ...result,
             }
             if (block.complete) completedCode.set(blockKey, rendered)
@@ -525,7 +538,7 @@ export function Markdown(
     if (!container) return
     if (isServer) return
     if (content.length === 0) {
-      disposeCopyButtons(container)
+      mermaidMounts.clear(container, disposeCopyButtons)
       annotationMounts.clear(container)
       container.innerHTML = ""
       return
@@ -535,6 +548,16 @@ export function Markdown(
       copy: i18n.t("ui.message.copy"),
       copied: i18n.t("ui.message.copied"),
     }
+    const mermaidLabels: MermaidLabels = {
+      diagram: i18n.t("ui.markdown.mermaid.diagram"),
+      copySource: i18n.t("ui.markdown.mermaid.copySource"),
+      copied: i18n.t("ui.message.copied"),
+      failed: i18n.t("ui.markdown.mermaid.failed"),
+      zoomOut: i18n.t("ui.markdown.mermaid.zoomOut"),
+      resetZoom: i18n.t("ui.markdown.mermaid.resetZoom"),
+      zoomIn: i18n.t("ui.markdown.mermaid.zoomIn"),
+    }
+    const mermaidTheme = theme.mode()
     const nextCodeKeys = new Set(content.filter((block) => block.mode === "code").map((block) => block.key))
     activeCodeKeys.forEach((key) => {
       if (!nextCodeKeys.has(key)) disposeCode(key)
@@ -547,6 +570,9 @@ export function Markdown(
         index,
         block,
         labels,
+        mermaidLabels,
+        mermaidTheme,
+        mermaidMounts,
         local.annotations ?? [],
         annotationToken,
         annotationMounts,
@@ -557,7 +583,7 @@ export function Markdown(
     while (container.children.length > content.length) {
       const child = container.lastElementChild
       if (!child) break
-      disposeCopyButtons(child)
+      mermaidMounts.clear(child, disposeCopyButtons)
       annotationMounts.clear(child)
       child.remove()
     }
@@ -572,9 +598,10 @@ export function Markdown(
   })
 
   onCleanup(() => {
-    if (copyCleanup) copyCleanup()
     const container = root()
     if (container) annotationMounts.clear(container)
+    if (container) mermaidMounts.clear(container)
+    if (copyCleanup) copyCleanup()
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
@@ -613,9 +640,11 @@ function pendingBlocks(
       key,
       mode: block.mode,
       raw: block.raw,
+      source: block.src,
       hash: String(block.raw.length),
       language: block.language ?? "text",
       complete: !!block.complete,
+      fenceClosed: block.fenceClosed,
       stable: [],
       generation: 0,
       unstable: [[block.src, ""] as MarkdownToken],
@@ -632,6 +661,9 @@ function updateBlock(
   index: number,
   block: RenderedBlock,
   labels: CopyLabels,
+  mermaidLabels: MermaidLabels,
+  mermaidTheme: "light" | "dark",
+  mermaidMounts: MarkdownMermaidMounts,
   annotations: ResponseAnnotation[],
   annotationToken: string,
   annotationMounts: AnnotationReferenceMounts,
@@ -641,15 +673,30 @@ function updateBlock(
   const current = container.children[index]
   if (block.mode === "code") {
     if (current instanceof Element) annotationMounts.clear(current)
+    if (current instanceof Element) mermaidMounts.clear(current)
     updateCodeBlock(container, current, block, labels)
+    const host = container.children[index]
+    if (host instanceof HTMLElement)
+      mountStreamingMarkdownMermaid(mermaidMounts, {
+        host,
+        source: block.source,
+        language: block.language,
+        complete: block.complete,
+        fenceClosed: block.fenceClosed,
+        theme: mermaidTheme,
+        labels: mermaidLabels,
+      })
     return
   }
   if (
     current instanceof HTMLDivElement &&
     current.dataset.markdownKey === block.key &&
     current.dataset.markdownHash === block.hash
-  )
+  ) {
+    mermaidMounts.clear(current)
+    mountFullMermaid(current, block.raw, labels, mermaidLabels, mermaidTheme, mermaidMounts)
     return
+  }
 
   const next = document.createElement("div")
   next.dataset.markdownBlock = ""
@@ -657,6 +704,7 @@ function updateBlock(
   next.dataset.markdownHash = block.hash
   next.style.display = "contents"
   next.innerHTML = block.html
+  const mermaid = mountFullMermaid(next, block.raw, labels, mermaidLabels, mermaidTheme, mermaidMounts)
   decorate(next, labels)
 
   if (!(current instanceof HTMLDivElement)) {
@@ -671,7 +719,22 @@ function updateBlock(
     return
   }
 
+  if (mermaid > 0) {
+    annotationMounts.clear(current)
+    mermaidMounts.clear(current, disposeCopyButtons)
+    current.replaceWith(next)
+    annotationMounts.mount(
+      next,
+      annotations,
+      annotationToken,
+      onResponseAnnotationSource,
+      responseAnnotationSourceAvailable,
+    )
+    return
+  }
+
   annotationMounts.clear(current)
+  mermaidMounts.clear(current)
   morphdom(current, next, {
     onBeforeElUpdated: (fromEl, toEl) => {
       if (
@@ -699,6 +762,27 @@ function updateBlock(
     onResponseAnnotationSource,
     responseAnnotationSourceAvailable,
   )
+}
+
+function mountFullMermaid(
+  root: HTMLDivElement,
+  markdown: string,
+  copyLabels: CopyLabels,
+  mermaidLabels: MermaidLabels,
+  theme: "light" | "dark",
+  mounts: MarkdownMermaidMounts,
+) {
+  return mountCompletedMarkdownMermaid(mounts, {
+    root,
+    markdown,
+    theme,
+    labels: mermaidLabels,
+    prepare(pre) {
+      ensureCodeWrapper(pre, copyLabels)
+      const wrapper = pre.closest('[data-component="markdown-code"]')
+      return wrapper instanceof HTMLElement ? wrapper : undefined
+    },
+  })
 }
 
 function updateCodeBlock(

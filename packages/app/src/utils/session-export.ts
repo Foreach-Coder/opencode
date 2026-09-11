@@ -68,7 +68,7 @@ export async function saveSessionExport(
     return filename
   }
   const { downloadSessionHtml } = await import("./session-html-download")
-  downloadSessionHtml(filename, data, language)
+  await downloadSessionHtml(filename, data, language)
   return filename
 }
 

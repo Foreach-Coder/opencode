@@ -124,6 +124,7 @@ export async function setupTimeline(
     pageMessages: () => ({
       items: messages,
     }),
+    fileList: () => [],
   })
   await page.addInitScript((settings) => {
     localStorage.setItem(

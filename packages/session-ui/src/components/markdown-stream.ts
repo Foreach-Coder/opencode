@@ -8,6 +8,7 @@ export type Block = {
   mode: "full" | "live" | "code"
   language?: string
   complete?: boolean
+  fenceClosed?: boolean
 }
 
 export type Projection = {
@@ -40,6 +41,23 @@ function open(raw: string) {
   return !new RegExp(`^[\\t ]{0,3}${char}{${size},}[\\t ]*$`).test(last)
 }
 
+export function markdownFenceClosed(raw: string) {
+  if (!/^[ \t]{0,3}(`{3,}|~{3,})/.test(raw)) return undefined
+  return !open(raw)
+}
+
+function codeBlock(raw: string, src: string, code: Tokens.Code, complete?: boolean): Block {
+  const closed = markdownFenceClosed(code.raw)
+  return {
+    raw,
+    src,
+    mode: "code",
+    language: language(code.lang),
+    ...(complete ? { complete: true } : {}),
+    ...(closed === undefined ? {} : { fenceClosed: closed }),
+  }
+}
+
 function closesFence(raw: string, suffix: string) {
   const mark = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})/)?.[1]
   if (!mark) return suffix.includes("```") || suffix.includes("~~~")
@@ -67,7 +85,7 @@ export function stream(text: string, live: boolean): Block[] {
     while (tokens[index + 1]?.type === "space" && index + 1 < tail) raw += tokens[++index]!.raw
     if (token.type === "code") {
       const code = token as Tokens.Code
-      result.push({ raw, src: code.text, mode: "code", language: language(code.lang), complete: true })
+      result.push(codeBlock(raw, code.text, code, true))
       continue
     }
     result.push({ raw, src: raw, mode: "full" })
@@ -80,9 +98,8 @@ export function stream(text: string, live: boolean): Block[] {
   if (last.type !== "code") return [...result, { raw, src: heal(raw), mode: "live" }]
 
   const code = last as Tokens.Code
-  if (!open(code.raw))
-    return [...result, { raw, src: code.text, mode: "code", language: language(code.lang), complete: true }]
-  return [...result, { raw, src: openCode(code.raw), mode: "code", language: language(code.lang) }]
+  if (!open(code.raw)) return [...result, codeBlock(raw, code.text, code, true)]
+  return [...result, codeBlock(raw, openCode(code.raw), code)]
 }
 
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {

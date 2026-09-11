@@ -221,6 +221,12 @@ export const dict: Record<string, string> = {
   "ui.message.interrupted": "Interrupted",
   "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
+  "ui.markdown.mermaid.diagram": "Mermaid diagram",
+  "ui.markdown.mermaid.copySource": "Copy Mermaid source",
+  "ui.markdown.mermaid.failed": "Unable to render Mermaid diagram",
+  "ui.markdown.mermaid.zoomOut": "Zoom out",
+  "ui.markdown.mermaid.resetZoom": "Reset zoom",
+  "ui.markdown.mermaid.zoomIn": "Zoom in",
 
   "ui.patch.action.deleted": "Deleted",
   "ui.patch.action.created": "Created",

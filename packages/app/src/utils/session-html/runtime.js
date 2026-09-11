@@ -4,9 +4,27 @@ function renderSessionExport(marked) {
   const root = document.getElementById("session-root")
   const data = JSON.parse(document.getElementById("session-data").textContent)
   const metadata = JSON.parse(document.getElementById("export-metadata").textContent)
+  const mermaidData = JSON.parse(document.getElementById("mermaid-snapshots").textContent)
   const labels = metadata.labels
+  const mermaidSnapshots = new Map()
+  for (const snapshot of Array.isArray(mermaidData.snapshots) ? mermaidData.snapshots : []) {
+    if (!snapshot || typeof snapshot.key !== "string" || typeof snapshot.source !== "string") continue
+    const records = mermaidSnapshots.get(snapshot.key) || []
+    records.push(snapshot)
+    mermaidSnapshots.set(snapshot.key, records)
+  }
   const status = element("p", "", "feedback")
   status.setAttribute("role", "status")
+  let mermaidInstance = 0
+  const ariaSingleReferenceAttributes = new Set(["aria-activedescendant", "aria-errormessage"])
+  const ariaReferenceListAttributes = new Set([
+    "aria-controls",
+    "aria-describedby",
+    "aria-details",
+    "aria-flowto",
+    "aria-labelledby",
+    "aria-owns",
+  ])
 
   function element(tag, text, className) {
     const node = document.createElement(tag)
@@ -28,6 +46,422 @@ function renderSessionExport(marked) {
     return /^(?:https?:\/\/|mailto:)[^\s\u0000-\u001f\u007f]+$/i.test(value)
   }
 
+  function checksum(value) {
+    if (!value) return "0"
+    let hash = 0x811c9dc5
+    for (let index = 0; index < value.length; index++) {
+      hash ^= value.charCodeAt(index)
+      hash = Math.imul(hash, 0x01000193)
+    }
+    return (hash >>> 0).toString(36)
+  }
+
+  function mermaidKey(source) {
+    return `${mermaidData.mermaidVersion}:light:${source.length}:${checksum(source)}`
+  }
+
+  function safeMermaidSvg(source) {
+    if (typeof source !== "string") return
+    const parsed = new DOMParser().parseFromString(source, "image/svg+xml")
+    if (parsed.querySelector("parsererror")) return
+    const svg = parsed.documentElement
+    if (svg.localName !== "svg" || svg.namespaceURI !== "http://www.w3.org/2000/svg") return
+    const forbidden = new Set([
+      "a",
+      "animate",
+      "animatecolor",
+      "animatemotion",
+      "animatetransform",
+      "audio",
+      "discard",
+      "embed",
+      "foreignobject",
+      "handler",
+      "iframe",
+      "object",
+      "script",
+      "set",
+      "video",
+    ])
+    const ids = new Map()
+    for (const node of svg.querySelectorAll("*")) {
+      if (node.namespaceURI !== "http://www.w3.org/2000/svg" || forbidden.has(node.localName.toLowerCase())) return
+    }
+    for (const node of [svg, ...svg.querySelectorAll("*")]) {
+      const id = node.getAttribute("id")
+      if (id) ids.set(id, (ids.get(id) || 0) + 1)
+    }
+    if ([...ids.values()].some((count) => count !== 1)) return
+    for (const node of [svg, ...svg.querySelectorAll("*")]) {
+      for (const attribute of node.attributes) {
+        const name = attribute.name.toLowerCase()
+        const value = attribute.value
+        if (name.startsWith("on") || attribute.localName.toLowerCase() === "base") return
+        if (name === "xmlns" && value === "http://www.w3.org/2000/svg") continue
+        if (name === "xmlns:xlink" && value === "http://www.w3.org/1999/xlink") continue
+        if (name === "href" || name === "xlink:href" || name === "src") {
+          if (!/^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(value) || ids.get(value.slice(1)) !== 1) return
+        }
+        if (!safeLocalUrls(value, ids)) return
+      }
+      if (node.localName === "style" && !safeLocalUrls(node.textContent || "", ids)) return
+    }
+    return svg
+  }
+
+  function safeLocalUrls(value, ids) {
+    if (!/url\s*\(/i.test(value)) return !/(?:javascript:|data:|https?:|\/\/)/i.test(value)
+    let count = 0
+    const stripped = value.replace(/url\s*\(\s*(["']?)#([A-Za-z_][A-Za-z0-9_.:-]*)\1\s*\)/gi, (_match, _quote, id) => {
+      if (ids.get(id) !== 1) return "__invalid_mermaid_url__"
+      count++
+      return ""
+    })
+    return count > 0 && !/url\s*\(|__invalid_mermaid_url__|(?:javascript:|data:|https?:|\/\/)/i.test(stripped)
+  }
+
+  function mermaidCard(source) {
+    const records = mermaidSnapshots.get(mermaidKey(source))
+    const snapshot = records?.find((record) => record.source === source)
+    if (!snapshot || snapshot.failure || typeof snapshot.svg !== "string") return
+    const safe = safeMermaidSvg(snapshot.svg)
+    const svg = safe && instantiateMermaidSvg(safe)
+    if (!svg) return
+    const title =
+      typeof snapshot.title === "string" && snapshot.title.trim() ? snapshot.title.trim() : labels.mermaidDiagram
+    const card = element("figure", undefined, "mermaid-card")
+    card.setAttribute("aria-label", title)
+    const toolbar = element("div", undefined, "mermaid-toolbar")
+    const canvas = element("div", undefined, "mermaid-canvas")
+    const diagram = document.importNode(svg, true)
+    const width = intrinsicSvgWidth(diagram)
+    if (width) diagram.style.width = `${Math.ceil(width)}px`
+    mermaidControls(toolbar, canvas, diagram, width)
+    const button = element("button", labels.copyMermaidSource)
+    button.type = "button"
+    button.addEventListener("click", () => copy(source))
+    toolbar.append(button)
+    canvas.append(diagram)
+    card.append(toolbar, canvas)
+    return card
+  }
+
+  function mermaidControls(toolbar, canvas, diagram, width) {
+    const minimum = 0.5
+    const maximum = 2
+    const step = 0.25
+    let scale = 1
+
+    const zoomOut = element("button", "−")
+    zoomOut.type = "button"
+    zoomOut.className = "mermaid-zoom-out"
+    zoomOut.setAttribute("aria-label", labels.zoomOut)
+    zoomOut.title = labels.zoomOut
+    const resetZoom = element("button")
+    resetZoom.type = "button"
+    resetZoom.className = "mermaid-zoom-reset"
+    const zoomIn = element("button", "+")
+    zoomIn.type = "button"
+    zoomIn.className = "mermaid-zoom-in"
+    zoomIn.setAttribute("aria-label", labels.zoomIn)
+    zoomIn.title = labels.zoomIn
+
+    const update = () => {
+      const percentage = `${Math.round(scale * 100)}%`
+      diagram.style.width = width ? `${Math.ceil(width * scale)}px` : percentage
+      diagram.style.minWidth = percentage
+      diagram.style.maxWidth = "none"
+      resetZoom.textContent = percentage
+      resetZoom.setAttribute("aria-label", `${labels.resetZoom} (${percentage})`)
+      resetZoom.title = `${labels.resetZoom} (${percentage})`
+      zoomOut.disabled = scale <= minimum
+      zoomIn.disabled = scale >= maximum
+    }
+    const setScale = (next) => {
+      scale = Math.min(maximum, Math.max(minimum, next))
+      update()
+    }
+    zoomOut.addEventListener("click", () => setScale(scale - step))
+    zoomIn.addEventListener("click", () => setScale(scale + step))
+    resetZoom.addEventListener("click", () => {
+      setScale(1)
+      canvas.scrollLeft = 0
+      canvas.scrollTop = 0
+    })
+
+    let drag
+    canvas.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "touch" || event.button !== 0) return
+      if (canvas.scrollWidth <= canvas.clientWidth && canvas.scrollHeight <= canvas.clientHeight) return
+      drag = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        left: canvas.scrollLeft,
+        top: canvas.scrollTop,
+      }
+      canvas.dataset.dragging = "true"
+      canvas.setPointerCapture?.(event.pointerId)
+      event.preventDefault()
+    })
+    canvas.addEventListener("pointermove", (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return
+      canvas.scrollLeft = drag.left - (event.clientX - drag.x)
+      canvas.scrollTop = drag.top - (event.clientY - drag.y)
+    })
+    const stop = (event) => {
+      if (!drag || drag.pointerId !== event.pointerId) return
+      drag = undefined
+      delete canvas.dataset.dragging
+      if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId)
+    }
+    canvas.addEventListener("pointerup", stop)
+    canvas.addEventListener("pointercancel", stop)
+    canvas.addEventListener("lostpointercapture", stop)
+
+    toolbar.append(zoomOut, resetZoom, zoomIn)
+    update()
+  }
+
+  function instantiateMermaidSvg(svg) {
+    const ids = new Map()
+    for (const node of [svg, ...svg.querySelectorAll("[id]")]) {
+      const id = node.getAttribute("id")
+      if (id) ids.set(id, (ids.get(id) || 0) + 1)
+    }
+    if ([...ids.values()].some((count) => count !== 1)) return
+    const namespace = uniqueMermaidNamespace([...ids.keys()])
+    if (!namespace) return
+    const replacements = new Map([...ids.keys()].map((id) => [id, `${namespace}-${id}`]))
+    const keyframes = new Map()
+    for (const style of svg.querySelectorAll("style")) {
+      const blocks = cssBlocks(style.textContent || "")
+      if (!blocks) return
+      for (const block of blocks) {
+        const keyframe = block.header.match(/^@keyframes\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
+        if (keyframe) keyframes.set(keyframe[1], `${namespace}-${keyframe[1]}`)
+      }
+    }
+
+    for (const node of [svg, ...svg.querySelectorAll("*")]) {
+      const id = node.getAttribute("id")
+      if (id) node.setAttribute("id", replacements.get(id) || id)
+      if (node.localName === "style") {
+        const stylesheet = rewriteStylesheet(node.textContent || "", replacements, keyframes)
+        if (stylesheet === undefined) return
+        node.textContent = stylesheet
+      }
+      for (const attribute of node.attributes) {
+        const name = attribute.name.toLowerCase()
+        const localName = attribute.localName.toLowerCase()
+        if (localName === "href" || name === "src") {
+          const replacement = replacements.get(attribute.value.slice(1))
+          if (!replacement) return
+          attribute.value = `#${replacement}`
+          continue
+        }
+        if (ariaSingleReferenceAttributes.has(name)) {
+          const replacement = replacements.get(attribute.value)
+          if (!replacement) return
+          attribute.value = replacement
+          continue
+        }
+        if (ariaReferenceListAttributes.has(name)) {
+          const rewritten = attribute.value
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((reference) => replacements.get(reference))
+          if (rewritten.some((reference) => !reference)) return
+          attribute.value = rewritten.join(" ")
+          continue
+        }
+        if (name === "style") {
+          const declarations = rewriteDeclarations(attribute.value, replacements, keyframes)
+          if (declarations === undefined) return
+          attribute.value = declarations
+          continue
+        }
+        attribute.value = rewriteLocalUrls(attribute.value, replacements)
+      }
+    }
+
+    return safeMermaidSvg(new XMLSerializer().serializeToString(svg))
+  }
+
+  function uniqueMermaidNamespace(ids) {
+    for (let attempt = 0; attempt < 1_000; attempt++) {
+      const namespace = `codeagent-mermaid-${(++mermaidInstance).toString(36)}`
+      if (!ids.some((id) => document.getElementById(`${namespace}-${id}`))) return namespace
+    }
+  }
+
+  function rewriteStylesheet(css, ids, keyframes) {
+    const blocks = cssBlocks(css)
+    if (!blocks) return
+    const rewritten = []
+    for (const block of blocks) {
+      const keyframe = block.header.match(/^@keyframes\s+([A-Za-z_][A-Za-z0-9_-]*)$/i)
+      if (keyframe) {
+        const frames = cssBlocks(block.body)
+        const name = keyframes.get(keyframe[1])
+        if (!frames || !name) return
+        const body = frames.map((frame) => {
+          const declarations = rewriteDeclarations(frame.body, ids, keyframes)
+          return declarations === undefined ? undefined : `${frame.header}{${declarations}}`
+        })
+        if (body.some((frame) => frame === undefined)) return
+        rewritten.push(`@keyframes ${name}{${body.join("")}}`)
+        continue
+      }
+      const header = block.header.replace(/#([A-Za-z_][A-Za-z0-9_-]*)/g, (match, id) => {
+        const replacement = ids.get(id)
+        return replacement ? `#${replacement}` : match
+      })
+      const declarations = rewriteDeclarations(block.body, ids, keyframes)
+      if (declarations === undefined) return
+      rewritten.push(`${header}{${declarations}}`)
+    }
+    return rewritten.join("")
+  }
+
+  function rewriteDeclarations(css, ids, keyframes) {
+    const declarations = cssDeclarations(css)
+    if (!declarations) return
+    return declarations
+      .map(({ property, value }) => {
+        let rewritten = rewriteLocalUrls(value, ids)
+        if (property === "animation" || property === "animation-name") {
+          for (const [name, replacement] of keyframes)
+            rewritten = rewritten.replace(
+              new RegExp(`(^|[^A-Za-z0-9_-])${name}(?=$|[^A-Za-z0-9_-])`, "g"),
+              `$1${replacement}`,
+            )
+        }
+        return `${property}:${rewritten}`
+      })
+      .join(";")
+  }
+
+  function rewriteLocalUrls(value, ids) {
+    return value.replace(/\burl\s*\(\s*(["']?)#([A-Za-z_][A-Za-z0-9_.:-]*)\1\s*\)/gi, (match, _quote, id) => {
+      const replacement = ids.get(id)
+      return replacement ? `url(#${replacement})` : match
+    })
+  }
+
+  function cssDeclarations(css) {
+    if (/[{}@]/.test(css)) return
+    const parts = splitCss(css, ";")
+    if (!parts) return
+    const declarations = []
+    for (const part of parts) {
+      const value = part.trim()
+      if (!value) continue
+      const match = value.match(/^([-A-Za-z][\w-]*)\s*:\s*(.+)$/s)
+      if (!match) return
+      declarations.push({ property: match[1].toLowerCase(), value: match[2].trim() })
+    }
+    return declarations
+  }
+
+  function splitCss(value, separator) {
+    const parts = []
+    let quote = ""
+    let depth = 0
+    let start = 0
+    for (let index = 0; index < value.length; index++) {
+      const character = value[index]
+      if (quote) {
+        if (character === quote) quote = ""
+        continue
+      }
+      if (character === '"' || character === "'") {
+        quote = character
+        continue
+      }
+      if (character === "(") depth++
+      if (character === ")") depth--
+      if (depth < 0) return
+      if (character !== separator || depth !== 0) continue
+      parts.push(value.slice(start, index))
+      start = index + 1
+    }
+    if (quote || depth !== 0) return
+    parts.push(value.slice(start))
+    return parts
+  }
+
+  function cssBlocks(css) {
+    const blocks = []
+    let cursor = 0
+    while (cursor < css.length) {
+      while (/\s|;/.test(css[cursor] || "")) cursor++
+      if (cursor >= css.length) break
+      const open = findCssCharacter(css, cursor, "{")
+      if (open < 0) return
+      const close = findClosingBrace(css, open)
+      if (close < 0) return
+      const header = css.slice(cursor, open).trim()
+      if (!header) return
+      blocks.push({ header, body: css.slice(open + 1, close) })
+      cursor = close + 1
+    }
+    return blocks
+  }
+
+  function findCssCharacter(css, start, target) {
+    let quote = ""
+    for (let index = start; index < css.length; index++) {
+      const character = css[index]
+      if (quote) {
+        if (character === quote) quote = ""
+        continue
+      }
+      if (character === '"' || character === "'") {
+        quote = character
+        continue
+      }
+      if (character === target) return index
+    }
+    return -1
+  }
+
+  function findClosingBrace(css, open) {
+    let depth = 0
+    let quote = ""
+    for (let index = open; index < css.length; index++) {
+      const character = css[index]
+      if (quote) {
+        if (character === quote) quote = ""
+        continue
+      }
+      if (character === '"' || character === "'") {
+        quote = character
+        continue
+      }
+      if (character === "{") depth++
+      if (character !== "}") continue
+      depth--
+      if (depth === 0) return index
+    }
+    return -1
+  }
+
+  function intrinsicSvgWidth(svg) {
+    const viewBox = svg
+      .getAttribute("viewBox")
+      ?.trim()
+      .split(/[\s,]+/)
+    const viewBoxWidth = viewBox?.length === 4 ? Number(viewBox[2]) : Number.NaN
+    if (Number.isFinite(viewBoxWidth) && viewBoxWidth > 0 && viewBoxWidth <= 20000) return viewBoxWidth
+    const width = svg
+      .getAttribute("width")
+      ?.trim()
+      .match(/^(\d+(?:\.\d*)?|\.\d+)(?:px)?$/i)
+    const intrinsic = width ? Number(width[1]) : Number.NaN
+    if (Number.isFinite(intrinsic) && intrinsic > 0 && intrinsic <= 20000) return intrinsic
+  }
+
   // Rebuild an inert parse into new DOM nodes. Never copy arbitrary attributes or
   // attach nodes from the untrusted document, including SVG and custom elements.
   function markdown(text, references = []) {
@@ -41,8 +475,19 @@ function renderSessionExport(marked) {
         `[${labels.annotation.replace("{{index}}", reference.index)}](${reference.href})`,
       )
     }
+    const source = chars.join("")
+    const tokens = marked.lexer(source, { gfm: true })
+    const codeTokens = []
+    marked.walkTokens(tokens, (token) => {
+      if (token.type === "code") codeTokens.push(token)
+    })
     const template = document.createElement("template")
-    template.innerHTML = marked.parse(chars.join(""), { async: false, gfm: true })
+    template.innerHTML = marked.parser(tokens, { async: false, gfm: true })
+    template.content.querySelectorAll("pre > code").forEach((code, index) => {
+      const token = codeTokens[index]
+      const language = token?.lang?.trim().split(/\s+/, 1)[0]?.toLowerCase()
+      if (language === "mermaid" && markdownFenceClosed(token.raw)) code.dataset.mermaid = ""
+    })
     const allowed = new Set([
       "P",
       "BR",
@@ -92,6 +537,9 @@ function renderSessionExport(marked) {
       }
       if (!allowed.has(node.tagName)) return document.createTextNode(node.textContent)
       const result = element(node.tagName.toLowerCase())
+      if (node.tagName === "CODE") {
+        if (node.hasAttribute("data-mermaid")) result.dataset.mermaid = ""
+      }
       if (node.tagName === "A") {
         const href = node.getAttribute("href") || ""
         if (references.some((reference) => reference.href === href)) {
@@ -118,16 +566,32 @@ function renderSessionExport(marked) {
     })
     body.querySelectorAll("pre").forEach((pre) => {
       const text = pre.textContent
+      const mermaid = pre.querySelector(":scope > code[data-mermaid]")
+      if (mermaid) {
+        const card = mermaidCard(text)
+        if (card) {
+          pre.replaceWith(card)
+          return
+        }
+      }
       const block = element("div", undefined, "code-block")
       const toolbar = element("div", undefined, "code-toolbar")
       const button = element("button", labels.copy)
       button.type = "button"
       button.addEventListener("click", () => copy(text))
+      if (mermaid) toolbar.prepend(element("span", labels.mermaidFailed, "mermaid-failed"))
       toolbar.append(button)
       pre.replaceWith(block)
       block.append(toolbar, pre)
     })
     return body
+  }
+
+  function markdownFenceClosed(raw) {
+    const mark = raw.match(/^[ \t]{0,3}(`{3,}|~{3,})/)?.[1]
+    if (!mark) return false
+    const last = raw.trimEnd().split("\n").at(-1)?.trim() || ""
+    return new RegExp(`^[\\t ]{0,3}${mark[0]}{${mark.length},}[\\t ]*$`).test(last)
   }
 
   async function copy(text) {
@@ -165,6 +629,30 @@ function renderSessionExport(marked) {
     body.append(content)
     box.append(summary, body)
     return box
+  }
+
+  function toolGroup(states) {
+    const box = element("details", undefined, "process tool-group")
+    const title = element("span")
+    const state = element("span", undefined, "state")
+    const summary = element("summary")
+    const body = element("div", undefined, "tool-group-body")
+    summary.append(title, state)
+    box.append(summary, body)
+    return { box, title, state, body, states }
+  }
+
+  function updateToolGroup(group) {
+    const status = group.states.includes("error")
+      ? "error"
+      : group.states.includes("running")
+        ? "running"
+        : group.states.every((state) => state === "completed")
+          ? "completed"
+          : "pending"
+    group.title.textContent = labels.toolGroup.replace("{{count}}", group.states.length)
+    group.state.textContent = labels[status] || status
+    group.state.className = `state ${status === "error" ? "error" : ""}`
   }
 
   function attachment(part) {
@@ -321,13 +809,32 @@ function renderSessionExport(marked) {
     return box
   }
 
+  function skillView(state) {
+    const name = typeof state.input?.name === "string" ? state.input.name : undefined
+    const title = state.title || (name ? `Loaded skill: ${name}` : labels.skill)
+    const box = element("section", undefined, "skill-card")
+    box.setAttribute("aria-label", title)
+    const heading = element("div", undefined, "skill-heading")
+    heading.append(
+      element("strong", labels.skill),
+      element("span", labels[state.status] || state.status, `state ${state.status === "error" ? "error" : ""}`),
+    )
+    box.append(heading, element("strong", title, "skill-title"))
+    if (state.error) box.append(element("p", state.error, "error"))
+    return box
+  }
+
   function partView(part, role, references, snapshot) {
     if (part.type === "text") {
       if (part.synthetic || part.ignored) return details(labels.details, element("pre", part.text))
       if (!part.text.trim()) return null
       return role === "user" ? element("div", part.text, "user-text") : markdown(part.text, references)
     }
-    if (part.type === "reasoning") return details(labels.reasoning, markdown(part.text))
+    if (part.type === "reasoning") {
+      const view = details(labels.reasoning, markdown(part.text))
+      view.classList.add("reasoning-card")
+      return view
+    }
     if (part.type === "file") return attachment(part)
     if (part.type === "tool") {
       const state = part.state
@@ -338,6 +845,7 @@ function renderSessionExport(marked) {
       for (const file of state.attachments || []) content.append(attachment(file))
       if (snapshot) return questionView(snapshot, state, content)
       if (part.tool === "task") return subagentView(state, content)
+      if (part.tool === "skill") return skillView(state)
       return details(state.title ? `${part.tool} · ${state.title}` : part.tool, content, state.status)
     }
     if (part.type === "step-start" || part.type === "step-finish") return null
@@ -394,7 +902,7 @@ function renderSessionExport(marked) {
         const message = data.messages[position]
         const presentation = metadata.presentation[position]
         const parentID = message.info.role === "assistant" && message.info.parentID
-        const reply = (parentID && replies.get(parentID)) || { view: undefined, tail: undefined }
+        const reply = (parentID && replies.get(parentID)) || { view: undefined, tail: undefined, tools: undefined }
         if (parentID) replies.set(parentID, reply)
         let created = message.info.time?.created
         function append(content) {
@@ -406,9 +914,38 @@ function renderSessionExport(marked) {
           }
           reply.view.body.append(content)
         }
+        function appendTool(content, state) {
+          if (!reply.tools) {
+            append(content)
+            reply.tools = { first: content, group: undefined, states: [state] }
+            return
+          }
+          if (!reply.tools.group) {
+            const group = toolGroup([...reply.tools.states, state])
+            reply.tools.first.replaceWith(group.box)
+            group.body.append(reply.tools.first, content)
+            reply.tools.group = group
+            updateToolGroup(group)
+            return
+          }
+          reply.tools.group.states.push(state)
+          reply.tools.group.body.append(content)
+          updateToolGroup(reply.tools.group)
+        }
         for (const [partIndex, part] of message.parts.entries()) {
           const snapshot = questionSnapshot(part)
           const content = partView(part, message.info.role, presentation.references[partIndex], snapshot)
+          const ordinaryTool =
+            message.info.role === "assistant" &&
+            part.type === "tool" &&
+            part.tool !== "question" &&
+            part.tool !== "task" &&
+            part.tool !== "skill"
+          if (ordinaryTool && content) {
+            appendTool(content, part.state.status)
+            continue
+          }
+          if (content) reply.tools = undefined
           if (snapshot && message.info.role === "assistant") {
             const answered = snapshot.some(({ answer }) => answer !== undefined)
             const response = messageView(
@@ -428,6 +965,7 @@ function renderSessionExport(marked) {
           if (content) append(content)
         }
         for (const annotation of presentation.annotations) {
+          reply.tools = undefined
           const card = element("section", undefined, "annotation-card")
           card.id = annotation.id
           card.append(
@@ -437,8 +975,10 @@ function renderSessionExport(marked) {
           )
           append(card)
         }
-        if (message.info.error)
+        if (message.info.error) {
+          reply.tools = undefined
           append(element("p", message.info.error.data?.message || message.info.error.name, "error"))
+        }
       }
       messages.append(batch)
       if (index + 40 < data.messages.length) await new Promise(requestAnimationFrame)

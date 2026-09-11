@@ -208,6 +208,12 @@ export const dict = {
   "ui.message.interrupted": "已中断",
   "ui.message.queued": "排队中",
   "ui.message.attachment.alt": "附件",
+  "ui.markdown.mermaid.diagram": "Mermaid 图表",
+  "ui.markdown.mermaid.copySource": "复制 Mermaid 原文",
+  "ui.markdown.mermaid.failed": "图表渲染失败",
+  "ui.markdown.mermaid.zoomOut": "缩小",
+  "ui.markdown.mermaid.resetZoom": "重置缩放",
+  "ui.markdown.mermaid.zoomIn": "放大",
 
   "ui.patch.action.deleted": "已删除",
   "ui.patch.action.created": "已创建",

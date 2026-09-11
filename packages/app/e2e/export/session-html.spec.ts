@@ -1,15 +1,22 @@
 import { test, expect, type Browser } from "@playwright/test"
+import { execFile } from "node:child_process"
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { promisify } from "node:util"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { createSessionHtml } from "../../src/utils/session-html"
 import { sessionHtmlLabels } from "../../src/utils/session-html-labels"
+import { mermaidSourceKey } from "@opencode-ai/session-ui/markdown-mermaid"
 import type { SessionExportData } from "../../src/utils/session-export"
+import type { SessionHtmlMermaidSnapshot } from "../../src/utils/session-html-mermaid"
 import { sessionExportChinese } from "../../src/i18n/session-export"
 
 let launch: Browser
 let directory: string
+let mermaidRenderer: string
+const execFileAsync = promisify(execFile)
+const evidence = (name: string) => path.resolve(process.cwd(), "../..", ".xcode", name)
 const fixture = {
   info: { id: "ses_export", title: "会话导出示例", time: { created: 1789000000000 } },
   messages: [
@@ -47,6 +54,10 @@ const fixture = {
 test.beforeAll(async ({ browser }) => {
   directory = await mkdtemp(path.join(tmpdir(), "session-html-"))
   launch = browser
+  const entrypoint = fileURLToPath(new URL("./session-html-mermaid-browser.ts", import.meta.url))
+  const output = path.join(directory, "session-html-mermaid-browser.js")
+  await execFileAsync("bun", ["build", entrypoint, "--target=browser", "--format=iife", `--outfile=${output}`])
+  mermaidRenderer = await readFile(output, "utf8")
 })
 
 test.afterAll(async () => {
@@ -58,7 +69,7 @@ test.afterAll(async () => {
     await rm(directory, { recursive: true, force: true })
 })
 
-async function open(data: SessionExportData, width = 1280) {
+async function open(data: SessionExportData, width = 1280, mermaid: SessionHtmlMermaidSnapshot[] = []) {
   const runtime = new URL("../../src/utils/session-html/runtime.js", import.meta.url)
   const css = new URL("../../src/utils/session-html/style.css", import.meta.url)
   const html = createSessionHtml(data, {
@@ -69,6 +80,7 @@ async function open(data: SessionExportData, width = 1280) {
     },
     labels: sessionHtmlLabels((key) => sessionExportChinese[key]),
     language: "zh-CN",
+    mermaid,
   })
   const file = path.join(directory, `${crypto.randomUUID()}.html`)
   await writeFile(file, html)
@@ -83,6 +95,302 @@ async function open(data: SessionExportData, width = 1280) {
   await page.goto(pathToFileURL(file).href)
   return { page, context, requests, errors, file }
 }
+
+async function renderMermaidSnapshots(data: SessionExportData) {
+  const context = await launch.newContext({ offline: true })
+  const page = await context.newPage()
+  const requests: string[] = []
+  const errors: string[] = []
+  page.on("request", (request) => {
+    if (/^https?:/.test(request.url())) requests.push(request.url())
+  })
+  page.on("pageerror", (error) => errors.push(error.message))
+  try {
+    await page.addScriptTag({ content: mermaidRenderer })
+    const snapshots = await page.evaluate(async (input) => {
+      const render = Reflect.get(window, "sessionHtmlMermaidSnapshots") as (
+        data: SessionExportData,
+      ) => Promise<SessionHtmlMermaidSnapshot[]>
+      return render(input)
+    }, data)
+    expect(requests).toEqual([])
+    expect(errors).toEqual([])
+    return snapshots
+  } finally {
+    await context.close()
+  }
+}
+
+test("offline Mermaid snapshots render diagrams, copy exact source and keep failed source", async ({}, testInfo) => {
+  const valid = "flowchart LR\n  accTitle: Export standard\n  Start --> Done\n"
+  const wide = [
+    "flowchart LR",
+    "  accTitle: Export wide",
+    ...Array.from(
+      { length: 14 },
+      (_, index) => `  Node${index}[Step ${index + 1}] --> Node${index + 1}[Step ${index + 2}]`,
+    ),
+  ].join("\n")
+  const invalid = "not a diagram\n"
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    {
+      type: "text",
+      text: `开始。\n\n\`\`\`mermaid\n${valid}\`\`\`\n\n中间。\n\n\`\`\`mermaid\n${wide}\n\`\`\`\n\n\`\`\`mermaid\n${invalid}\`\`\`\n\n\`\`\`ts\nconst ordinary = true\n\`\`\`\n\n结束。`,
+    },
+  ] as SessionExportData["messages"][number]["parts"]
+  const snapshots = await renderMermaidSnapshots(data)
+  const { page, context, requests, errors } = await open(data, 1280, snapshots)
+  try {
+    const diagrams = page.getByRole("figure", { name: /^Export (standard|wide)$/ })
+    await expect(diagrams).toHaveCount(2)
+    const diagram = page.getByRole("figure", { name: "Export standard", exact: true })
+    const wideDiagram = page.getByRole("figure", { name: "Export wide", exact: true })
+    await expect(diagram.locator(":scope > .mermaid-canvas > svg")).toBeVisible()
+    await expect(wideDiagram.locator(":scope > .mermaid-canvas > svg")).toBeVisible()
+    await expect(diagram.locator("code")).toHaveCount(0)
+    await expect(page.locator(".mermaid-failed").filter({ hasText: "图表渲染失败" })).toBeVisible()
+    await expect(page.locator("code").filter({ hasText: "not a diagram" })).toBeVisible()
+    await expect(page.locator("code").filter({ hasText: "const ordinary = true" })).toBeVisible()
+    await expect(page.getByText("开始。", { exact: true })).toBeVisible()
+    await expect(page.getByText("中间。", { exact: true })).toBeVisible()
+    await expect(page.getByText("结束。", { exact: true })).toBeVisible()
+
+    const layout = async () =>
+      page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll<HTMLElement>(".mermaid-card"))
+        const wideCanvas = document
+          .querySelector<HTMLElement>('[aria-label="Export wide"]')
+          ?.querySelector<HTMLElement>(".mermaid-canvas")
+        const standardCanvas = document
+          .querySelector<HTMLElement>('[aria-label="Export standard"]')
+          ?.querySelector<HTMLElement>(".mermaid-canvas")
+        const wideSvg = wideCanvas?.querySelector<SVGSVGElement>("svg")
+        const labelHeights = Array.from(
+          wideSvg?.querySelectorAll("text") ?? [],
+          (label) => label.getBoundingClientRect().height,
+        ).filter((height) => height > 0)
+        return {
+          viewport: window.innerWidth,
+          pageWidth: document.documentElement.scrollWidth,
+          cards: cards.map((card) => {
+            const rect = card.getBoundingClientRect()
+            return { left: rect.left, right: rect.right, width: rect.width }
+          }),
+          wideClientWidth: wideCanvas?.clientWidth ?? 0,
+          wideScrollWidth: wideCanvas?.scrollWidth ?? 0,
+          wideSvgWidth: wideSvg?.getBoundingClientRect().width ?? 0,
+          minLabelHeight: labelHeights.length ? Math.min(...labelHeights) : 0,
+          standardClientWidth: standardCanvas?.clientWidth ?? 0,
+          standardScrollWidth: standardCanvas?.scrollWidth ?? 0,
+        }
+      })
+    const desktop = await layout()
+    expect(desktop.pageWidth).toBeLessThanOrEqual(desktop.viewport)
+    expect(desktop.cards).toHaveLength(2)
+    for (const card of desktop.cards) {
+      expect(card.left).toBeGreaterThanOrEqual(0)
+      expect(card.right).toBeLessThanOrEqual(desktop.viewport)
+    }
+    expect(desktop.wideScrollWidth).toBeGreaterThan(desktop.wideClientWidth)
+    expect(desktop.wideSvgWidth).toBeGreaterThanOrEqual(1_200)
+    expect(desktop.minLabelHeight).toBeGreaterThanOrEqual(10)
+    expect(desktop.standardScrollWidth).toBeLessThanOrEqual(desktop.standardClientWidth)
+
+    const zoomIn = wideDiagram.getByRole("button", { name: "放大", exact: true })
+    const zoomOut = wideDiagram.getByRole("button", { name: "缩小", exact: true })
+    const resetZoom = wideDiagram.getByRole("button", { name: "重置缩放 (100%)", exact: true })
+    await zoomIn.click()
+    await expect(wideDiagram.getByRole("button", { name: "重置缩放 (125%)", exact: true })).toHaveText("125%")
+    const zoomedWidth = await wideDiagram
+      .locator(":scope > .mermaid-canvas > svg")
+      .evaluate((svg) => svg.getBoundingClientRect().width)
+    expect(zoomedWidth).toBeGreaterThan(desktop.wideSvgWidth)
+
+    const canvas = wideDiagram.locator(":scope > .mermaid-canvas")
+    await canvas.evaluate((node) => {
+      node.scrollLeft = 0
+      node.scrollTop = 0
+    })
+    const box = await canvas.boundingBox()
+    expect(box).not.toBeNull()
+    if (box) {
+      await page.mouse.move(box.x + box.width - 30, box.y + box.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(box.x + 30, box.y + box.height / 2)
+      await page.mouse.up()
+    }
+    expect(await canvas.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0)
+
+    await wideDiagram.getByRole("button", { name: "重置缩放 (125%)", exact: true }).click()
+    await expect(resetZoom).toHaveText("100%")
+    expect(await canvas.evaluate((node) => node.scrollLeft)).toBe(0)
+    await expect(zoomOut).toBeEnabled()
+    await page.screenshot({ path: evidence("mermaid-export-desktop.png"), fullPage: true })
+
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(diagrams).toHaveCount(2)
+    await expect(diagram.locator(":scope > .mermaid-canvas > svg")).toBeVisible()
+    await expect(wideDiagram.locator(":scope > .mermaid-canvas > svg")).toBeVisible()
+    const mobile = await layout()
+    expect(mobile.pageWidth).toBeLessThanOrEqual(mobile.viewport)
+    expect(mobile.cards).toHaveLength(2)
+    for (const card of mobile.cards) {
+      expect(card.left).toBeGreaterThanOrEqual(0)
+      expect(card.right).toBeLessThanOrEqual(mobile.viewport)
+    }
+    expect(mobile.wideScrollWidth).toBeGreaterThan(mobile.wideClientWidth)
+    expect(mobile.wideSvgWidth).toBeGreaterThanOrEqual(1_200)
+    expect(mobile.minLabelHeight).toBeGreaterThanOrEqual(10)
+    expect(mobile.standardScrollWidth).toBeLessThanOrEqual(mobile.standardClientWidth)
+    await writeFile(testInfo.outputPath("mermaid-export-layout.json"), JSON.stringify({ desktop, mobile }, null, 2))
+    await page.screenshot({ path: evidence("mermaid-export-mobile.png"), fullPage: true })
+    await page.evaluate(() =>
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (text: string) => {
+            Reflect.set(window, "copiedMermaid", text)
+            return Promise.resolve()
+          },
+        },
+      }),
+    )
+    await diagram.getByRole("button", { name: "复制 Mermaid 原文", exact: true }).click()
+    expect(await page.evaluate(() => Reflect.get(window, "copiedMermaid"))).toBe(valid)
+    expect(requests).toEqual([])
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("offline Mermaid falls back for equal-key wrong-source, missing and invalid SVG snapshots", async () => {
+  const collision = "flowchart LR\nAp4zqpkjupw-->B\n"
+  const wrongSource = "flowchart LR\nAbuxw36x8ji-->B\n"
+  const missing = "flowchart LR\nMissing-->Snapshot\n"
+  const invalidSvg = "flowchart LR\nInvalid-->Svg\n"
+  expect(mermaidSourceKey(collision)).toBe(mermaidSourceKey(wrongSource))
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    {
+      type: "text",
+      text: [collision, missing, invalidSvg].map((source) => `\`\`\`mermaid\n${source}\`\`\``).join("\n\n"),
+    },
+  ] as SessionExportData["messages"][number]["parts"]
+  const generated = await renderMermaidSnapshots(data)
+  const snapshots = generated.flatMap((snapshot) => {
+    if (snapshot.source === collision) return [{ ...snapshot, source: wrongSource }]
+    if (snapshot.source === missing) return []
+    if (snapshot.source === invalidSvg)
+      return [{ ...snapshot, svg: '<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>' }]
+    return [snapshot]
+  })
+  const { page, context, requests, errors } = await open(data, 1280, snapshots)
+  try {
+    await expect(page.locator(".mermaid-card")).toHaveCount(0)
+    await expect(page.locator(".mermaid-failed")).toHaveCount(3)
+    for (const source of ["Ap4zqpkjupw-->B", "Missing-->Snapshot", "Invalid-->Svg"])
+      await expect(page.locator("code").filter({ hasText: source })).toBeVisible()
+    expect(requests).toEqual([])
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("offline Mermaid renders only closed fences when an identical snapshot exists", async () => {
+  const source = "flowchart LR\n  A --> B\n"
+  const closed = `\`\`\`mermaid\n${source}\`\`\``
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    { type: "text", text: `${closed}\n\n${closed}\n\n\`\`\`mermaid\n${source}` },
+  ] as SessionExportData["messages"][number]["parts"]
+  const snapshots = await renderMermaidSnapshots(data)
+  expect(snapshots).toHaveLength(1)
+  expect(snapshots[0]?.svg).toContain("<svg")
+  const { page, context, requests, errors } = await open(data, 1280, snapshots)
+  try {
+    await expect(page.locator(".mermaid-card")).toHaveCount(2)
+    await expect(page.locator(".code-block code").filter({ hasText: "A --> B" })).toHaveCount(1)
+    await expect(page.locator(".mermaid-failed")).toHaveCount(0)
+    expect(requests).toEqual([])
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("offline Mermaid namespaces every repeated diagram and keeps references local", async () => {
+  const source = "flowchart LR\n  A --> B\n"
+  const block = `\`\`\`mermaid\n${source}\`\`\``
+  const data = structuredClone(fixture)
+  data.messages[1].parts = [
+    { type: "text", text: `${block}\n\n${block}` },
+  ] as SessionExportData["messages"][number]["parts"]
+  const snapshots = await renderMermaidSnapshots(data)
+  expect(snapshots).toHaveLength(1)
+  const { page, context, requests, errors } = await open(data, 1280, snapshots)
+  try {
+    await expect(page.locator(".mermaid-card")).toHaveCount(2)
+    const references = await page.evaluate(() => {
+      const ariaSingle = new Set(["aria-activedescendant", "aria-errormessage"])
+      const ariaLists = new Set([
+        "aria-controls",
+        "aria-describedby",
+        "aria-details",
+        "aria-flowto",
+        "aria-labelledby",
+        "aria-owns",
+      ])
+      const diagrams = Array.from(document.querySelectorAll<SVGSVGElement>(".mermaid-card > .mermaid-canvas > svg"))
+      const documentIDs = Array.from(document.querySelectorAll<HTMLElement>("[id]"), (node) => node.id)
+      const keyframes: string[] = []
+      const invalid: string[] = []
+      for (const svg of diagrams) {
+        const local = new Set(Array.from(svg.querySelectorAll<SVGElement>("[id]"), (node) => node.id))
+        if (svg.id) local.add(svg.id)
+        const localKeyframes = new Set<string>()
+        for (const style of svg.querySelectorAll("style")) {
+          const css = style.textContent || ""
+          for (const match of css.matchAll(/@keyframes\s+([A-Za-z_][A-Za-z0-9_-]*)/g)) {
+            localKeyframes.add(match[1])
+            keyframes.push(match[1])
+          }
+          for (const match of css.matchAll(/#([A-Za-z_][A-Za-z0-9_.:-]*)/g))
+            if (match[1].startsWith("mermaid-") && !local.has(match[1])) invalid.push(`selector:${match[1]}`)
+          for (const match of css.matchAll(/animation(?:-name)?\s*:\s*([A-Za-z_][A-Za-z0-9_-]*)/g))
+            if (!localKeyframes.has(match[1])) invalid.push(`animation:${match[1]}`)
+        }
+        for (const node of [svg, ...svg.querySelectorAll("*")]) {
+          for (const attribute of node.attributes) {
+            const name = attribute.name.toLowerCase()
+            const value = attribute.value
+            if (name === "href" || name === "xlink:href") {
+              if (!value.startsWith("#") || !local.has(value.slice(1))) invalid.push(`${name}:${value}`)
+            }
+            for (const match of value.matchAll(/url\s*\(\s*["']?#([A-Za-z_][A-Za-z0-9_.:-]*)["']?\s*\)/g))
+              if (!local.has(match[1])) invalid.push(`url:${match[1]}`)
+            if (ariaSingle.has(name) && !local.has(value)) invalid.push(`${name}:${value}`)
+            if (ariaLists.has(name))
+              for (const id of value.split(/\s+/)) if (id && !local.has(id)) invalid.push(`${name}:${id}`)
+          }
+        }
+      }
+      return {
+        diagrams: diagrams.length,
+        duplicateIDs: documentIDs.filter((id, index) => documentIDs.indexOf(id) !== index),
+        duplicateKeyframes: keyframes.filter((name, index) => keyframes.indexOf(name) !== index),
+        invalid,
+      }
+    })
+    expect(references).toEqual({ diagrams: 2, duplicateIDs: [], duplicateKeyframes: [], invalid: [] })
+    expect(requests).toEqual([])
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
 
 test("offline file renders messages, Markdown, collapsed processes and attachments", async ({}, testInfo) => {
   const { page, context, requests, errors, file } = await open(fixture)
@@ -201,6 +509,144 @@ test("assistant records without a parent ID remain separate", async () => {
   try {
     await expect(page.getByRole("article")).toHaveCount(2)
     await expect(page.getByRole("article")).toHaveText(["助手独立记录一", "助手独立记录二"])
+  } finally {
+    await context.close()
+  }
+})
+
+test("skill triggers render as independent expanded cards outside ordinary tool groups", async () => {
+  const data = structuredClone(fixture)
+  const skills = ["customize-opencode", "test-driven-development", "verification-before-completion"]
+  data.messages[1].parts = [
+    ...skills.map((name) => ({
+      type: "tool" as const,
+      tool: "skill",
+      state: {
+        status: "completed" as const,
+        input: { name },
+        output: `Loaded skill: ${name}`,
+        title: `Loaded skill: ${name}`,
+      },
+    })),
+    {
+      type: "tool",
+      tool: "read",
+      state: { status: "completed", input: { path: "README.md" }, output: "read output" },
+    },
+    {
+      type: "tool",
+      tool: "bash",
+      state: { status: "completed", input: { command: "bun test" }, output: "test output" },
+    },
+  ] as SessionExportData["messages"][number]["parts"]
+
+  const { page, context, errors } = await open(data)
+  try {
+    const cards = page.locator(".skill-card")
+    await expect(cards).toHaveCount(3)
+    for (const name of skills) {
+      const card = page.getByRole("region", { name: `Loaded skill: ${name}`, exact: true })
+      await expect(card).toBeVisible()
+      await expect(card).toContainText("技能")
+      await expect(card).toContainText("已完成")
+      await expect(card).toContainText(name)
+      await expect(card.locator("summary")).toHaveCount(0)
+    }
+    expect(await cards.first().evaluate((card) => getComputedStyle(card).borderLeftColor)).toBe("rgb(10, 89, 247)")
+    const ordinary = page.locator(".tool-group")
+    await expect(ordinary).toHaveCount(1)
+    await expect(ordinary.locator(":scope > summary")).toHaveText("工具调用 · 2 个已完成")
+    await expect(ordinary).not.toContainText("Loaded skill")
+    await page.screenshot({ path: evidence("skill-cards-export.png"), fullPage: true })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(cards).toHaveCount(3)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    expect(errors).toEqual([])
+  } finally {
+    await context.close()
+  }
+})
+
+test("consecutive ordinary tools collapse into groups across batches and stop at special content", async ({}, testInfo) => {
+  const data = structuredClone(fixture)
+  const tool = (name: string, status: "completed" | "running" | "error", output?: string) => ({
+    type: "tool" as const,
+    tool: name,
+    state: {
+      status,
+      input: { name },
+      ...(output === undefined ? {} : { output }),
+      ...(status === "error" ? { error: `${name} failed` } : {}),
+    },
+  })
+  const assistant = (id: string, parts: SessionExportData["messages"][number]["parts"]) => ({
+    info: { ...data.messages[1].info, id },
+    parts,
+  })
+  data.messages = [
+    data.messages[0],
+    ...Array.from({ length: 38 }, (_, index) =>
+      assistant(`msg_preamble_${index}`, [{ type: "text", text: `准备 ${index + 1}` }]),
+    ),
+    assistant("msg_read", [tool("read", "completed", "read output")]),
+    assistant("msg_glob", [tool("glob", "running")]),
+    assistant("msg_bash", [tool("bash", "error")]),
+    assistant("msg_task", [
+      {
+        type: "tool",
+        tool: "task",
+        state: {
+          status: "completed",
+          input: { description: "分析模块", prompt: "检查模块", subagent_type: "explore" },
+        },
+      },
+    ]),
+    assistant("msg_grep", [tool("grep", "completed", "grep output")]),
+    assistant("msg_question", [
+      {
+        type: "tool",
+        tool: "question",
+        state: {
+          status: "completed",
+          input: { questions: [{ question: "继续吗？", options: [] }] },
+          metadata: { answers: [["继续"]] },
+        },
+      },
+    ]),
+    assistant("msg_list", [tool("list", "completed", "list output")]),
+    assistant("msg_boundary", [{ type: "text", text: "接着修改" }]),
+    assistant("msg_edit", [tool("edit", "completed", "edit output")]),
+    assistant("msg_write", [tool("write", "completed", "write output")]),
+  ] as SessionExportData["messages"]
+
+  const { page, context, errors } = await open(data)
+  try {
+    const failedGroup = page.locator("summary").filter({ hasText: "工具调用 · 3 个" })
+    const completedGroup = page.locator("summary").filter({ hasText: "工具调用 · 2 个" })
+    await expect(failedGroup).toHaveText("工具调用 · 3 个失败")
+    await expect(completedGroup).toHaveText("工具调用 · 2 个已完成")
+    await expect(page.getByText("read output", { exact: true })).toBeHidden()
+    await failedGroup.click()
+    const read = page.locator("summary").filter({ hasText: /^read/ })
+    await expect(read).toHaveText("read已完成")
+    await expect(page.locator("summary").filter({ hasText: /^glob/ })).toHaveText("glob导出时执行中")
+    await expect(page.locator("summary").filter({ hasText: /^bash/ })).toHaveText("bash失败")
+    await expect(page.getByText("read output", { exact: true })).toBeHidden()
+    await read.click()
+    await expect(page.getByText("read output", { exact: true })).toBeVisible()
+    await expect(page.getByRole("region", { name: "分析模块", exact: true })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "继续吗？", exact: true })).toBeVisible()
+    await expect(page.locator("summary").filter({ hasText: /^grep/ })).toHaveCount(1)
+    await expect(page.locator("summary").filter({ hasText: /^list/ })).toHaveCount(1)
+    await completedGroup.click()
+    await expect(page.locator("summary").filter({ hasText: /^edit/ })).toBeVisible()
+    await expect(page.locator("summary").filter({ hasText: /^write/ })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath("tool-groups-desktop.png"), fullPage: true })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.screenshot({ path: testInfo.outputPath("tool-groups-mobile.png"), fullPage: true })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    expect(await page.evaluate(() => JSON.parse(document.getElementById("session-data")!.textContent!))).toEqual(data)
+    expect(errors).toEqual([])
   } finally {
     await context.close()
   }
@@ -679,6 +1125,21 @@ test("question boundaries and subagent cards compose into an offline conversatio
     { type: "text", text: "我会分别检查智能体模块和工具接入，再汇总建议。" },
     {
       type: "tool",
+      tool: "read",
+      state: { status: "completed", input: { path: "src/agent.ts" }, output: "已读取智能体入口" },
+    },
+    {
+      type: "tool",
+      tool: "glob",
+      state: { status: "completed", input: { pattern: "src/**/*.ts" }, output: "找到 18 个文件" },
+    },
+    {
+      type: "tool",
+      tool: "bash",
+      state: { status: "completed", input: { command: "bun test" }, output: "测试通过" },
+    },
+    {
+      type: "tool",
       tool: "task",
       state: {
         status: "completed",
@@ -735,6 +1196,58 @@ test("question boundaries and subagent cards compose into an offline conversatio
   try {
     await expect(page.getByRole("heading", { name: "处理结果", exact: true })).toBeVisible()
     await expect(page.getByRole("article").locator(".message-meta > span")).toHaveText(["用户", "助手", "用户", "助手"])
+    const toolGroup = page.locator("summary").filter({ hasText: "工具调用 · 3 个" })
+    const reasoning = page.getByText("推理记录", { exact: true })
+    await expect(toolGroup).toHaveText("工具调用 · 3 个已完成")
+    const cardStyle = (summary: typeof reasoning) =>
+      summary.evaluate((node) => {
+        const style = getComputedStyle(node.parentElement!)
+        return {
+          borderRadius: style.borderRadius,
+          borderTopStyle: style.borderTopStyle,
+          borderTopWidth: style.borderTopWidth,
+          paddingLeft: style.paddingLeft,
+          paddingRight: style.paddingRight,
+        }
+      })
+    const expectedCardStyle = {
+      borderRadius: "10px",
+      borderTopStyle: "solid",
+      borderTopWidth: "1px",
+      paddingLeft: "14px",
+      paddingRight: "14px",
+    }
+    expect(await cardStyle(toolGroup)).toEqual(expectedCardStyle)
+    expect(await cardStyle(reasoning)).toEqual(expectedCardStyle)
+    await reasoning.click()
+    await expect(page.getByText("检查注册入口，确认工具定义与管理器接口匹配。", { exact: true })).toBeVisible()
+    const reasoningBody = page.locator(".reasoning-card > .process-body")
+    expect(
+      await reasoningBody.evaluate((node) => {
+        const style = getComputedStyle(node)
+        const summary = node.previousElementSibling!.getBoundingClientRect()
+        const body = node.getBoundingClientRect()
+        return {
+          backgroundColor: style.backgroundColor,
+          borderRadius: style.borderRadius,
+          borderTopStyle: style.borderTopStyle,
+          borderTopWidth: style.borderTopWidth,
+          leftOffset: body.left - summary.left,
+          paddingLeft: style.paddingLeft,
+          paddingRight: style.paddingRight,
+          rightOffset: summary.right - body.right,
+        }
+      }),
+    ).toEqual({
+      backgroundColor: "rgba(0, 0, 0, 0)",
+      borderRadius: "0px",
+      borderTopStyle: "solid",
+      borderTopWidth: "1px",
+      leftOffset: 0,
+      paddingLeft: "0px",
+      paddingRight: "0px",
+      rightOffset: 0,
+    })
     await expect(page.getByRole("region", { name: "检查 skills 工具接入", exact: true })).toBeVisible()
     await expect(page.locator(".question-answer")).toContainText("补充文档")
     await writeFile(testInfo.outputPath("cards-conversation.html"), await readFile(file))

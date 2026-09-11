@@ -445,6 +445,63 @@ pre code {
   color: var(--font-secondary);
   padding: 4px 8px;
 }
+.mermaid-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 16px 0;
+  overflow: hidden;
+}
+.mermaid-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 3px 8px;
+  background: var(--background-secondary);
+}
+.mermaid-toolbar button {
+  border: 0;
+  background: transparent;
+  color: var(--font-secondary);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.mermaid-toolbar button:disabled {
+  opacity: 0.4;
+}
+.mermaid-zoom-out,
+.mermaid-zoom-in {
+  min-width: 28px;
+  font-size: 16px !important;
+}
+.mermaid-zoom-reset {
+  min-width: 48px;
+  font-variant-numeric: tabular-nums;
+}
+.mermaid-canvas {
+  overflow: auto;
+  max-height: min(70vh, 720px);
+  padding: 16px;
+  text-align: center;
+  cursor: grab;
+  overscroll-behavior: contain;
+}
+.mermaid-canvas[data-dragging="true"] {
+  cursor: grabbing;
+  user-select: none;
+}
+.mermaid-canvas svg {
+  display: inline-block;
+  min-width: 100%;
+  height: auto;
+  max-width: none;
+  vertical-align: middle;
+}
+.mermaid-failed {
+  margin-right: auto;
+  color: var(--error);
+  font-size: 12px;
+}
 .table-scroll {
   max-width: 100%;
   overflow: auto;
@@ -500,6 +557,53 @@ tr:last-child td {
 }
 .process-body h3:not(:first-child) {
   margin-top: 16px;
+}
+.tool-group,
+.reasoning-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0 14px;
+}
+.tool-group > summary,
+.reasoning-card > summary {
+  font-weight: 600;
+}
+.reasoning-card > .process-body {
+  background: transparent;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 14px 0;
+}
+.tool-group-body {
+  border-top: 1px solid var(--border);
+  padding: 2px 0 4px;
+}
+.tool-group-body > .process {
+  margin: 0;
+}
+.tool-group-body > .process + .process {
+  border-top: 1px solid var(--border);
+}
+.skill-card {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--brand);
+  border-radius: 10px;
+  background: var(--background-primary);
+}
+.skill-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.skill-heading .state {
+  margin-left: 0;
+}
+.skill-title {
+  overflow-wrap: anywhere;
 }
 .attachment {
   margin: 12px 0 0;
@@ -600,6 +704,7 @@ noscript {
   }
   .download-button,
   .code-toolbar,
+  .mermaid-toolbar,
   .feedback {
     display: none;
   }

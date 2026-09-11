@@ -17,7 +17,7 @@ describe("markdown stream", () => {
   test("splits an unfinished trailing code fence from stable content", () => {
     expect(stream("before\n\n```ts\nconst x = 1", true)).toEqual([
       { raw: "before\n\n", src: "before\n\n", mode: "full" },
-      { raw: "```ts\nconst x = 1", src: "const x = 1", mode: "code", language: "ts" },
+      { raw: "```ts\nconst x = 1", src: "const x = 1", mode: "code", language: "ts", fenceClosed: false },
     ])
   })
 
@@ -25,13 +25,54 @@ describe("markdown stream", () => {
     const text = "before\n\n```ts\nconst x = 1\n```"
     expect(stream(text, true)).toEqual([
       { raw: "before\n\n", src: "before\n\n", mode: "full" },
-      { raw: "```ts\nconst x = 1\n```", src: "const x = 1", mode: "code", language: "ts", complete: true },
+      {
+        raw: "```ts\nconst x = 1\n```",
+        src: "const x = 1",
+        mode: "code",
+        language: "ts",
+        complete: true,
+        fenceClosed: true,
+      },
+    ])
+  })
+
+  test("keeps an unfinished Mermaid fence in code mode without marking it complete", () => {
+    // Treating an open Mermaid fence as complete would start diagram rendering during streaming.
+    expect(stream("```mermaid\nflowchart LR\nA-->B", true)).toEqual([
+      {
+        raw: "```mermaid\nflowchart LR\nA-->B",
+        src: "flowchart LR\nA-->B",
+        mode: "code",
+        language: "mermaid",
+        fenceClosed: false,
+      },
+    ])
+  })
+
+  test("marks a Mermaid fence complete only after its closing delimiter arrives", () => {
+    // Losing the completed bit would leave a finished diagram as ordinary highlighted source forever.
+    expect(stream("```Mermaid title=Flow\nflowchart LR\nA-->B\n```", true)).toEqual([
+      {
+        raw: "```Mermaid title=Flow\nflowchart LR\nA-->B\n```",
+        src: "flowchart LR\nA-->B",
+        mode: "code",
+        language: "Mermaid",
+        complete: true,
+        fenceClosed: true,
+      },
     ])
   })
 
   test("keeps a completed code fence in worker-rendered code mode when prose follows", () => {
     expect(stream("```ts\nconst x = 1\n```\n\nafter", true)).toEqual([
-      { raw: "```ts\nconst x = 1\n```\n\n", src: "const x = 1", mode: "code", language: "ts", complete: true },
+      {
+        raw: "```ts\nconst x = 1\n```\n\n",
+        src: "const x = 1",
+        mode: "code",
+        language: "ts",
+        complete: true,
+        fenceClosed: true,
+      },
       { raw: "after", src: "after", mode: "live" },
     ])
   })
@@ -108,6 +149,7 @@ describe("markdown stream", () => {
         src: "const x = 1",
         mode: "code",
         language: "ts",
+        fenceClosed: false,
       },
     ])
   })
@@ -119,6 +161,7 @@ describe("markdown stream", () => {
         src: "const x = 1\n",
         mode: "code",
         language: "ts",
+        fenceClosed: false,
       },
     ])
   })
@@ -146,6 +189,7 @@ describe("markdown stream", () => {
       src: "const one = 1\nconst two = 2\n",
       mode: "code",
       language: "ts",
+      fenceClosed: false,
     })
   })
 
@@ -178,6 +222,24 @@ describe("markdown stream", () => {
         mode: "code",
         language: "ts",
         complete: true,
+        fenceClosed: false,
+      },
+    ])
+  })
+
+  test("does not report an open Mermaid fence as closed when streaming stops", () => {
+    // Reusing highlight completion as fence closure would render a diagram without a closing delimiter.
+    const live = project(undefined, "```mermaid\nflowchart LR\nA-->B", true)
+    const final = project(live, live.text, false)
+
+    expect(final.blocks).toEqual([
+      {
+        raw: "```mermaid\nflowchart LR\nA-->B",
+        src: "flowchart LR\nA-->B",
+        mode: "code",
+        language: "mermaid",
+        complete: true,
+        fenceClosed: false,
       },
     ])
   })
@@ -191,6 +253,7 @@ describe("markdown stream", () => {
       src: "const x = 1",
       mode: "code",
       language: "ts",
+      fenceClosed: false,
     })
   })
 
@@ -207,9 +270,17 @@ describe("markdown stream", () => {
       mode: "code",
       language: "ts",
       complete: true,
+      fenceClosed: true,
     })
     expect(prose.blocks).toEqual([
-      { raw: "```ts\nconst x = 1\n```\n", src: "const x = 1", mode: "code", language: "ts", complete: true },
+      {
+        raw: "```ts\nconst x = 1\n```\n",
+        src: "const x = 1",
+        mode: "code",
+        language: "ts",
+        complete: true,
+        fenceClosed: true,
+      },
       { raw: "after", src: "after", mode: "live" },
     ])
   })
@@ -226,6 +297,7 @@ describe("markdown stream", () => {
       mode: "code",
       language: "ts",
       complete: true,
+      fenceClosed: true,
     })
   })
 })

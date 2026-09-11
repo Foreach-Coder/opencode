@@ -51,3 +51,20 @@ export default {
 }
 
 export const Basic = story.Basic
+
+export const Mermaid = {
+  args: {
+    text: `### Mermaid diagrams
+
+\`\`\`mermaid
+flowchart LR
+  Prompt --> CodeAgent
+  CodeAgent --> Result
+\`\`\`
+
+\`\`\`mermaid
+flowchart LR
+  Broken --
+\`\`\``,
+  },
+}
